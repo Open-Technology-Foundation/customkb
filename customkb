@@ -1,0 +1,37 @@
+#!/bin/bash
+#shellcheck disable=SC2155,SC1091
+#
+# customkb bootstrap
+#
+set -euo pipefail
+
+readonly -- PRG0="$(readlink -en -- "$0")"
+readonly -- PRGDIR="${PRG0%/*}" PRG="${PRG0##*/}"
+
+# Ensure .venv exists
+if [[ ! -d "$PRGDIR/.venv" ]]; then
+  >&2 echo "Error: Virtual environment not found at $PRGDIR/.venv"
+  exit 1
+fi
+# Activate .venv
+source "$PRGDIR/.venv/bin/activate"
+
+export  ANTHROPIC_API_KEY \
+        EDITOR \
+        GOOGLE_API_KEY \
+        GOOGLE_TRANSLATE_API_KEY \
+        GROK_API_KEY \
+        NLTK_DATA \
+        OPENAI_API_KEY \
+        OPENAI_ORGANIZATION_ID \
+        VECTORDBS
+
+[[ -f /etc/environment ]] && source /etc/environment
+
+# Source envvars from .env if exists
+[[ -f "$PRGDIR/.env" ]] && source "$PRGDIR/.env"
+
+# Execute Python script with all passed arguments
+"$PRGDIR/.venv/bin/python3" "$PRGDIR/$PRG.py" "$@"
+
+#fin

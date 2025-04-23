@@ -1,0 +1,608 @@
+#!/usr/bin/env python
+"""
+Database management for CustomKB.
+Handles database connections, text processing, and storage.
+"""
+
+import os
+import sqlite3
+import argparse
+import re
+from typing import List, Optional, Dict, Any, Tuple, Set
+
+from utils.logging_utils import setup_logging, get_logger, elapsed_time, time_to_finish
+from utils.text_utils import get_files, split_filepath, clean_text, enhanced_clean_text, nlp
+from config.config_manager import KnowledgeBase, get_fq_cfg_filename
+
+# Import NLTK for text processing
+import nltk
+from nltk.corpus import stopwords
+from nltk.tokenize import word_tokenize, sent_tokenize
+from nltk.stem import WordNetLemmatizer
+import spacy
+from langchain_text_splitters import (
+  RecursiveCharacterTextSplitter,
+  MarkdownTextSplitter,
+  Language
+)
+from tokenizers import Tokenizer
+
+# Set up NLTK data path
+NLTK_DATA = os.getenv('NLTK_DATA')
+if not NLTK_DATA:
+  raise EnvironmentError("NLTK_DATA environment variable not set.")
+
+nltk.data.path = [NLTK_DATA]
+try:
+  nltk.data.find('tokenizers/punkt_tab')
+  nltk.data.find('tokenizers/punkt')
+  nltk.data.find('corpora/stopwords')
+  nltk.data.find('corpora/wordnet')
+except LookupError:
+  os.makedirs(NLTK_DATA, exist_ok=True)
+  nltk.download('punkt_tab', download_dir=NLTK_DATA, quiet=True)
+  nltk.download('punkt', download_dir=NLTK_DATA, quiet=True)
+  nltk.download('stopwords', download_dir=NLTK_DATA, quiet=True)
+  nltk.download('wordnet', download_dir=NLTK_DATA, quiet=True)
+
+# Ensure required languages are available for stopwords
+required_languages = ['english', 'indonesian', 'french', 'german', 'swedish']
+for lang in required_languages:
+  try:
+    # Test if stopwords for this language can be loaded
+    stopwords.words(lang)
+  except LookupError:
+    # If not available, download stopwords package again
+    nltk.download('stopwords', download_dir=NLTK_DATA, quiet=True)
+
+# Load spaCy model for entity recognition
+try:
+  nlp = spacy.load("en_core_web_sm")
+except:
+  # Fall back if spacy model isn't installed
+  nlp = None
+
+# Language codes mapping
+language_codes = {
+  'ar': 'arabic',
+  'az': 'azerbaijani',
+  'eu': 'basque',
+  'bn': 'bengali',
+  'ca': 'catalan',
+  'zh': 'chinese',
+  'da': 'danish',
+  'nl': 'dutch',
+  'en': 'english',
+  'fi': 'finnish',
+  'fr': 'french',
+  'de': 'german',
+  'el': 'greek',
+  'he': 'hebrew',
+  'hi': 'hinglish',
+  'hu': 'hungarian',
+  'id': 'indonesian',
+  'it': 'italian',
+  'kk': 'kazakh',
+  'ne': 'nepali',
+  'no': 'norwegian',
+  'pt': 'portuguese',
+  'ro': 'romanian',
+  'ru': 'russian',
+  'sl': 'slovene',
+  'es': 'spanish',
+  'sv': 'swedish',
+  'tg': 'tajik',
+  'tr': 'turkish'
+}
+
+logger = get_logger(__name__)
+
+def detect_file_type(filename: str) -> str:
+  """
+  Detect file type based on extension or content patterns.
+  
+  Args:
+      filename: The path to the file.
+  
+  Returns:
+      String indicating file type ('markdown', 'code', 'text').
+  """
+  ext = os.path.splitext(filename)[1].lower()
+  
+  # Markdown files
+  if ext in ['.md', '.markdown']:
+    return 'markdown'
+  
+  # Code files
+  if ext in ['.py', '.js', '.java', '.c', '.cpp', '.go', '.rs', '.php', '.rb', '.ts', '.swift']:
+    return 'code'
+  
+  # HTML files
+  if ext in ['.html', '.htm', '.xml']:
+    return 'html'
+  
+  # Default to text
+  return 'text'
+
+def init_text_splitter(kb: KnowledgeBase, file_type: str = 'text') -> Any:
+  """
+  Initialize appropriate text splitter based on file type with specified token limits.
+
+  Args:
+      kb: The KnowledgeBase instance containing configuration.
+      file_type: Type of file being processed ('markdown', 'code', 'text').
+
+  Returns:
+      A configured text splitter instance.
+  """
+  min_tokens = kb.db_min_tokens
+  max_tokens = kb.db_max_tokens
+  chunk_overlap = min(100, min_tokens // 2)  # Overlap to maintain context between chunks
+  
+  if file_type == 'markdown':
+    return MarkdownTextSplitter(
+      chunk_size=max_tokens,
+      chunk_overlap=chunk_overlap
+    )
+  elif file_type == 'code':
+    # Determine language from filename or default to Python
+    return RecursiveCharacterTextSplitter.from_language(
+      language=Language.PYTHON,  # Default to Python, could be improved to detect language
+      chunk_size=max_tokens,
+      chunk_overlap=chunk_overlap
+    )
+  elif file_type == 'html':
+    # HTML-aware text splitter
+    from bs4 import BeautifulSoup
+    
+    def html_splitter(text):
+      soup = BeautifulSoup(text, 'html.parser')
+      text_content = soup.get_text(separator='\n', strip=True)
+      splitter = RecursiveCharacterTextSplitter(
+        chunk_size=max_tokens,
+        chunk_overlap=chunk_overlap,
+        separators=["\n\n", "\n", ". ", " ", ""]
+      )
+      return splitter.split_text(text_content)
+    
+    return html_splitter
+  else:
+    # Default recursive text splitter
+    return RecursiveCharacterTextSplitter(
+      chunk_size=max_tokens,
+      chunk_overlap=chunk_overlap,
+      separators=["\n\n", "\n", ". ", " ", ""]
+    )
+
+def extract_metadata(text: str, file_path: str) -> Dict[str, Any]:
+  """
+  Extract and track metadata about a text chunk.
+  
+  Args:
+      text: The text chunk.
+      file_path: Path to the source file.
+      
+  Returns:
+      Dictionary containing metadata.
+  """
+  metadata = {
+    "source": file_path,
+    "char_length": len(text),
+    "word_count": len(text.split()),
+  }
+  
+  # Extract file extension
+  _, _, ext, _ = split_filepath(file_path)
+  if ext:
+    metadata["file_type"] = ext.lstrip('.')
+  
+  # Extract headings if possible (expanded pattern for different heading formats)
+  heading_match = re.search(r'^(#+|=+|[-]+)\s*(.+?)(?:\s*[=|-]+)?$', text[:200], re.MULTILINE)
+  if heading_match:
+    metadata["heading"] = heading_match.group(2).strip()
+  
+  # Try to identify document section type
+  if text.startswith('#'):
+    metadata["section_type"] = "heading"
+  elif re.search(r'```\w*\n[\s\S]*?```', text):
+    metadata["section_type"] = "code_block"
+  elif re.search(r'<table[\s>].*?</table>', text, re.DOTALL | re.IGNORECASE):
+    metadata["section_type"] = "table"
+  elif re.search(r'<(ul|ol)[\s>].*?</(ul|ol)>', text, re.DOTALL | re.IGNORECASE):
+    metadata["section_type"] = "list"
+  elif re.search(r'^\s*[-*•]\s', text, re.MULTILINE):
+    metadata["section_type"] = "bullet_list"
+  elif re.search(r'^\s*\d+[.)]\s', text, re.MULTILINE):
+    metadata["section_type"] = "numbered_list"
+  
+  # Try to identify common document sections
+  if re.search(r'\b(summary|overview|introduction|conclusion|abstract)\b', text[:200], re.IGNORECASE):
+    section_match = re.search(r'\b(summary|overview|introduction|conclusion|abstract)\b', text[:200], re.IGNORECASE)
+    metadata["document_section"] = section_match.group(1).lower()
+  
+  # Extract named entities if spaCy is available
+  if nlp:
+    try:
+      doc = nlp(text[:500])  # Process first 500 chars for efficiency
+      entities = {}
+      for ent in doc.ents:
+        if ent.label_ not in entities:
+          entities[ent.label_] = []
+        if ent.text not in entities[ent.label_]:
+          entities[ent.label_].append(ent.text)
+      
+      # Add only if entities were found
+      if entities:
+        metadata["entities"] = entities
+    except Exception as e:
+      logger.warning(f"Error extracting entities: {e}")
+  if heading_match:
+    metadata["heading"] = heading_match.group(2).strip()
+  
+  # Try to identify document section type
+  if text.startswith('#'):
+    metadata["section_type"] = "heading"
+  elif re.search(r'```\w*\n[\s\S]*?```', text):
+    metadata["section_type"] = "code_block"
+  elif re.search(r'<table[\s>].*?</table>', text, re.DOTALL | re.IGNORECASE):
+    metadata["section_type"] = "table"
+  elif re.search(r'<(ul|ol)[\s>].*?</(ul|ol)>', text, re.DOTALL | re.IGNORECASE):
+    metadata["section_type"] = "list"
+  elif re.search(r'^\s*[-*•]\s', text, re.MULTILINE):
+    metadata["section_type"] = "bullet_list"
+  elif re.search(r'^\s*\d+[.)]\s', text, re.MULTILINE):
+    metadata["section_type"] = "numbered_list"
+  
+  # Try to identify common document sections
+  if re.search(r'\b(summary|overview|introduction|conclusion|abstract)\b', text[:200], re.IGNORECASE):
+    section_match = re.search(r'\b(summary|overview|introduction|conclusion|abstract)\b', text[:200], re.IGNORECASE)
+    metadata["document_section"] = section_match.group(1).lower()
+  
+  # Extract named entities if spaCy is available
+  if nlp:
+    try:
+      doc = nlp(text[:500])  # Process first 500 chars for efficiency
+      entities = {}
+      for ent in doc.ents:
+        if ent.label_ not in entities:
+          entities[ent.label_] = []
+        if ent.text not in entities[ent.label_]:
+          entities[ent.label_].append(ent.text)
+      
+      # Add only if entities were found
+      if entities:
+        metadata["entities"] = entities
+    except Exception as e:
+      logger.warning(f"Error extracting entities: {e}")
+  
+  return metadata
+
+def process_database(args: argparse.Namespace) -> str:
+  """
+  Process and store text files into the CustomKB knowledge base.
+  
+  Takes input text files, processes them with appropriate text splitters based on file type,
+  and stores them as chunks in the SQLite database. Supports various file formats and
+  implements multilingual stopword filtering to improve text quality.
+  
+  Args:
+      args: Command-line arguments containing:
+          config_file: Path to knowledge base configuration
+          files: List of file paths or patterns to process
+          language: Language for stopwords (default: english)
+          force: Whether to reprocess files already in the database
+          verbose: Enable verbose output
+          debug: Enable debug output
+
+  Returns:
+      A status message indicating the number of files processed and skipped.
+  """
+  global logger
+  logger = setup_logging(args.verbose, args.debug)
+
+  # Set language for stopwords
+  language = args.language
+  logger.info(f"{language=}")
+
+  # Get configuration file
+  config_file = get_fq_cfg_filename(args.config_file)
+  if not config_file:
+    return "Error: Configuration file not found."
+
+  logger.info(f"{config_file=}")
+
+  # Initialize knowledge base
+  kb = KnowledgeBase(config_file)
+  if args.verbose:
+    kb.save_config()
+
+  logger.info(f"Config file: {args.config_file}")
+  if args.files:
+    logger.info(f"Processing {len(args.files)} files")
+  else:
+    logger.info("No input files provided")
+    return "No input files provided. Nothing to do."
+
+  # Connect to database
+  connect_to_database(kb)
+
+  # Initialize stopwords with multiple languages
+  Stop_Words = set()
+  # Always include the specified primary language
+  Stop_Words.update(stopwords.words(language))
+  
+  # Add additional language stopwords
+  additional_languages = ['indonesian', 'french', 'german', 'swedish']
+  for lang in additional_languages:
+    if lang != language:  # Skip if same as primary language
+      try:
+        Stop_Words.update(stopwords.words(lang))
+      except:
+        logger.warning(f"Failed to load stopwords for {lang}")
+
+  # Pre-scan to get actual total file count
+  all_files = []
+  for arg in args.files:
+    all_files.extend(get_files(arg))
+  
+  numfiles = len(all_files)
+  logger.info(f"Found {numfiles} total files to process")
+  
+  # Process files in optimized batches
+  filecount = 0
+  processed_count = 0
+  batch_size = 500  # Process 500 files per batch for better performance
+  
+  # Pre-compute batch splitting and file types to reduce overhead
+  for i in range(0, len(all_files), batch_size):
+    batch = all_files[i:i+batch_size]
+    logger.info(f"Processing batch of {len(batch)} files ({i+1}-{min(i+batch_size, numfiles)} of {numfiles})")
+    
+    # If not forcing reprocessing, check which files already exist in the database
+    existing_basenames = set()
+    if not args.force and batch:
+      try:
+        # Extract basenames for efficient lookup
+        basenames = [os.path.basename(f) for f in batch]
+        
+        # Create a map from basename back to original path for reporting
+        basename_to_path = {os.path.basename(f): f for f in batch}
+        
+        # Efficiently query which file basenames already exist
+        if basenames:
+          placeholders = ','.join(['?'] * len(basenames))
+          kb.sql_cursor.execute(f"SELECT DISTINCT sourcedoc FROM docs WHERE sourcedoc IN ({placeholders})", basenames)
+          existing_basenames = set(row[0] for row in kb.sql_cursor.fetchall())
+          logger.debug(f"Found {len(existing_basenames)} existing files in database")
+      except sqlite3.Error as e:
+        logger.warning(f"Error checking existing files: {e}, will process all files in batch")
+    
+    # Process each file in the batch
+    for pfile in batch:
+      basename = os.path.basename(pfile)
+      # Skip if file exists and not forcing
+      if basename in existing_basenames and not args.force:
+        logger.info(f"Skipping {pfile} (already in database)")
+        filecount += 1
+        continue
+      
+      file_type = detect_file_type(pfile)
+      splitter = init_text_splitter(kb, file_type)
+      
+      # Track if file was actually processed or skipped
+      if process_text_file(kb, pfile, splitter, Stop_Words, language, file_type, args.force):
+        processed_count += 1
+      
+      filecount += 1
+      if (filecount % 5) == 0:
+        logger.info(f"{filecount}/{numfiles} ~{time_to_finish(kb.start_time, filecount, numfiles)}")
+
+  # Close database connection
+  close_database(kb)
+
+  # Update return message to show both examined and processed counts
+  if filecount == processed_count:
+    return f'{filecount} files added to database {kb.knowledge_base_db}'
+  else:
+    return f'{processed_count} files processed ({filecount - processed_count} skipped) in database {kb.knowledge_base_db}'
+
+def connect_to_database(kb: KnowledgeBase) -> None:
+  """
+  Connect to the SQLite database and create the 'docs' table if it doesn't exist.
+
+  Args:
+      kb: The KnowledgeBase instance.
+
+  Raises:
+      Exception: If there's an error connecting to the database or creating the table.
+  """
+  if not os.path.exists(kb.knowledge_base_db):
+    user_input = input(f"Database {kb.knowledge_base_db} does not exist. Do you want to create it? (y/n): ")
+    if user_input.lower() != 'y':
+      raise Exception(f"Database {kb.knowledge_base_db} does not exist. Process aborted.")
+
+  try:
+    kb.sql_connection = sqlite3.connect(kb.knowledge_base_db)
+    kb.sql_cursor = kb.sql_connection.cursor()
+
+    try:
+      kb.sql_cursor.execute('''
+        CREATE TABLE IF NOT EXISTS docs (
+            id INTEGER PRIMARY KEY,
+            sid INTEGER,
+            sourcedoc VARCHAR(255),
+            originaltext TEXT,
+            embedtext TEXT,
+            embedded INTEGER DEFAULT 0,
+            language TEXT default "en",
+            metadata TEXT,
+            keyphrase_processed INTEGER default 0
+        );
+      ''')
+      
+      # Create necessary indexes for performance optimization
+      # Index on sourcedoc for fast file existence checks
+      kb.sql_cursor.execute('''
+        CREATE INDEX IF NOT EXISTS idx_sourcedoc ON docs(sourcedoc);
+      ''')
+      
+      # Index on embedded flag for efficient embedding queries
+      kb.sql_cursor.execute('''
+        CREATE INDEX IF NOT EXISTS idx_embedded ON docs(embedded);
+      ''')
+      
+      # Compound index on sourcedoc and sid for efficient context retrieval
+      kb.sql_cursor.execute('''
+        CREATE INDEX IF NOT EXISTS idx_sourcedoc_sid ON docs(sourcedoc, sid);
+      ''')
+      
+      # Commit the index creation
+      kb.sql_connection.commit()
+      logger.debug("Database schema and indexes verified")
+      
+    except sqlite3.Error as e:
+      raise Exception(f"Error setting up database schema: {e}")
+
+  except sqlite3.Error as e:
+    raise Exception(f"Error connecting to the database: {e}")
+
+def close_database(kb: KnowledgeBase) -> None:
+  """
+  Close the SQLite database connection.
+
+  Args:
+      kb: The KnowledgeBase instance.
+  """
+  if kb.sql_connection:
+    try:
+      kb.sql_cursor.close()
+      kb.sql_cursor = None
+      kb.sql_connection.close()
+      kb.sql_connection = None
+    except Exception as e:
+      logger.error(f"Error closing database connection: {e}")
+
+def process_text_file(kb: KnowledgeBase, sourcefile: str, splitter: Any,
+                     Stop_Words: set, language: str, file_type: str = 'text', 
+                     force: bool = False) -> bool:
+  """
+  Process a text file, split it into chunks, and store in the database.
+
+  Args:
+      kb: The KnowledgeBase instance.
+      sourcefile: Path to the source file.
+      splitter: The text splitter instance.
+      Stop_Words: Set of stopwords for the current language.
+      language: Current language code.
+      file_type: Type of file being processed.
+      force: Whether to force reprocessing of files already in the database.
+      
+  Returns:
+      True if file was processed, False if skipped.
+  """
+  # Get file basename only for database checks
+  dirname, basename, extension, _ = split_filepath(sourcefile)
+  basename = f"{basename}{extension}"
+  
+  # Check if file already exists in the database (only check basename since that's what's stored)
+  kb.sql_cursor.execute("SELECT COUNT(*) FROM docs WHERE sourcedoc = ?", [basename])
+  count = kb.sql_cursor.fetchone()[0]
+  
+  if count > 0 and not force:
+    logger.info(f"Skipping {sourcefile} (already in database, use --force to reprocess)")
+    return False
+    
+  logger.info(f"Chunking {sourcefile}")
+
+  # Read file content
+  try:
+    with open(sourcefile, 'r', encoding='utf-8') as file:
+      content = file.read()
+  except IOError as e:
+    logger.error(f"Failed to read {sourcefile}: {e}")
+    return False
+
+  # Split content into chunks
+  try:
+    # Different handling based on splitter type
+    if file_type == 'html' and callable(splitter):
+      # For HTML, we call the function directly
+      chunks = splitter(content)
+    elif hasattr(splitter, 'split_text'):
+      # For LangChain splitters
+      chunks = splitter.split_text(content)
+    elif hasattr(splitter, 'chunks'):
+      # For semantic_text_splitter
+      chunks = splitter.chunks(content)
+    else:
+      # Fallback to basic chunking
+      chunks = [content[i:i+kb.db_max_tokens] for i in range(0, len(content), kb.db_max_tokens)]
+      
+    logger.debug(f"Split {sourcefile} into {len(chunks)} chunks")
+  except Exception as e:
+    logger.error(f"Failed to split chunks for {sourcefile}: {e}")
+    return
+
+  # Check if language needs to be updated based on directory name
+  _, langkey, _, _ = split_filepath(dirname)
+  if langkey in language_codes:
+    new_language = language_codes[langkey]
+    if new_language != language:
+      language = new_language
+      logger.info(f"stopwords {language=}")
+      
+      # Re-initialize stopwords with multiple languages
+      Stop_Words = set()
+      # Always include the new primary language
+      Stop_Words.update(stopwords.words(language))
+      
+      # Add additional language stopwords
+      additional_languages = ['indonesian', 'french', 'german', 'swedish']
+      for lang in additional_languages:
+        if lang != language:  # Skip if same as primary language
+          try:
+            Stop_Words.update(stopwords.words(lang))
+          except:
+            logger.warning(f"Failed to load stopwords for {lang}")
+
+  # Delete any existing entries with this basename
+  kb.sql_cursor.execute(
+    "DELETE FROM docs WHERE sourcedoc = ?",
+    [basename]
+  )
+  kb.sql_connection.commit()
+
+  # Set up lemmatizer for better cleaning
+  lemmatizer = WordNetLemmatizer()
+  
+  # Insert chunks into database
+  sid = 0
+  previous_chunk = None
+  for i, chunk in enumerate(chunks):
+    # Extract metadata about the chunk
+    metadata = extract_metadata(chunk, sourcefile)
+    
+    # Enhanced text cleaning with entity preservation
+    clean_chunk = enhanced_clean_text(chunk, Stop_Words, lemmatizer)
+    if not clean_chunk:
+      continue
+      
+    # Store metadata as JSON string in the database
+    metadata_str = str(metadata)
+    
+    # Add chunk with metadata
+    kb.sql_cursor.execute(
+      "INSERT INTO docs (sid, sourcedoc, originaltext, embedtext, embedded, language, metadata) VALUES (?,?,?,?,?,?,?)",
+      (sid, basename, chunk, clean_chunk, 0, language, metadata_str))
+    
+    # Commit periodically
+    if sid % 1000 == 0:
+      kb.sql_connection.commit()
+    
+    previous_chunk = chunk
+    sid += 1
+
+  kb.sql_connection.commit()
+  return True
+
+#fin
