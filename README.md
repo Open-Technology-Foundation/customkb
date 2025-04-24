@@ -2,6 +2,8 @@
 
 CustomKB is a powerful, flexible tool for creating, managing, and querying custom knowledge bases using vector embeddings and large language models. It enables semantic search on your document corpus with intelligent, context-aware AI responses.
 
+[![Version](https://img.shields.io/badge/version-0.1.1-blue.svg)](https://github.com/Open-Technology-Foundation/customkb)
+
 ## Features
 
 - **Vector-Based Knowledge Storage**
@@ -166,6 +168,46 @@ Display usage information.
 
 ```bash
 customkb help
+```
+
+#### Version Command
+Display version information.
+
+```bash
+customkb version [--build]
+```
+
+Options:
+- `--build`: Include build number in version output
+
+## Versioning
+
+CustomKB uses semantic versioning (MAJOR.MINOR.PATCH.BUILD) to track changes:
+
+- **MAJOR**: Incremented for incompatible API changes
+- **MINOR**: Incremented for new functionality in a backward compatible manner
+- **PATCH**: Incremented for backward compatible bug fixes
+- **BUILD**: Incremented for each development build (automatically updated with git commits)
+
+### Version Management
+
+The version management script `version.sh` provides commands for updating version components:
+
+```bash
+# Show version and usage information
+./version.sh
+
+# Increment build number (typically done automatically by git hook)
+./version.sh build
+
+# Increment patch number (for bug fixes)
+./version.sh patch
+
+# Increment minor version (for new features)
+./version.sh minor
+
+# Increment major version (for breaking changes)
+./version.sh major
 ```
 
 ## Advanced Configuration

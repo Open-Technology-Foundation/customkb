@@ -131,8 +131,11 @@ logger = None
 
 def customkb_usage() -> str:
   """Return the usage information for the CustomKB script."""
+  from version import VERSION
   import __main__
-  helpstr = f'''{__main__.__doc__}
+  helpstr = f'''CustomKB {VERSION}: AI-Powered Knowledge Base System
+
+{__main__.__doc__}
 {dashes(0, '=')}'''
   return helpstr
 
@@ -264,6 +267,14 @@ def main() -> None:
     formatter_class=argparse.RawDescriptionHelpFormatter,
   )
   help_parser.set_defaults(verbose=True)
+  
+  # VERSION
+  version_parser = subparsers.add_parser(
+    'version',
+    description='Display version information',
+  )
+  version_parser.add_argument('--build', action='store_true', help='Include build number')
+  version_parser.set_defaults(verbose=True)
 
   # Parse arguments
   args = main_parser.parse_args()
@@ -295,6 +306,10 @@ def main() -> None:
       print(edit_config(args))
     elif args.command == 'help':
       print(customkb_usage())
+      sys.exit(0)
+    elif args.command == 'version':
+      from version import get_version
+      print(f"CustomKB {get_version(args.build)}")
       sys.exit(0)
     else:
       logger.error(f'Unknown command: {args.command}')

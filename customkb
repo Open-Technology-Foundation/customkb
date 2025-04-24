@@ -7,6 +7,8 @@ set -euo pipefail
 
 readonly -- PRG0="$(readlink -en -- "$0")"
 readonly -- PRGDIR="${PRG0%/*}" PRG="${PRG0##*/}"
+readonly -- VERSION=$(python3 -c "import sys; sys.path.insert(0, '$PRGDIR'); from version import VERSION; print(VERSION)")
+readonly -- VERSION_FULL=$(python3 -c "import sys; sys.path.insert(0, '$PRGDIR'); from version import VERSION_FULL; print(VERSION_FULL)")
 
 # Ensure .venv exists
 if [[ ! -d "$PRGDIR/.venv" ]]; then
