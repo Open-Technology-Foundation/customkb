@@ -18,6 +18,7 @@ class MockDataGenerator:
     kb_name: str = "test_kb",
     vector_model: str = "text-embedding-3-small",
     vector_dimensions: int = 1536,
+    include_new_sections: bool = True,
     **kwargs
   ) -> str:
     """
@@ -27,6 +28,7 @@ class MockDataGenerator:
         kb_name: Knowledge base name
         vector_model: Embedding model to use
         vector_dimensions: Vector dimensions
+        include_new_sections: Whether to include new config sections
         **kwargs: Additional config parameters
         
     Returns:
@@ -51,6 +53,60 @@ query_role = {kwargs.get('query_role', 'You are a helpful assistant.')}
     
     if 'query_context_files' in kwargs:
       config_content += f"query_context_files = {kwargs['query_context_files']}\n"
+    
+    # Add new configuration sections for comprehensive testing
+    if include_new_sections:
+      config_content += f"""
+[API]
+# API performance and rate limiting - test values
+api_call_delay_seconds = {kwargs.get('api_call_delay_seconds', 0.01)}
+api_max_retries = {kwargs.get('api_max_retries', 3)}
+api_max_concurrency = {kwargs.get('api_max_concurrency', 2)}
+api_min_concurrency = {kwargs.get('api_min_concurrency', 1)}
+backoff_exponent = {kwargs.get('backoff_exponent', 2)}
+backoff_jitter = {kwargs.get('backoff_jitter', 0.1)}
+
+[LIMITS]
+# File and memory limits - test values
+max_file_size_mb = {kwargs.get('max_file_size_mb', 10)}
+max_query_file_size_mb = {kwargs.get('max_query_file_size_mb', 1)}
+memory_cache_size = {kwargs.get('memory_cache_size', 100)}
+api_key_min_length = {kwargs.get('api_key_min_length', 20)}
+max_query_length = {kwargs.get('max_query_length', 1000)}
+max_config_value_length = {kwargs.get('max_config_value_length', 500)}
+max_json_size = {kwargs.get('max_json_size', 1000)}
+
+[PERFORMANCE]
+# Processing and caching performance - test values
+embedding_batch_size = {kwargs.get('embedding_batch_size', 10)}
+checkpoint_interval = {kwargs.get('checkpoint_interval', 2)}
+commit_frequency = {kwargs.get('commit_frequency', 10)}
+io_thread_pool_size = {kwargs.get('io_thread_pool_size', 2)}
+file_processing_batch_size = {kwargs.get('file_processing_batch_size', 5)}
+sql_batch_size = {kwargs.get('sql_batch_size', 10)}
+reference_batch_size = {kwargs.get('reference_batch_size', 2)}
+query_cache_ttl_days = {kwargs.get('query_cache_ttl_days', 1)}
+default_editor = {kwargs.get('default_editor', 'nano')}
+
+[ALGORITHMS]
+# Algorithm parameters and thresholds - test values
+high_dimension_threshold = {kwargs.get('high_dimension_threshold', 1024)}
+small_dataset_threshold = {kwargs.get('small_dataset_threshold', 10)}
+medium_dataset_threshold = {kwargs.get('medium_dataset_threshold', 100)}
+ivf_centroid_multiplier = {kwargs.get('ivf_centroid_multiplier', 2)}
+max_centroids = {kwargs.get('max_centroids', 64)}
+token_estimation_sample_size = {kwargs.get('token_estimation_sample_size', 3)}
+token_estimation_multiplier = {kwargs.get('token_estimation_multiplier', 1.2)}
+similarity_threshold = {kwargs.get('similarity_threshold', 0.7)}
+low_similarity_scope_factor = {kwargs.get('low_similarity_scope_factor', 0.5)}
+max_chunk_overlap = {kwargs.get('max_chunk_overlap', 50)}
+overlap_ratio = {kwargs.get('overlap_ratio', 0.3)}
+heading_search_limit = {kwargs.get('heading_search_limit', 100)}
+entity_extraction_limit = {kwargs.get('entity_extraction_limit', 200)}
+default_dir_permissions = {kwargs.get('default_dir_permissions', 493)}
+default_code_language = {kwargs.get('default_code_language', 'python')}
+additional_stopword_languages = {kwargs.get('additional_stopword_languages', 'french,german')}
+"""
     
     return config_content
 

@@ -98,26 +98,30 @@ class TestCacheFunctionality:
   def test_memory_cache_lru_eviction(self):
     """Test LRU eviction in memory cache."""
     from embedding.embed_manager import add_to_memory_cache, embedding_memory_cache, embedding_memory_cache_keys
+    from config.config_manager import KnowledgeBase
     
     # Clear cache
     embedding_memory_cache.clear()
     embedding_memory_cache_keys.clear()
     
-    with patch('embedding.embed_manager.MEMORY_CACHE_SIZE', 2):
-      # Add first embedding
-      add_to_memory_cache("key1", [0.1])
-      assert "key1" in embedding_memory_cache
-      
-      # Add second embedding
-      add_to_memory_cache("key2", [0.2])
-      assert "key2" in embedding_memory_cache
-      assert len(embedding_memory_cache) == 2
-      
-      # Add third embedding (should evict first)
-      add_to_memory_cache("key3", [0.3])
-      assert "key1" not in embedding_memory_cache
-      assert "key2" in embedding_memory_cache
-      assert "key3" in embedding_memory_cache
+    # Create a KB instance with small cache size for testing
+    kb = KnowledgeBase("test", memory_cache_size=2)
+    
+    # Add first embedding
+    add_to_memory_cache("key1", [0.1], kb)
+    assert "key1" in embedding_memory_cache
+    
+    # Add second embedding
+    add_to_memory_cache("key2", [0.2], kb)
+    assert "key2" in embedding_memory_cache
+    assert len(embedding_memory_cache) == 2
+    
+    # Add third embedding (should evict first)
+    add_to_memory_cache("key3", [0.3], kb)
+    assert "key1" not in embedding_memory_cache
+    assert "key2" in embedding_memory_cache
+    assert "key3" in embedding_memory_cache
+    assert len(embedding_memory_cache) == 2
 
 
 class TestFaissIndexOptimization:

@@ -21,6 +21,7 @@ pip install flake8 mypy pytest pytest-cov pdoc
 ### Memories
 
 - python venv for this codebase is .venv/
+- once again, remember. .gudang/ and .venv/ don't need to be checked
 
 ### Testing & Quality
 ```bash
@@ -53,7 +54,7 @@ pytest --cov=. tests/
 ### Main Components
 - **config_manager.py**: Configuration handling and KnowledgeBase class
 - **db_manager.py**: Database operations and text processing
-- **embed_manager_improved.py**: Vector embedding generation
+- **embed_manager.py**: Vector embedding generation
 - **query_manager.py**: Semantic search and response generation
 - **model_manager.py**: AI model handling and resolution
 - **utils/**: Text processing, logging, and utility functions
@@ -162,6 +163,56 @@ query_top_k = 50
 query_context_scope = 4
 query_temperature = 0.1
 query_role = You are a helpful assistant.
+
+[API]
+# API performance and rate limiting
+api_call_delay_seconds = 0.05
+api_max_retries = 20
+api_max_concurrency = 8
+api_min_concurrency = 3
+backoff_exponent = 2
+backoff_jitter = 0.1
+
+[LIMITS]
+# File and memory limits
+max_file_size_mb = 100
+max_query_file_size_mb = 1
+memory_cache_size = 10000
+api_key_min_length = 20
+max_query_length = 10000
+max_config_value_length = 1000
+max_json_size = 10000
+
+[PERFORMANCE]
+# Processing and caching performance
+embedding_batch_size = 100
+checkpoint_interval = 10
+commit_frequency = 1000
+io_thread_pool_size = 4
+file_processing_batch_size = 500
+sql_batch_size = 500
+reference_batch_size = 5
+query_cache_ttl_days = 7
+default_editor = joe
+
+[ALGORITHMS]
+# Algorithm parameters and thresholds
+high_dimension_threshold = 1536
+small_dataset_threshold = 1000
+medium_dataset_threshold = 100000
+ivf_centroid_multiplier = 4
+max_centroids = 256
+token_estimation_sample_size = 10
+token_estimation_multiplier = 1.3
+similarity_threshold = 0.6
+low_similarity_scope_factor = 0.5
+max_chunk_overlap = 100
+overlap_ratio = 0.5
+heading_search_limit = 200
+entity_extraction_limit = 500
+default_dir_permissions = 0o770
+default_code_language = python
+additional_stopword_languages = indonesian,french,german,swedish
 ```
 
 ### Environment Variables

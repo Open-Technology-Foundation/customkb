@@ -229,6 +229,143 @@ query_context_files = file1.txt,file2.txt,file3.txt
     
     assert before <= kb.start_time <= after
   
+  def test_new_config_sections_defaults(self):
+    """Test that new configuration section defaults are properly set."""
+    kb = KnowledgeBase("test")
+    
+    # API configuration defaults
+    assert kb.DEF_API_CALL_DELAY_SECONDS == 0.05
+    assert kb.DEF_API_MAX_RETRIES == 20
+    assert kb.DEF_API_MAX_CONCURRENCY == 8
+    assert kb.DEF_API_MIN_CONCURRENCY == 3
+    assert kb.DEF_BACKOFF_EXPONENT == 2
+    assert kb.DEF_BACKOFF_JITTER == 0.1
+    
+    # Limits configuration defaults
+    assert kb.DEF_MAX_FILE_SIZE_MB == 100
+    assert kb.DEF_MAX_QUERY_FILE_SIZE_MB == 1
+    assert kb.DEF_MEMORY_CACHE_SIZE == 10000
+    assert kb.DEF_API_KEY_MIN_LENGTH == 20
+    assert kb.DEF_MAX_QUERY_LENGTH == 10000
+    assert kb.DEF_MAX_CONFIG_VALUE_LENGTH == 1000
+    assert kb.DEF_MAX_JSON_SIZE == 10000
+    
+    # Performance configuration defaults
+    assert kb.DEF_EMBEDDING_BATCH_SIZE == 100
+    assert kb.DEF_CHECKPOINT_INTERVAL == 10
+    assert kb.DEF_COMMIT_FREQUENCY == 1000
+    assert kb.DEF_IO_THREAD_POOL_SIZE == 4
+    assert kb.DEF_FILE_PROCESSING_BATCH_SIZE == 500
+    assert kb.DEF_SQL_BATCH_SIZE == 500
+    assert kb.DEF_REFERENCE_BATCH_SIZE == 5
+    assert kb.DEF_QUERY_CACHE_TTL_DAYS == 7
+    assert kb.DEF_DEFAULT_EDITOR == 'joe'
+    
+    # Algorithms configuration defaults
+    assert kb.DEF_HIGH_DIMENSION_THRESHOLD == 1536
+    assert kb.DEF_SMALL_DATASET_THRESHOLD == 1000
+    assert kb.DEF_MEDIUM_DATASET_THRESHOLD == 100000
+    assert kb.DEF_IVF_CENTROID_MULTIPLIER == 4
+    assert kb.DEF_MAX_CENTROIDS == 256
+    assert kb.DEF_TOKEN_ESTIMATION_SAMPLE_SIZE == 10
+    assert kb.DEF_TOKEN_ESTIMATION_MULTIPLIER == 1.3
+    assert kb.DEF_SIMILARITY_THRESHOLD == 0.6
+    assert kb.DEF_LOW_SIMILARITY_SCOPE_FACTOR == 0.5
+    assert kb.DEF_MAX_CHUNK_OVERLAP == 100
+    assert kb.DEF_OVERLAP_RATIO == 0.5
+    assert kb.DEF_HEADING_SEARCH_LIMIT == 200
+    assert kb.DEF_ENTITY_EXTRACTION_LIMIT == 500
+    assert kb.DEF_DEFAULT_DIR_PERMISSIONS == 0o770
+    assert kb.DEF_DEFAULT_CODE_LANGUAGE == 'python'
+    assert kb.DEF_ADDITIONAL_STOPWORD_LANGUAGES == ['indonesian', 'french', 'german', 'swedish']
+  
+  def test_new_config_sections_from_file(self, temp_data_manager):
+    """Test loading new configuration sections from config file."""
+    from tests.fixtures.mock_data import MockDataGenerator
+    
+    # Create config with new sections
+    config_content = MockDataGenerator.create_sample_config(
+      include_new_sections=True,
+      api_call_delay_seconds=0.02,
+      api_max_retries=5,
+      max_file_size_mb=50,
+      embedding_batch_size=25,
+      similarity_threshold=0.8
+    )
+    
+    config_file = temp_data_manager.create_temp_config(config_content)
+    kb = KnowledgeBase(config_file)
+    
+    # Test that values are loaded from config file
+    assert kb.api_call_delay_seconds == 0.02
+    assert kb.api_max_retries == 5
+    assert kb.max_file_size_mb == 50
+    assert kb.embedding_batch_size == 25
+    assert kb.similarity_threshold == 0.8
+    
+    # Test that defaults are used for unspecified values
+    assert kb.api_max_concurrency == 2  # from test config default
+    assert kb.memory_cache_size == 100  # from test config default
+  
+  def test_new_config_sections_env_override(self, temp_config_file):
+    """Test that environment variables override new config section values."""
+    with patch.dict(os.environ, {
+      'API_CALL_DELAY_SECONDS': '0.1',
+      'MAX_FILE_SIZE_MB': '200',
+      'EMBEDDING_BATCH_SIZE': '50',
+      'SIMILARITY_THRESHOLD': '0.9'
+    }):
+      kb = KnowledgeBase(temp_config_file)
+      assert kb.api_call_delay_seconds == 0.1
+      assert kb.max_file_size_mb == 200
+      assert kb.embedding_batch_size == 50
+      assert kb.similarity_threshold == 0.9
+  
+  def test_new_config_sections_kwargs(self):
+    """Test new configuration sections with kwargs."""
+    kb = KnowledgeBase(
+      "test_kb",
+      api_call_delay_seconds=0.001,
+      max_file_size_mb=500,
+      embedding_batch_size=200,
+      similarity_threshold=0.95,
+      default_editor='vim'
+    )
+    
+    assert kb.api_call_delay_seconds == 0.001
+    assert kb.max_file_size_mb == 500
+    assert kb.embedding_batch_size == 200
+    assert kb.similarity_threshold == 0.95
+    assert kb.default_editor == 'vim'
+  
+  def test_additional_stopword_languages_parsing(self, temp_data_manager):
+    """Test parsing of additional_stopword_languages list parameter."""
+    config_content = """[DEFAULT]
+vector_model = test-model
+
+[ALGORITHMS]
+additional_stopword_languages = spanish,italian,portuguese
+"""
+    config_file = temp_data_manager.create_temp_config(config_content)
+    kb = KnowledgeBase(config_file)
+    
+    assert kb.additional_stopword_languages == ['spanish', 'italian', 'portuguese']
+  
+  def test_config_sections_missing_fallback(self, temp_data_manager):
+    """Test fallback to DEFAULT section when specific sections are missing."""
+    config_content = """[DEFAULT]
+vector_model = test-model
+# No API, LIMITS, PERFORMANCE, or ALGORITHMS sections
+"""
+    config_file = temp_data_manager.create_temp_config(config_content)
+    kb = KnowledgeBase(config_file)
+    
+    # Should use defaults since sections are missing
+    assert kb.api_call_delay_seconds == 0.05
+    assert kb.max_file_size_mb == 100
+    assert kb.embedding_batch_size == 100
+    assert kb.similarity_threshold == 0.6
+  
   @patch('config.config_manager.get_env')
   def test_get_env_called_for_overrides(self, mock_get_env, temp_config_file):
     """Test that get_env is called for environment variable overrides."""

@@ -166,8 +166,16 @@ def edit_config(args: argparse.Namespace, logger) -> int:
 
   editor = os.getenv('EDITOR')
   if not editor:
-    logger.warning("EDITOR envvar not defined; defaulting to 'joe'")
-    editor = 'joe'
+    # Load config to get default editor preference
+    try:
+      kb = KnowledgeBase(config_file)
+      default_editor = getattr(kb, 'default_editor', 'joe')
+      logger.warning(f"EDITOR envvar not defined; defaulting to '{default_editor}'")
+      editor = default_editor
+    except Exception:
+      # Fallback if config loading fails
+      logger.warning("EDITOR envvar not defined; defaulting to 'joe'")
+      editor = 'joe'
 
   try:
     import subprocess

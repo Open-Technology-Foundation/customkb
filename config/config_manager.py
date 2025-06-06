@@ -16,7 +16,7 @@ from utils.text_utils import split_filepath, find_file, get_env
 VECTORDBS = os.getenv('VECTORDBS', '/var/lib/vectordbs')
 if not os.path.exists(VECTORDBS):
   try:
-    os.makedirs(VECTORDBS, mode=0o770, exist_ok=True)
+    os.makedirs(VECTORDBS, mode=0o770, exist_ok=True)  # Will be made configurable per-instance
   except Exception as e:
     raise EnvironmentError(f"Failed to create directory {VECTORDBS}: {e}")
 
@@ -131,22 +131,77 @@ class KnowledgeBase:
       'DEF_QUERY_MAX_TOKENS': (int, 4000)
     }
 
+    # New configuration sections for performance tuning
+    self.API_CONFIG = {
+      'DEF_API_CALL_DELAY_SECONDS': (float, 0.05),
+      'DEF_API_MAX_RETRIES': (int, 20),
+      'DEF_API_MAX_CONCURRENCY': (int, 8),
+      'DEF_API_MIN_CONCURRENCY': (int, 3),
+      'DEF_BACKOFF_EXPONENT': (int, 2),
+      'DEF_BACKOFF_JITTER': (float, 0.1)
+    }
+
+    self.LIMITS_CONFIG = {
+      'DEF_MAX_FILE_SIZE_MB': (int, 100),
+      'DEF_MAX_QUERY_FILE_SIZE_MB': (int, 1),
+      'DEF_MEMORY_CACHE_SIZE': (int, 10000),
+      'DEF_API_KEY_MIN_LENGTH': (int, 20),
+      'DEF_MAX_QUERY_LENGTH': (int, 10000),
+      'DEF_MAX_CONFIG_VALUE_LENGTH': (int, 1000),
+      'DEF_MAX_JSON_SIZE': (int, 10000)
+    }
+
+    self.PERFORMANCE_CONFIG = {
+      'DEF_EMBEDDING_BATCH_SIZE': (int, 100),
+      'DEF_CHECKPOINT_INTERVAL': (int, 10),
+      'DEF_COMMIT_FREQUENCY': (int, 1000),
+      'DEF_IO_THREAD_POOL_SIZE': (int, 4),
+      'DEF_FILE_PROCESSING_BATCH_SIZE': (int, 500),
+      'DEF_SQL_BATCH_SIZE': (int, 500),
+      'DEF_REFERENCE_BATCH_SIZE': (int, 5),
+      'DEF_QUERY_CACHE_TTL_DAYS': (int, 7),
+      'DEF_DEFAULT_EDITOR': (str, 'joe')
+    }
+
+    self.ALGORITHMS_CONFIG = {
+      'DEF_HIGH_DIMENSION_THRESHOLD': (int, 1536),
+      'DEF_SMALL_DATASET_THRESHOLD': (int, 1000),
+      'DEF_MEDIUM_DATASET_THRESHOLD': (int, 100000),
+      'DEF_IVF_CENTROID_MULTIPLIER': (int, 4),
+      'DEF_MAX_CENTROIDS': (int, 256),
+      'DEF_TOKEN_ESTIMATION_SAMPLE_SIZE': (int, 10),
+      'DEF_TOKEN_ESTIMATION_MULTIPLIER': (float, 1.3),
+      'DEF_SIMILARITY_THRESHOLD': (float, 0.6),
+      'DEF_LOW_SIMILARITY_SCOPE_FACTOR': (float, 0.5),
+      'DEF_MAX_CHUNK_OVERLAP': (int, 100),
+      'DEF_OVERLAP_RATIO': (float, 0.5),
+      'DEF_HEADING_SEARCH_LIMIT': (int, 200),
+      'DEF_ENTITY_EXTRACTION_LIMIT': (int, 500),
+      'DEF_DEFAULT_DIR_PERMISSIONS': (int, 0o770),
+      'DEF_DEFAULT_CODE_LANGUAGE': (str, 'python'),
+      'DEF_ADDITIONAL_STOPWORD_LANGUAGES': (list, ['indonesian', 'french', 'german', 'swedish'])
+    }
+
     # Set default values from environment or defaults
-    for var_name, (var_type, default_value) in self.CONFIG.items():
-      try:
-        env_value = os.getenv(var_name)
-        if env_value is not None:
-          setattr(self, var_name, var_type(env_value))
-        else:
+    all_configs = [self.CONFIG, self.API_CONFIG, self.LIMITS_CONFIG, 
+                   self.PERFORMANCE_CONFIG, self.ALGORITHMS_CONFIG]
+    
+    for config_dict in all_configs:
+      for var_name, (var_type, default_value) in config_dict.items():
+        try:
+          env_value = os.getenv(var_name)
+          if env_value is not None:
+            setattr(self, var_name, var_type(env_value))
+          else:
+            setattr(self, var_name, default_value)
+        except ValueError as e:
+          if logger:
+            logger.warning(f"Invalid value for {var_name}, using default. Error: {e}")
           setattr(self, var_name, default_value)
-      except ValueError as e:
-        if logger:
-          logger.warning(f"Invalid value for {var_name}, using default. Error: {e}")
-        setattr(self, var_name, default_value)
-      except Exception as e:
-        if logger:
-          logger.error(f"Error initializing {var_name}: {e}")
-        raise
+        except Exception as e:
+          if logger:
+            logger.error(f"Error initializing {var_name}: {e}")
+          raise
 
     self.start_time = int(time.time())
     self.load_config(kb_base, **kwargs)
@@ -180,6 +235,8 @@ class KnowledgeBase:
       config = configparser.ConfigParser()
       config.read(kb_base)
       df = config['DEFAULT']
+      
+      # Load original config parameters
       self.vector_model = get_env('VECTOR_MODEL',
         df.get('vector_model', fallback=self.DEF_VECTOR_MODEL))
       self.vector_dimensions = get_env('VECTOR_DIMENSIONS',
@@ -204,7 +261,100 @@ class KnowledgeBase:
         df.getint('query_context_scope', fallback=self.DEF_QUERY_CONTEXT_SCOPE), int)
       self.query_context_files = get_env('QUERY_CONTEXT_FILES',
         df.get('query_context_files', fallback='').split(','))
+
+      # Load new configuration sections
+      api_section = config['API'] if 'API' in config else df
+      limits_section = config['LIMITS'] if 'LIMITS' in config else df
+      performance_section = config['PERFORMANCE'] if 'PERFORMANCE' in config else df
+      algorithms_section = config['ALGORITHMS'] if 'ALGORITHMS' in config else df
+
+      # API configuration
+      self.api_call_delay_seconds = get_env('API_CALL_DELAY_SECONDS',
+        api_section.getfloat('api_call_delay_seconds', fallback=self.DEF_API_CALL_DELAY_SECONDS), float)
+      self.api_max_retries = get_env('API_MAX_RETRIES',
+        api_section.getint('api_max_retries', fallback=self.DEF_API_MAX_RETRIES), int)
+      self.api_max_concurrency = get_env('API_MAX_CONCURRENCY',
+        api_section.getint('api_max_concurrency', fallback=self.DEF_API_MAX_CONCURRENCY), int)
+      self.api_min_concurrency = get_env('API_MIN_CONCURRENCY',
+        api_section.getint('api_min_concurrency', fallback=self.DEF_API_MIN_CONCURRENCY), int)
+      self.backoff_exponent = get_env('BACKOFF_EXPONENT',
+        api_section.getint('backoff_exponent', fallback=self.DEF_BACKOFF_EXPONENT), int)
+      self.backoff_jitter = get_env('BACKOFF_JITTER',
+        api_section.getfloat('backoff_jitter', fallback=self.DEF_BACKOFF_JITTER), float)
+
+      # Limits configuration
+      self.max_file_size_mb = get_env('MAX_FILE_SIZE_MB',
+        limits_section.getint('max_file_size_mb', fallback=self.DEF_MAX_FILE_SIZE_MB), int)
+      self.max_query_file_size_mb = get_env('MAX_QUERY_FILE_SIZE_MB',
+        limits_section.getint('max_query_file_size_mb', fallback=self.DEF_MAX_QUERY_FILE_SIZE_MB), int)
+      self.memory_cache_size = get_env('MEMORY_CACHE_SIZE',
+        limits_section.getint('memory_cache_size', fallback=self.DEF_MEMORY_CACHE_SIZE), int)
+      self.api_key_min_length = get_env('API_KEY_MIN_LENGTH',
+        limits_section.getint('api_key_min_length', fallback=self.DEF_API_KEY_MIN_LENGTH), int)
+      self.max_query_length = get_env('MAX_QUERY_LENGTH',
+        limits_section.getint('max_query_length', fallback=self.DEF_MAX_QUERY_LENGTH), int)
+      self.max_config_value_length = get_env('MAX_CONFIG_VALUE_LENGTH',
+        limits_section.getint('max_config_value_length', fallback=self.DEF_MAX_CONFIG_VALUE_LENGTH), int)
+      self.max_json_size = get_env('MAX_JSON_SIZE',
+        limits_section.getint('max_json_size', fallback=self.DEF_MAX_JSON_SIZE), int)
+
+      # Performance configuration
+      self.embedding_batch_size = get_env('EMBEDDING_BATCH_SIZE',
+        performance_section.getint('embedding_batch_size', fallback=self.DEF_EMBEDDING_BATCH_SIZE), int)
+      self.checkpoint_interval = get_env('CHECKPOINT_INTERVAL',
+        performance_section.getint('checkpoint_interval', fallback=self.DEF_CHECKPOINT_INTERVAL), int)
+      self.commit_frequency = get_env('COMMIT_FREQUENCY',
+        performance_section.getint('commit_frequency', fallback=self.DEF_COMMIT_FREQUENCY), int)
+      self.io_thread_pool_size = get_env('IO_THREAD_POOL_SIZE',
+        performance_section.getint('io_thread_pool_size', fallback=self.DEF_IO_THREAD_POOL_SIZE), int)
+      self.file_processing_batch_size = get_env('FILE_PROCESSING_BATCH_SIZE',
+        performance_section.getint('file_processing_batch_size', fallback=self.DEF_FILE_PROCESSING_BATCH_SIZE), int)
+      self.sql_batch_size = get_env('SQL_BATCH_SIZE',
+        performance_section.getint('sql_batch_size', fallback=self.DEF_SQL_BATCH_SIZE), int)
+      self.reference_batch_size = get_env('REFERENCE_BATCH_SIZE',
+        performance_section.getint('reference_batch_size', fallback=self.DEF_REFERENCE_BATCH_SIZE), int)
+      self.query_cache_ttl_days = get_env('QUERY_CACHE_TTL_DAYS',
+        performance_section.getint('query_cache_ttl_days', fallback=self.DEF_QUERY_CACHE_TTL_DAYS), int)
+      self.default_editor = get_env('DEFAULT_EDITOR',
+        performance_section.get('default_editor', fallback=self.DEF_DEFAULT_EDITOR))
+
+      # Algorithms configuration
+      self.high_dimension_threshold = get_env('HIGH_DIMENSION_THRESHOLD',
+        algorithms_section.getint('high_dimension_threshold', fallback=self.DEF_HIGH_DIMENSION_THRESHOLD), int)
+      self.small_dataset_threshold = get_env('SMALL_DATASET_THRESHOLD',
+        algorithms_section.getint('small_dataset_threshold', fallback=self.DEF_SMALL_DATASET_THRESHOLD), int)
+      self.medium_dataset_threshold = get_env('MEDIUM_DATASET_THRESHOLD',
+        algorithms_section.getint('medium_dataset_threshold', fallback=self.DEF_MEDIUM_DATASET_THRESHOLD), int)
+      self.ivf_centroid_multiplier = get_env('IVF_CENTROID_MULTIPLIER',
+        algorithms_section.getint('ivf_centroid_multiplier', fallback=self.DEF_IVF_CENTROID_MULTIPLIER), int)
+      self.max_centroids = get_env('MAX_CENTROIDS',
+        algorithms_section.getint('max_centroids', fallback=self.DEF_MAX_CENTROIDS), int)
+      self.token_estimation_sample_size = get_env('TOKEN_ESTIMATION_SAMPLE_SIZE',
+        algorithms_section.getint('token_estimation_sample_size', fallback=self.DEF_TOKEN_ESTIMATION_SAMPLE_SIZE), int)
+      self.token_estimation_multiplier = get_env('TOKEN_ESTIMATION_MULTIPLIER',
+        algorithms_section.getfloat('token_estimation_multiplier', fallback=self.DEF_TOKEN_ESTIMATION_MULTIPLIER), float)
+      self.similarity_threshold = get_env('SIMILARITY_THRESHOLD',
+        algorithms_section.getfloat('similarity_threshold', fallback=self.DEF_SIMILARITY_THRESHOLD), float)
+      self.low_similarity_scope_factor = get_env('LOW_SIMILARITY_SCOPE_FACTOR',
+        algorithms_section.getfloat('low_similarity_scope_factor', fallback=self.DEF_LOW_SIMILARITY_SCOPE_FACTOR), float)
+      self.max_chunk_overlap = get_env('MAX_CHUNK_OVERLAP',
+        algorithms_section.getint('max_chunk_overlap', fallback=self.DEF_MAX_CHUNK_OVERLAP), int)
+      self.overlap_ratio = get_env('OVERLAP_RATIO',
+        algorithms_section.getfloat('overlap_ratio', fallback=self.DEF_OVERLAP_RATIO), float)
+      self.heading_search_limit = get_env('HEADING_SEARCH_LIMIT',
+        algorithms_section.getint('heading_search_limit', fallback=self.DEF_HEADING_SEARCH_LIMIT), int)
+      self.entity_extraction_limit = get_env('ENTITY_EXTRACTION_LIMIT',
+        algorithms_section.getint('entity_extraction_limit', fallback=self.DEF_ENTITY_EXTRACTION_LIMIT), int)
+      self.default_dir_permissions = get_env('DEFAULT_DIR_PERMISSIONS',
+        algorithms_section.getint('default_dir_permissions', fallback=self.DEF_DEFAULT_DIR_PERMISSIONS), int)
+      self.default_code_language = get_env('DEFAULT_CODE_LANGUAGE',
+        algorithms_section.get('default_code_language', fallback=self.DEF_DEFAULT_CODE_LANGUAGE))
+      
+      # Handle list parameter specially
+      stopword_langs_str = algorithms_section.get('additional_stopword_languages', fallback=','.join(self.DEF_ADDITIONAL_STOPWORD_LANGUAGES))
+      self.additional_stopword_languages = [lang.strip() for lang in stopword_langs_str.split(',') if lang.strip()]
     else:
+      # Original configuration
       self.vector_model = kwargs.get('vector_model', self.DEF_VECTOR_MODEL)
       self.vector_dimensions = kwargs.get('vector_dimensions', self.DEF_VECTOR_DIMENSIONS)
       self.vector_chunks = kwargs.get('vector_chunks', self.DEF_VECTOR_CHUNKS)
@@ -217,6 +367,53 @@ class KnowledgeBase:
       self.query_role = kwargs.get('query_role', self.DEF_QUERY_ROLE)
       self.query_context_scope = kwargs.get('query_context_scope', self.DEF_QUERY_CONTEXT_SCOPE)
       self.query_context_files = kwargs.get('query_context_files', [])
+
+      # New configuration parameters (for kwargs support)
+      # API parameters
+      self.api_call_delay_seconds = kwargs.get('api_call_delay_seconds', self.DEF_API_CALL_DELAY_SECONDS)
+      self.api_max_retries = kwargs.get('api_max_retries', self.DEF_API_MAX_RETRIES)
+      self.api_max_concurrency = kwargs.get('api_max_concurrency', self.DEF_API_MAX_CONCURRENCY)
+      self.api_min_concurrency = kwargs.get('api_min_concurrency', self.DEF_API_MIN_CONCURRENCY)
+      self.backoff_exponent = kwargs.get('backoff_exponent', self.DEF_BACKOFF_EXPONENT)
+      self.backoff_jitter = kwargs.get('backoff_jitter', self.DEF_BACKOFF_JITTER)
+
+      # Limits parameters
+      self.max_file_size_mb = kwargs.get('max_file_size_mb', self.DEF_MAX_FILE_SIZE_MB)
+      self.max_query_file_size_mb = kwargs.get('max_query_file_size_mb', self.DEF_MAX_QUERY_FILE_SIZE_MB)
+      self.memory_cache_size = kwargs.get('memory_cache_size', self.DEF_MEMORY_CACHE_SIZE)
+      self.api_key_min_length = kwargs.get('api_key_min_length', self.DEF_API_KEY_MIN_LENGTH)
+      self.max_query_length = kwargs.get('max_query_length', self.DEF_MAX_QUERY_LENGTH)
+      self.max_config_value_length = kwargs.get('max_config_value_length', self.DEF_MAX_CONFIG_VALUE_LENGTH)
+      self.max_json_size = kwargs.get('max_json_size', self.DEF_MAX_JSON_SIZE)
+
+      # Performance parameters
+      self.embedding_batch_size = kwargs.get('embedding_batch_size', self.DEF_EMBEDDING_BATCH_SIZE)
+      self.checkpoint_interval = kwargs.get('checkpoint_interval', self.DEF_CHECKPOINT_INTERVAL)
+      self.commit_frequency = kwargs.get('commit_frequency', self.DEF_COMMIT_FREQUENCY)
+      self.io_thread_pool_size = kwargs.get('io_thread_pool_size', self.DEF_IO_THREAD_POOL_SIZE)
+      self.file_processing_batch_size = kwargs.get('file_processing_batch_size', self.DEF_FILE_PROCESSING_BATCH_SIZE)
+      self.sql_batch_size = kwargs.get('sql_batch_size', self.DEF_SQL_BATCH_SIZE)
+      self.reference_batch_size = kwargs.get('reference_batch_size', self.DEF_REFERENCE_BATCH_SIZE)
+      self.query_cache_ttl_days = kwargs.get('query_cache_ttl_days', self.DEF_QUERY_CACHE_TTL_DAYS)
+      self.default_editor = kwargs.get('default_editor', self.DEF_DEFAULT_EDITOR)
+
+      # Algorithms parameters
+      self.high_dimension_threshold = kwargs.get('high_dimension_threshold', self.DEF_HIGH_DIMENSION_THRESHOLD)
+      self.small_dataset_threshold = kwargs.get('small_dataset_threshold', self.DEF_SMALL_DATASET_THRESHOLD)
+      self.medium_dataset_threshold = kwargs.get('medium_dataset_threshold', self.DEF_MEDIUM_DATASET_THRESHOLD)
+      self.ivf_centroid_multiplier = kwargs.get('ivf_centroid_multiplier', self.DEF_IVF_CENTROID_MULTIPLIER)
+      self.max_centroids = kwargs.get('max_centroids', self.DEF_MAX_CENTROIDS)
+      self.token_estimation_sample_size = kwargs.get('token_estimation_sample_size', self.DEF_TOKEN_ESTIMATION_SAMPLE_SIZE)
+      self.token_estimation_multiplier = kwargs.get('token_estimation_multiplier', self.DEF_TOKEN_ESTIMATION_MULTIPLIER)
+      self.similarity_threshold = kwargs.get('similarity_threshold', self.DEF_SIMILARITY_THRESHOLD)
+      self.low_similarity_scope_factor = kwargs.get('low_similarity_scope_factor', self.DEF_LOW_SIMILARITY_SCOPE_FACTOR)
+      self.max_chunk_overlap = kwargs.get('max_chunk_overlap', self.DEF_MAX_CHUNK_OVERLAP)
+      self.overlap_ratio = kwargs.get('overlap_ratio', self.DEF_OVERLAP_RATIO)
+      self.heading_search_limit = kwargs.get('heading_search_limit', self.DEF_HEADING_SEARCH_LIMIT)
+      self.entity_extraction_limit = kwargs.get('entity_extraction_limit', self.DEF_ENTITY_EXTRACTION_LIMIT)
+      self.default_dir_permissions = kwargs.get('default_dir_permissions', self.DEF_DEFAULT_DIR_PERMISSIONS)
+      self.default_code_language = kwargs.get('default_code_language', self.DEF_DEFAULT_CODE_LANGUAGE)
+      self.additional_stopword_languages = kwargs.get('additional_stopword_languages', self.DEF_ADDITIONAL_STOPWORD_LANGUAGES)
 
   def save_config(self, output_to: Optional[str] = None) -> None:
     """

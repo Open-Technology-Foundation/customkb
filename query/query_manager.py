@@ -69,7 +69,7 @@ logger = get_logger(__name__)
 # Cache settings
 CACHE_DIR = os.path.join(os.getenv('VECTORDBS', '/var/lib/vectordbs'), '.query_cache')
 os.makedirs(CACHE_DIR, exist_ok=True)
-CACHE_TTL = 3600 * 24 * 7  # 7 days in seconds
+# Cache TTL will be loaded from KB config in functions
 
 def get_cache_key(query_text: str, model: str) -> str:
   """
@@ -85,13 +85,14 @@ def get_cache_key(query_text: str, model: str) -> str:
   text_hash = hashlib.md5(query_text.encode('utf-8')).hexdigest()
   return f"{model}_{text_hash}"
 
-def get_cached_query_embedding(query_text: str, model: str) -> Optional[List[float]]:
+def get_cached_query_embedding(query_text: str, model: str, kb=None) -> Optional[List[float]]:
   """
   Retrieve a cached query embedding if it exists.
   
   Args:
       query_text: The query text.
       model: The model used for embedding.
+      kb: KnowledgeBase instance for configuration (optional).
       
   Returns:
       The cached embedding or None if not found or expired.
@@ -103,7 +104,9 @@ def get_cached_query_embedding(query_text: str, model: str) -> Optional[List[flo
     try:
       # Check if cache is expired
       file_time = os.path.getmtime(cache_file)
-      if time.time() - file_time > CACHE_TTL:
+      cache_ttl_days = getattr(kb, 'query_cache_ttl_days', 7) if kb else 7
+      cache_ttl_seconds = cache_ttl_days * 24 * 3600
+      if time.time() - file_time > cache_ttl_seconds:
         os.remove(cache_file)
         return None
         
@@ -153,19 +156,20 @@ def get_context_range(index_start: int, context_n: int) -> List[int]:
 
   return [start_index, end_index - 1]
 
-async def get_query_embedding(query_text: str, model: str) -> np.ndarray:
+async def get_query_embedding(query_text: str, model: str, kb: Optional['KnowledgeBase'] = None) -> np.ndarray:
   """
   Get embedding for a query, using cache if available.
   
   Args:
       query_text: The query text.
       model: The model to use for embedding.
+      kb: KnowledgeBase instance for configuration.
       
   Returns:
       Numpy array containing the embedding vector.
   """
   clean_query = clean_text(query_text)
-  cached_embedding = get_cached_query_embedding(clean_query, model)
+  cached_embedding = get_cached_query_embedding(clean_query, model, kb)
   
   if cached_embedding:
     logger.info("Using cached query embedding")
@@ -241,9 +245,11 @@ async def process_reference_batch(kb: KnowledgeBase, batch: List[Tuple[int, floa
   context_scope = int(kb.query_context_scope)
   
   for idx, distance in batch:
-    # Adjust context scope based on similarity
-    if distance < 0.6:
-      local_context_scope = max(int(context_scope / 2), 1)
+    # Adjust context scope based on similarity (configurable thresholds)
+    similarity_threshold = getattr(kb, 'similarity_threshold', 0.6)
+    scope_factor = getattr(kb, 'low_similarity_scope_factor', 0.5)
+    if distance < similarity_threshold:
+      local_context_scope = max(int(context_scope * scope_factor), 1)
     else:
       local_context_scope = context_scope
       
@@ -291,6 +297,9 @@ async def process_query_async(args: argparse.Namespace, logger) -> str:
 
   logger.info(f"Knowledgebase config: {cfgfile}")
 
+  # Initialize knowledge base early to access configuration
+  kb = KnowledgeBase(cfgfile)
+
   # Get query text
   query_text = args.query_text
   if args.query_file:
@@ -307,7 +316,9 @@ async def process_query_async(args: argparse.Namespace, logger) -> str:
       # Check file size limit for query files
       try:
         file_size = os.path.getsize(validated_query_file)
-        max_query_file_size = 1024 * 1024  # 1MB limit for query files
+        # Get configurable max query file size
+        max_query_file_size_mb = getattr(kb, 'max_query_file_size_mb', 1)
+        max_query_file_size = max_query_file_size_mb * 1024 * 1024  # Convert MB to bytes
         if file_size > max_query_file_size:
           logger.error(f"Query file too large: {file_size} bytes (max: {max_query_file_size})")
           return f"Error: Query file too large (max 1MB)"
@@ -318,7 +329,9 @@ async def process_query_async(args: argparse.Namespace, logger) -> str:
       with open(validated_query_file, 'r') as file:
         additional_query = file.read()
         # Sanitize the loaded query text
-        additional_query = sanitize_query_text(additional_query)
+        # Use configurable max query length
+        max_query_length = getattr(kb, 'max_query_length', 10000)
+        additional_query = sanitize_query_text(additional_query, max_query_length)
         query_text = additional_query + f"\n{query_text}"
         
     except IOError as e:
@@ -332,8 +345,6 @@ async def process_query_async(args: argparse.Namespace, logger) -> str:
   if return_context_only:
     logger.warning("Returning context only")
 
-  # Initialize knowledge base
-  kb = KnowledgeBase(cfgfile)
   if args.verbose:
     kb.save_config()
 
@@ -356,7 +367,7 @@ async def process_query_async(args: argparse.Namespace, logger) -> str:
   index = faiss.read_index(kb.knowledge_base_vector)
 
   # Generate query embedding asynchronously
-  query_vector = await get_query_embedding(query_text, kb.vector_model)
+  query_vector = await get_query_embedding(query_text, kb.vector_model, kb)
 
   # Search for similar vectors
   distances, indices = index.search(query_vector, kb.query_top_k)
@@ -368,8 +379,8 @@ async def process_query_async(args: argparse.Namespace, logger) -> str:
     close_database(kb)
     return "Error: Database connection is not open."
 
-  # Prepare batch processing
-  batch_size = 5  # Process 5 documents at a time
+  # Prepare batch processing (configurable batch size)
+  batch_size = getattr(kb, 'reference_batch_size', 5)  # Process documents at a time
   reference_batches = []
   for i in range(0, len(indices[0]), batch_size):
     batch = [(int(indices[0][j]), float(distances[0][j])) 
@@ -402,7 +413,9 @@ async def process_query_async(args: argparse.Namespace, logger) -> str:
   # Read context files in parallel
   context_files_content = []
   if kb.query_context_files:
-    with ThreadPoolExecutor(max_workers=min(4, len(kb.query_context_files))) as executor:
+    # Get configurable context file I/O thread pool size
+    max_workers = getattr(kb, 'io_thread_pool_size', 4)
+    with ThreadPoolExecutor(max_workers=min(max_workers, len(kb.query_context_files))) as executor:
       context_files_content = list(executor.map(
         read_context_file, 
         [file for file in kb.query_context_files if file]
@@ -497,14 +510,16 @@ def build_reference_string(kb: KnowledgeBase, reference: List[List[Any]],
         
         # Try to parse as JSON first (safer)
         try:
-          metadata = safe_json_loads(metadata_str)
+          # Use configurable max JSON size
+          max_json_size = getattr(kb, 'max_json_size', 10000)
+          metadata = safe_json_loads(metadata_str, max_json_size)
         except ValueError:
           # Fallback: if it's not JSON, try to convert Python dict string to JSON
           # This handles cases where metadata was stored as Python dict strings
           try:
             # Replace Python dict syntax with JSON syntax
             json_str = metadata_str.replace("'", '"').replace('True', 'true').replace('False', 'false').replace('None', 'null')
-            metadata = safe_json_loads(json_str)
+            metadata = safe_json_loads(json_str, max_json_size)
           except ValueError:
             logger.warning(f"Could not parse metadata: {metadata_str[:100]}...")
             metadata = {}

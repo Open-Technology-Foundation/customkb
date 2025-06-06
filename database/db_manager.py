@@ -136,7 +136,10 @@ def init_text_splitter(kb: KnowledgeBase, file_type: str = 'text') -> Any:
   """
   min_tokens = kb.db_min_tokens
   max_tokens = kb.db_max_tokens
-  chunk_overlap = min(100, min_tokens // 2)  # Overlap to maintain context between chunks
+  # Get configurable overlap parameters
+  max_chunk_overlap = getattr(kb, 'max_chunk_overlap', 100)
+  overlap_ratio = getattr(kb, 'overlap_ratio', 0.5)
+  chunk_overlap = min(max_chunk_overlap, int(min_tokens * overlap_ratio))  # Overlap to maintain context between chunks
   
   if file_type == 'markdown':
     return MarkdownTextSplitter(
@@ -146,7 +149,7 @@ def init_text_splitter(kb: KnowledgeBase, file_type: str = 'text') -> Any:
   elif file_type == 'code':
     # Determine language from filename or default to Python
     return RecursiveCharacterTextSplitter.from_language(
-      language=Language.PYTHON,  # Default to Python, could be improved to detect language
+      language=getattr(Language, getattr(kb, 'default_code_language', 'PYTHON').upper(), Language.PYTHON),  # Configurable default language
       chunk_size=max_tokens,
       chunk_overlap=chunk_overlap
     )
@@ -173,13 +176,14 @@ def init_text_splitter(kb: KnowledgeBase, file_type: str = 'text') -> Any:
       separators=["\n\n", "\n", ". ", " ", ""]
     )
 
-def extract_metadata(text: str, file_path: str) -> Dict[str, Any]:
+def extract_metadata(text: str, file_path: str, kb) -> Dict[str, Any]:
   """
   Extract and track metadata about a text chunk.
   
   Args:
       text: The text chunk.
       file_path: Path to the source file.
+      kb: KnowledgeBase instance for configuration.
       
   Returns:
       Dictionary containing metadata.
@@ -196,7 +200,9 @@ def extract_metadata(text: str, file_path: str) -> Dict[str, Any]:
     metadata["file_type"] = ext.lstrip('.')
   
   # Extract headings if possible (expanded pattern for different heading formats)
-  heading_match = re.search(r'^(#+|=+|[-]+)\s*(.+?)(?:\s*[=|-]+)?$', text[:200], re.MULTILINE)
+  # Get configurable heading search limit
+  heading_search_limit = getattr(kb, 'heading_search_limit', 200)
+  heading_match = re.search(r'^(#+|=+|[-]+)\s*(.+?)(?:\s*[=|-]+)?$', text[:heading_search_limit], re.MULTILINE)
   if heading_match:
     metadata["heading"] = heading_match.group(2).strip()
   
@@ -222,7 +228,9 @@ def extract_metadata(text: str, file_path: str) -> Dict[str, Any]:
   # Extract named entities if spaCy is available
   if nlp:
     try:
-      doc = nlp(text[:500])  # Process first 500 chars for efficiency
+      # Get configurable entity extraction limit
+      entity_limit = getattr(kb, 'entity_extraction_limit', 500)
+      doc = nlp(text[:entity_limit])  # Process configurable amount for efficiency
       entities = {}
       for ent in doc.ents:
         if ent.label_ not in entities:
@@ -291,8 +299,8 @@ def process_database(args: argparse.Namespace, logger) -> str:
   # Always include the specified primary language
   Stop_Words.update(stopwords.words(language))
   
-  # Add additional language stopwords
-  additional_languages = ['indonesian', 'french', 'german', 'swedish']
+  # Add additional language stopwords (configurable)
+  additional_languages = getattr(kb, 'additional_stopword_languages', ['indonesian', 'french', 'german', 'swedish'])
   for lang in additional_languages:
     if lang != language:  # Skip if same as primary language
       try:
@@ -312,7 +320,8 @@ def process_database(args: argparse.Namespace, logger) -> str:
   # Process files in optimized batches
   filecount = 0
   processed_count = 0
-  batch_size = 500  # Process 500 files per batch for better performance
+  # Get configurable file processing batch size
+  batch_size = getattr(kb, 'file_processing_batch_size', 500)  # Process files per batch for better performance
   
   # Pre-compute batch splitting and file types to reduce overhead
   for i in range(0, len(all_files), batch_size):
@@ -500,7 +509,9 @@ def process_text_file(kb: KnowledgeBase, sourcefile: str, splitter: Any,
     # Check file size (prevent extremely large files)
     try:
       file_size = os.path.getsize(validated_sourcefile)
-      max_file_size = 100 * 1024 * 1024  # 100MB limit
+      # Get configurable max file size
+      max_file_size_mb = getattr(kb, 'max_file_size_mb', 100)
+      max_file_size = max_file_size_mb * 1024 * 1024  # Convert MB to bytes
       if file_size > max_file_size:
         log_operation_error(logger, "file_size_check", 
                            ValueError(f"File too large: {file_size} bytes"), 
@@ -555,8 +566,8 @@ def process_text_file(kb: KnowledgeBase, sourcefile: str, splitter: Any,
       # Always include the new primary language
       Stop_Words.update(stopwords.words(language))
       
-      # Add additional language stopwords
-      additional_languages = ['indonesian', 'french', 'german', 'swedish']
+      # Add additional language stopwords (use same config as before)
+      additional_languages = getattr(kb, 'additional_stopword_languages', ['indonesian', 'french', 'german', 'swedish'])
       for lang in additional_languages:
         if lang != language:  # Skip if same as primary language
           try:
@@ -580,7 +591,7 @@ def process_text_file(kb: KnowledgeBase, sourcefile: str, splitter: Any,
   previous_chunk = None
   for i, chunk in enumerate(chunks):
     # Extract metadata about the chunk
-    metadata = extract_metadata(chunk, sourcefile)
+    metadata = extract_metadata(chunk, sourcefile, kb)
     
     # Enhanced text cleaning with entity preservation
     clean_chunk = enhanced_clean_text(chunk, Stop_Words, lemmatizer)
@@ -601,8 +612,9 @@ def process_text_file(kb: KnowledgeBase, sourcefile: str, splitter: Any,
       "INSERT INTO docs (sid, sourcedoc, originaltext, embedtext, embedded, language, metadata) VALUES (?,?,?,?,?,?,?)",
       (sid, basename, chunk, clean_chunk, 0, language, metadata_str))
     
-    # Commit periodically
-    if sid % 1000 == 0:
+    # Commit periodically (configurable frequency)
+    commit_frequency = getattr(kb, 'commit_frequency', 1000)
+    if sid % commit_frequency == 0:
       kb.sql_connection.commit()
     
     previous_chunk = chunk

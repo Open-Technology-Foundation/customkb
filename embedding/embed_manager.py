@@ -54,13 +54,7 @@ logger = get_logger(__name__)
 CACHE_DIR = os.path.join(os.getenv('VECTORDBS', '/var/lib/vectordbs'), '.embedding_cache')
 os.makedirs(CACHE_DIR, exist_ok=True)
 
-# New configuration for rate limiting and checkpointing
-API_CALL_DELAY = 0.05  # Forced delay of 50ms between API calls
-MAX_BATCH_SIZE = 100   # Maximum number of chunks to send in a single API call
-CHECKPOINT_INTERVAL = 10  # Save progress after every 10 successful batches
-
-# Memory cache configuration
-MEMORY_CACHE_SIZE = 10000  # Number of embeddings to keep in memory
+# Configuration constants - these are now loaded from KnowledgeBase config
 
 # In-memory embedding cache
 embedding_memory_cache = {}
@@ -112,16 +106,18 @@ def get_cached_embedding(text: str, model: str) -> Optional[List[float]]:
   
   return None
 
-def add_to_memory_cache(cache_key: str, embedding: List[float]) -> None:
+def add_to_memory_cache(cache_key: str, embedding: List[float], kb=None) -> None:
   """
   Add an embedding to the in-memory cache with LRU eviction.
   
   Args:
       cache_key: The cache key.
       embedding: The embedding vector.
+      kb: KnowledgeBase instance for configuration (optional).
   """
   # If cache is full, remove oldest item
-  if len(embedding_memory_cache_keys) >= MEMORY_CACHE_SIZE:
+  memory_cache_size = getattr(kb, 'memory_cache_size', 10000) if kb else 10000
+  if len(embedding_memory_cache_keys) >= memory_cache_size:
     oldest_key = embedding_memory_cache_keys.pop(0)
     if oldest_key in embedding_memory_cache:
       del embedding_memory_cache[oldest_key]
@@ -130,7 +126,7 @@ def add_to_memory_cache(cache_key: str, embedding: List[float]) -> None:
   embedding_memory_cache[cache_key] = embedding
   embedding_memory_cache_keys.append(cache_key)
 
-def save_embedding_to_cache(text: str, model: str, embedding: List[float]) -> None:
+def save_embedding_to_cache(text: str, model: str, embedding: List[float], kb=None) -> None:
   """
   Save an embedding to both memory and disk cache.
   
@@ -142,7 +138,7 @@ def save_embedding_to_cache(text: str, model: str, embedding: List[float]) -> No
   cache_key = get_cache_key(text, model)
   
   # Save to memory cache for immediate access
-  add_to_memory_cache(cache_key, embedding)
+  add_to_memory_cache(cache_key, embedding, kb)
   
   # Save to disk asynchronously using a thread to avoid blocking
   cache_file = os.path.join(CACHE_DIR, f"{cache_key}.json")
@@ -155,40 +151,51 @@ def save_embedding_to_cache(text: str, model: str, embedding: List[float]) -> No
       logger.warning(f"Failed to cache embedding: {e}")
   
   # Use thread pool for disk I/O to avoid blocking the main process
-  executor = ThreadPoolExecutor(max_workers=4)
+  # Use configurable thread pool size from kb config if available
+  max_workers = getattr(kb, 'io_thread_pool_size', 4) if 'kb' in locals() else 4
+  executor = ThreadPoolExecutor(max_workers=max_workers)
   executor.submit(save_to_disk)
   executor.shutdown(wait=False)
 
-def get_optimal_faiss_index(dimensions: int, dataset_size: int) -> faiss.Index:
+def get_optimal_faiss_index(dimensions: int, dataset_size: int, kb=None) -> faiss.Index:
   """
   Create an optimal FAISS index based on dataset size.
   
   Args:
       dimensions: The dimensions of the embedding vectors.
       dataset_size: The expected size of the dataset.
+      kb: KnowledgeBase instance for configuration (optional).
       
   Returns:
       A FAISS index optimized for the dataset.
   """
-  # For high-dimensional vectors (>1536), use a flat index 
+  # Get configurable thresholds
+  high_dim_threshold = getattr(kb, 'high_dimension_threshold', 1536) if kb else 1536
+  small_dataset_threshold = getattr(kb, 'small_dataset_threshold', 1000) if kb else 1000
+  medium_dataset_threshold = getattr(kb, 'medium_dataset_threshold', 100000) if kb else 100000
+  ivf_centroid_multiplier = getattr(kb, 'ivf_centroid_multiplier', 4) if kb else 4
+  max_centroids = getattr(kb, 'max_centroids', 256) if kb else 256
+  
+  # For high-dimensional vectors, use a flat index 
   # which doesn't require training and works with any dimensionality
-  if dimensions > 1536:
+  if dimensions > high_dim_threshold:
     logger.info(f"Using IndexFlatIP due to high dimensionality: {dimensions}")
     index = faiss.IndexFlatIP(dimensions)
     return faiss.IndexIDMap(index)
     
   # For smaller datasets, use exact search
-  if dataset_size < 1000:
+  if dataset_size < small_dataset_threshold:
     index = faiss.IndexFlatIP(dimensions)
-  elif dataset_size < 100000:
-    # For medium datasets, use IVF with 4*sqrt(n) centroids
-    n_centroids = min(int(4 * (dataset_size ** 0.5)), 256)  # Limit number of centroids
+  elif dataset_size < medium_dataset_threshold:
+    # For medium datasets, use IVF with configurable centroids
+    n_centroids = min(int(ivf_centroid_multiplier * (dataset_size ** 0.5)), max_centroids)  # Limit number of centroids
     quantizer = faiss.IndexFlatIP(dimensions)
     index = faiss.IndexIVFFlat(quantizer, dimensions, n_centroids, faiss.METRIC_INNER_PRODUCT)
     index.train_mode = True  # Enable training mode initially
   else:
     # For large datasets, use IVF with PQ for compression
-    n_centroids = min(int(4 * (dataset_size ** 0.5)), 512)  # Limit number of centroids
+    large_max_centroids = max_centroids * 2  # Allow more centroids for large datasets
+    n_centroids = min(int(ivf_centroid_multiplier * (dataset_size ** 0.5)), large_max_centroids)  # Limit number of centroids
     quantizer = faiss.IndexFlatIP(dimensions)
     # Use 8-bit quantization with 16 subquantizers
     n_subquantizers = min(16, dimensions // 64)  # Ensure subquantizers fit dimensions
@@ -197,7 +204,7 @@ def get_optimal_faiss_index(dimensions: int, dataset_size: int) -> faiss.Index:
   
   return faiss.IndexIDMap(index)
 
-def calculate_optimal_batch_size(chunks: List[str], model: str, max_batch_size: int) -> int:
+def calculate_optimal_batch_size(chunks: List[str], model: str, max_batch_size: int, kb=None) -> int:
   """
   Calculate the optimal batch size based on token limits.
   
@@ -205,15 +212,20 @@ def calculate_optimal_batch_size(chunks: List[str], model: str, max_batch_size: 
       chunks: The text chunks to embed.
       model: The embedding model.
       max_batch_size: The maximum batch size.
+      kb: KnowledgeBase instance for configuration (optional).
       
   Returns:
       An optimal batch size.
   """
+  # Get configurable parameters
+  sample_size_config = getattr(kb, 'token_estimation_sample_size', 10) if kb else 10
+  token_multiplier = getattr(kb, 'token_estimation_multiplier', 1.3) if kb else 1.3
+  
   # More efficient token estimation
   # Sample a few chunks rather than processing all of them
-  sample_size = min(10, len(chunks))
+  sample_size = min(sample_size_config, len(chunks))
   sample_chunks = chunks[:sample_size]
-  avg_tokens = sum(len(chunk.split()) * 1.3 for chunk in sample_chunks) / sample_size
+  avg_tokens = sum(len(chunk.split()) * token_multiplier for chunk in sample_chunks) / sample_size
   
   # Token limits per model
   model_limits = {
@@ -241,7 +253,7 @@ async def process_embedding_batch_async(kb: KnowledgeBase, chunks: List[str]) ->
   Returns:
       List of embedding vectors.
   """
-  max_tries = 20
+  max_tries = getattr(kb, 'api_max_retries', 20)
   tries = 0
   cached_embeddings: List[Optional[List[float]]] = [get_cached_embedding(chunk, kb.vector_model) for chunk in chunks]
   uncached_indices = [i for i, emb in enumerate(cached_embeddings) if emb is None]
@@ -253,7 +265,8 @@ async def process_embedding_batch_async(kb: KnowledgeBase, chunks: List[str]) ->
   uncached_chunks = [chunks[i] for i in uncached_indices]
   
   # Split into smaller sub-batches to improve reliability
-  sub_batch_size = min(MAX_BATCH_SIZE, len(uncached_chunks))
+  max_batch_size_config = getattr(kb, 'embedding_batch_size', 100)
+  sub_batch_size = min(max_batch_size_config, len(uncached_chunks))
   sub_batches = [uncached_chunks[i:i+sub_batch_size] for i in range(0, len(uncached_chunks), sub_batch_size)]
   sub_indices = [uncached_indices[i:i+sub_batch_size] for i in range(0, len(uncached_indices), sub_batch_size)]
   
@@ -265,7 +278,8 @@ async def process_embedding_batch_async(kb: KnowledgeBase, chunks: List[str]) ->
     while True:
       try:
         # Add forced delay to avoid rate limiting
-        await asyncio.sleep(API_CALL_DELAY)
+        api_delay = getattr(kb, 'api_call_delay_seconds', 0.05)
+        await asyncio.sleep(api_delay)
         
         response = await async_openai_client.embeddings.create(
           input=sub_batch, 
@@ -276,7 +290,7 @@ async def process_embedding_batch_async(kb: KnowledgeBase, chunks: List[str]) ->
         
         # Cache the new embeddings
         for i, chunk_idx, emb in zip(range(len(sub_batch)), sub_idx, new_embeddings):
-          save_embedding_to_cache(chunks[chunk_idx], kb.vector_model, emb)
+          save_embedding_to_cache(chunks[chunk_idx], kb.vector_model, emb, kb)
           all_embeddings.append((chunk_idx, emb))
         
         all_indices.extend(sub_idx)
@@ -292,7 +306,9 @@ async def process_embedding_batch_async(kb: KnowledgeBase, chunks: List[str]) ->
           # Skip this batch instead of exiting the program
           break
         # Exponential backoff with jitter
-        backoff = (tries ** 2) + (0.1 * np.random.random())
+        backoff_exponent = getattr(kb, 'backoff_exponent', 2)
+        backoff_jitter = getattr(kb, 'backoff_jitter', 0.1)
+        backoff = (tries ** backoff_exponent) + (backoff_jitter * np.random.random())
         logger.info(f"Rate limit hit. Backing off for {backoff:.2f} seconds")
         await asyncio.sleep(backoff)
   
@@ -356,7 +372,9 @@ async def process_all_batches_with_checkpoints(kb: KnowledgeBase, index: faiss.I
   # Set concurrency limit based on dataset size
   # For larger datasets, process more batches concurrently
   dataset_size = sum(len(chunk_batch) for chunk_batch in all_chunks)
-  concurrency_limit = min(8, max(3, dataset_size // 1000))
+  max_concurrency = getattr(kb, 'api_max_concurrency', 8)
+  min_concurrency = getattr(kb, 'api_min_concurrency', 3)
+  concurrency_limit = min(max_concurrency, max(min_concurrency, dataset_size // 1000))
   logger.info(f"Using concurrency limit of {concurrency_limit} for embedding API calls")
   
   # Process batches in parallel with a semaphore to limit concurrent API calls
@@ -369,10 +387,11 @@ async def process_all_batches_with_checkpoints(kb: KnowledgeBase, index: faiss.I
   
   # Create tasks for batch processing with the semaphore for concurrent processing
   # Process batches in smaller groups to allow checkpointing
-  for batch_group_idx in range(0, len(all_chunks), CHECKPOINT_INTERVAL):
+  checkpoint_interval = getattr(kb, 'checkpoint_interval', 10)
+  for batch_group_idx in range(0, len(all_chunks), checkpoint_interval):
     # Get a group of batches to process
-    batch_group = all_chunks[batch_group_idx:batch_group_idx + CHECKPOINT_INTERVAL]
-    id_group = all_ids[batch_group_idx:batch_group_idx + CHECKPOINT_INTERVAL]
+    batch_group = all_chunks[batch_group_idx:batch_group_idx + checkpoint_interval]
+    id_group = all_ids[batch_group_idx:batch_group_idx + checkpoint_interval]
     
     # Process this group of batches concurrently
     tasks = []
@@ -395,11 +414,11 @@ async def process_all_batches_with_checkpoints(kb: KnowledgeBase, index: faiss.I
     # Update database to mark processed chunks as embedded
     if all_processed_ids:
       # Process in smaller batches to avoid "too many SQL variables" error
-      batch_size = 500  # SQLite typically has a limit of 999 variables
+      sql_batch_size = getattr(kb, 'sql_batch_size', 500)  # SQLite typically has a limit of 999 variables
       processed_ids_list = list(all_processed_ids)
       
-      for i in range(0, len(processed_ids_list), batch_size):
-        batch = processed_ids_list[i:i+batch_size]
+      for i in range(0, len(processed_ids_list), sql_batch_size):
+        batch = processed_ids_list[i:i+sql_batch_size]
         from utils.security_utils import safe_sql_in_query
         # Use safe SQL execution for ID list
         query_template = "UPDATE docs SET embedded=1 WHERE id IN ({placeholders})"
@@ -487,10 +506,10 @@ def process_embeddings(args: argparse.Namespace, logger) -> str:
       response = openai_client.embeddings.create(input=rows[0][1], model=kb.vector_model)
       embedding_dimensions = len(response.data[0].embedding)
       # Cache this embedding
-      save_embedding_to_cache(rows[0][1], kb.vector_model, response.data[0].embedding)
+      save_embedding_to_cache(rows[0][1], kb.vector_model, response.data[0].embedding, kb)
     
     logger.info(f"Using {embedding_dimensions=}")
-    index = get_optimal_faiss_index(embedding_dimensions, len(rows))
+    index = get_optimal_faiss_index(embedding_dimensions, len(rows), kb)
     reset_database = True
 
   # Reset embedded flag if needed
@@ -509,7 +528,7 @@ def process_embeddings(args: argparse.Namespace, logger) -> str:
   # Calculate optimal batch size
   sample_chunks = [row[1] for row in rows[:min(100, len(rows))]]
   configured_batch_size = kb.vector_chunks
-  optimal_batch_size = calculate_optimal_batch_size(sample_chunks, kb.vector_model, configured_batch_size)
+  optimal_batch_size = calculate_optimal_batch_size(sample_chunks, kb.vector_model, configured_batch_size, kb)
   logger.info(f"Using optimal batch size of {optimal_batch_size} (configured max: {configured_batch_size})")
   
   # Deduplicate texts to avoid embedding the same text multiple times
