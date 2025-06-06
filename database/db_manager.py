@@ -1,7 +1,26 @@
 #!/usr/bin/env python
 """
-Database management for CustomKB.
-Handles database connections, text processing, and storage.
+Database management module for CustomKB knowledge base system.
+
+This module handles all database-related operations including:
+- SQLite database creation and management
+- Text file ingestion and processing with multiple format support
+- Intelligent text chunking with configurable token limits
+- Multi-language stopword filtering and text normalization
+- Named entity recognition and metadata extraction
+- Batch processing with performance optimization
+- Transaction management and error recovery
+
+The module supports various file formats (Markdown, HTML, code files, plain text)
+and applies format-specific processing strategies for optimal text extraction.
+
+Key Features:
+- Automatic file type detection and appropriate splitter selection
+- Preserved entity names during text cleaning
+- Heading and section metadata extraction
+- Duplicate file detection and skip logic
+- Configurable chunk sizes with overlap management
+- Multi-language support with NLTK integration
 """
 
 import os
@@ -98,13 +117,17 @@ logger = get_logger(__name__)
 
 def detect_file_type(filename: str) -> str:
   """
-  Detect file type based on extension or content patterns.
+  Detect file type based on extension to select appropriate text processing strategy.
   
   Args:
-      filename: The path to the file.
+      filename: Path to the file to analyze.
   
   Returns:
-      String indicating file type ('markdown', 'code', 'text').
+      File type identifier: 'markdown', 'code', 'html', or 'text'.
+      
+  Note:
+      This determines which text splitter will be used for optimal chunking.
+      Each file type has specialized handling to preserve structure and context.
   """
   ext = os.path.splitext(filename)[1].lower()
   

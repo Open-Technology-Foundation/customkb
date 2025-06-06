@@ -1,13 +1,29 @@
 #!/usr/bin/env python
 """
-Configuration management for CustomKB.
-Handles loading, parsing, and validating configuration files for knowledge bases.
+Configuration management for CustomKB knowledge base system.
+
+This module provides the core configuration infrastructure for CustomKB, handling:
+- Configuration file loading and validation with security checks
+- Environment variable overrides with type conversion
+- Domain-style knowledge base naming (e.g., 'example.com.cfg')
+- Path resolution and validation for configuration files
+- Comprehensive configuration parameters across 5 categories:
+  * DEFAULT: Core model and processing settings
+  * API: External API interaction parameters
+  * LIMITS: Resource and security constraints
+  * PERFORMANCE: Optimization and tuning settings
+  * ALGORITHMS: Algorithm-specific thresholds and parameters
+
+The configuration resolution hierarchy is:
+1. Environment variables (highest priority)
+2. Configuration file values
+3. Built-in defaults (lowest priority)
 """
 
 import os
 import configparser
 import time
-from typing import Dict, Any, Optional, Tuple
+from typing import Optional
 
 from utils.logging_utils import get_logger
 from utils.text_utils import split_filepath, find_file, get_env
@@ -22,38 +38,52 @@ if not os.path.exists(VECTORDBS):
 
 logger = get_logger(__name__)
 
+
 def get_fq_cfg_filename(cfgfile: str) -> Optional[str]:
   """
-  Resolve a configuration filename to its fully-qualified path.
+  Resolve a configuration filename to its fully-qualified, validated path.
   
-  Handles domain-style names (e.g., 'example.com') and regular paths,
-  adding the .cfg extension if needed, and searching in VECTORDBS
-  directory if the file is not in the current path.
+  This function implements a sophisticated path resolution system that:
+  1. Validates the input path for security (no path traversal, etc.)
+  2. Handles domain-style names (e.g., 'example.com' → 'example.com.cfg')
+  3. Automatically appends '.cfg' extension if missing
+  4. Searches in VECTORDBS directory if file not found locally
+  5. Ensures the resolved path is within allowed directories
 
   Args:
-      cfgfile: The configuration file path or name.
+      cfgfile: Configuration file path or name. Can be:
+        - Full path: '/path/to/config.cfg'
+        - Relative path: 'configs/myproject.cfg'
+        - Domain-style: 'example.com' (becomes 'example.com.cfg')
+        - Base name: 'myproject' (becomes 'myproject.cfg')
 
   Returns:
-      The fully-qualified path to the configuration file, or None if not found.
+      The fully-qualified, validated path to the configuration file,
+      or None if the file cannot be found or fails validation.
+
+  Examples:
+      >>> get_fq_cfg_filename('example.com')
+      '/var/lib/vectordbs/example.com.cfg'
+      >>> get_fq_cfg_filename('myproject')
+      '/current/dir/myproject.cfg'
   """
   from utils.security_utils import validate_file_path, validate_safe_path
   
-  # Validate input
   if not cfgfile:
     logger.error("Configuration file name cannot be empty")
     return None
   
   try:
-    # Basic validation for dangerous characters and path traversal
+    # Security validation: prevent path traversal and dangerous characters
     validated_cfgfile = validate_file_path(cfgfile, ['.cfg', ''])
   except ValueError as e:
     logger.error(f"Invalid configuration file path: {e}")
     return None
-  # Handle domain-style names
+  # Handle domain-style names (e.g., 'example.com' → 'example.com.cfg')
   if '.' in validated_cfgfile and not validated_cfgfile.endswith('.cfg'):
     candidate_cfg = f"{validated_cfgfile}.cfg"
     if os.path.exists(candidate_cfg):
-      # Validate the final path is safe
+      # Security check: ensure path is within allowed directories
       if validate_safe_path(candidate_cfg, VECTORDBS) or validate_safe_path(candidate_cfg, os.getcwd()):
         return candidate_cfg
     
@@ -102,11 +132,33 @@ def get_fq_cfg_filename(cfgfile: str) -> Optional[str]:
 
 class KnowledgeBase:
   """
-  Manages configuration and resources for a knowledge base.
+  Central configuration and resource manager for a CustomKB knowledge base instance.
   
-  Handles loading settings from config files, environment variables, or defaults.
-  Maintains paths to database and vector files, and provides configuration for
-  embedding models, database parameters, and query settings.
+  This class serves as the primary configuration hub, managing all settings and
+  resources needed for a knowledge base to function. It implements a three-tier
+  configuration hierarchy: environment variables (highest priority), config file
+  values, and built-in defaults.
+  
+  Configuration Categories:
+  - DEFAULT: Core settings (models, dimensions, chunking parameters)
+  - API: External API interaction (rate limiting, concurrency, retries)
+  - LIMITS: Resource constraints and security limits
+  - PERFORMANCE: Optimization parameters (batch sizes, caching, threading)
+  - ALGORITHMS: Algorithm-specific thresholds and tuning parameters
+  
+  Attributes:
+      knowledge_base_name: The base name of this knowledge base
+      knowledge_base_db: Path to the SQLite database file
+      knowledge_base_vector: Path to the FAISS vector index file
+      vector_model: Name of the embedding model to use
+      query_model: Name of the LLM model for response generation
+      
+  Example:
+      >>> kb = KnowledgeBase('myproject.cfg')
+      >>> print(kb.vector_model)
+      'text-embedding-3-small'
+      >>> print(kb.knowledge_base_db)
+      '/var/lib/vectordbs/myproject.db'
   """
 
   def __init__(self, kb_base: str, **kwargs):
@@ -114,8 +166,24 @@ class KnowledgeBase:
     Initialize a KnowledgeBase with configuration from file or defaults.
 
     Args:
-      kb_base: Base name or path of the knowledge base.
-      **kwargs: Additional parameters to override configuration values.
+        kb_base: Path to configuration file (e.g., 'myproject.cfg') or 
+            base name of the knowledge base. If a .cfg file is provided,
+            configuration will be loaded from it. Otherwise, defaults or
+            kwargs will be used.
+        **kwargs: Additional parameters to override configuration values.
+            Any configuration parameter can be overridden by passing it
+            as a keyword argument.
+
+    Raises:
+        EnvironmentError: If required directories cannot be created.
+        ValueError: If configuration values fail type conversion.
+        
+    Example:
+        >>> # Load from config file
+        >>> kb = KnowledgeBase('myproject.cfg')
+        >>> 
+        >>> # Create with overrides
+        >>> kb = KnowledgeBase('myproject', vector_model='text-embedding-ada-002')
     """
     self.CONFIG = {
       'DEF_VECTOR_MODEL': (str, 'text-embedding-3-small'),

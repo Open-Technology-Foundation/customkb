@@ -1,234 +1,428 @@
 # CustomKB: AI-Powered Knowledge Base System
 
-CustomKB is a powerful, flexible tool for creating, managing, and querying custom knowledge bases using vector embeddings and large language models. It enables semantic search on your document corpus with intelligent, context-aware AI responses.
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
+[![Version](https://img.shields.io/badge/version-0.1.1-green.svg)](https://github.com/Open-Technology-Foundation/customkb)
 
-[![Version](https://img.shields.io/badge/version-0.1.1-blue.svg)](https://github.com/Open-Technology-Foundation/customkb)
+CustomKB is a production-ready knowledge base system that transforms your document collections into AI-powered, searchable knowledge repositories. It combines state-of-the-art embedding models with efficient vector search to deliver contextually relevant answers from your data.
 
-## Features
+## 🌟 Key Features
 
-- **Vector-Based Knowledge Storage**
-  - SQLite database for text storage with metadata
-  - FAISS vector indices for fast semantic search
-  - Document chunking with configurable token limits
-  - Automatic metadata extraction and tracking
+### Intelligent Document Processing
+- **Multi-Format Support**: Process Markdown, HTML, code files, and plain text with format-specific optimization
+- **Smart Chunking**: Configurable token-based chunking that preserves context and document structure
+- **Metadata Extraction**: Automatic extraction of headings, sections, and entities
+- **Multi-Language Support**: Stopword filtering and text normalization for 27+ languages
 
-- **Advanced Embedding Generation**
-  - Multiple embedding model support (OpenAI, Anthropic)
-  - Batch processing with automatic checkpointing
-  - Efficient caching to reduce API costs
-  - Optimized vector indexing based on dataset size
+### Advanced Vector Search
+- **High-Performance Storage**: SQLite for structured data + FAISS for vector indices
+- **Adaptive Indexing**: Automatically selects optimal index type based on dataset size
+- **Semantic Search**: Find relevant content based on meaning, not just keywords
+- **Relevance Scoring**: Context-aware ranking with configurable similarity thresholds
 
-- **Intelligent Querying**
-  - Semantic search with relevance scoring
-  - Context-aware retrieval with adjustable scope
-  - Integration with multiple LLMs:
-    - OpenAI GPT models (4o, 4.1, o1, etc.)
-    - Anthropic Claude models (3, 3.5, 3.7)
-    - Meta Llama models via Ollama
-  - XML-formatted context for precise AI prompting
+### AI-Powered Responses
+- **Multi-Model Support**: 
+  - OpenAI GPT (4o, 4o-mini, o1 series)
+  - Anthropic Claude (3.0, 3.5, 3.7)
+  - Meta Llama (via Ollama integration)
+- **Context Management**: XML-formatted reference contexts for precise prompting
+- **Customizable Behavior**: Fine-tune temperature, token limits, and system roles
 
-- **Text Processing & NLP**
-  - Entity recognition and preservation
-  - Multi-language stopword filtering
-  - Lemmatization and text normalization
-  - Intelligent document splitting
+### Enterprise-Ready Features
+- **Security First**: Input validation, path traversal prevention, API key protection
+- **Performance Optimized**: Batch processing, caching, concurrent API calls
+- **Resilient Design**: Checkpoint saving, automatic retries, graceful error handling
+- **Comprehensive Logging**: Per-knowledge-base logs with performance metrics
 
-- **Flexible Configuration**
-  - INI-style configuration files
-  - Environment variable overrides
-  - Command-line parameter customization
-  - Model aliasing through Models.json
+## 🚀 Quick Start
 
-## Installation
+### Prerequisites
 
-### Requirements
+- Python 3.12 or higher
+- SQLite 3.45+
+- API keys for your chosen embedding/LLM providers
+- 4GB+ RAM recommended for large datasets
 
-- Python 3.12+
-- Required packages: see `requirements.txt`
+### Installation
 
-### Setup
+1. **Clone the repository**
+   ```bash
+   git clone https://github.com/Open-Technology-Foundation/customkb.git
+   cd customkb
+   ```
 
-1. Clone the repository
-2. Create a virtual environment:
+2. **Set up Python environment**
    ```bash
    python -m venv .venv
-   source .venv/bin/activate
+   source .venv/bin/activate  # On Windows: .venv\Scripts\activate
    ```
-3. Install dependencies:
+
+3. **Install dependencies**
    ```bash
    pip install -r requirements.txt
    ```
-4. Set required environment variables:
+
+4. **Configure environment variables**
    ```bash
-   export OPENAI_API_KEY="your-api-key"
-   export ANTHROPIC_API_KEY="your-api-key"
-   export VECTORDBS="/path/to/vectordbs" # Default: /var/lib/vectordbs
-   export NLTK_DATA="/path/to/nltk_data" # Required for text processing
+   export OPENAI_API_KEY="your-openai-api-key"
+   export ANTHROPIC_API_KEY="your-anthropic-api-key"
+   export NLTK_DATA="$HOME/nltk_data"  # Required for text processing
+   export VECTORDBS="/var/lib/vectordbs"  # Optional: default KB storage location
    ```
 
-## Usage
+### Basic Usage Example
 
-CustomKB is used through a command-line interface with subcommands:
-
-```bash
-customkb <command> <config_file> [options]
-```
-
-### Basic Workflow
-
-1. **Create Configuration**:
-   - Create a `.cfg` file for your knowledge base (see example below)
-
-2. **Process Documents**:
-   ```bash
-   customkb database myknowledge.cfg *.txt *.md
+1. **Create a configuration file** (`myproject.cfg`):
+   ```ini
+   [DEFAULT]
+   vector_model = text-embedding-3-small
+   query_model = gpt-4o-mini
+   db_min_tokens = 200
+   db_max_tokens = 400
    ```
 
-3. **Generate Embeddings**:
+2. **Process your documents**:
    ```bash
-   customkb embed myknowledge.cfg
+   customkb database myproject.cfg docs/*.md *.txt
    ```
 
-4. **Query the Knowledge Base**:
+3. **Generate embeddings**:
    ```bash
-   customkb query myknowledge.cfg "What are the key features?"
+   customkb embed myproject.cfg
    ```
 
-### Configuration Example
+4. **Query your knowledge base**:
+   ```bash
+   customkb query myproject.cfg "How do I configure the vector model?"
+   ```
 
-Create a file named `myknowledge.cfg`:
+## 📖 Detailed Documentation
 
-```ini
-[DEFAULT]
-vector_model = text-embedding-3-large
-vector_dimensions = 1536
-vector_chunks = 500
+### Command Reference
 
-db_min_tokens = 300
-db_max_tokens = 500
-
-query_model = gpt-4o
-query_max_tokens = 4096
-query_top_k = 50
-query_context_scope = 4
-query_temperature = 0.1
-query_role = You are a helpful assistant.
-```
-
-### Commands
-
-#### Database Command
-Process files and store them in the knowledge base.
-
+#### `database` - Import Documents
 ```bash
-customkb database <config_file> [files...]
+customkb database <config> [files...] [options]
 ```
+Processes text files and stores them in the knowledge base.
 
-Options:
-- `-l, --language`: Language for stopwords (default: english)
-- `-v/q, --verbose/--quiet`: Control output verbosity
-- `-d, --debug`: Enable debug output
+**Options:**
+- `-l, --language LANG`: Stopword language (default: english)
+- `-f, --force`: Reprocess files already in database
+- `-v, --verbose`: Enable detailed output
+- `-d, --debug`: Enable debug logging
 
-#### Embedding Command
-Generate vector embeddings for stored text chunks.
-
+**Example:**
 ```bash
-customkb embed <config_file> [options]
+customkb database myproject.cfg ~/documents/**/*.md -l english
 ```
 
-Options:
-- `-r, --reset-database`: Reset the 'embedded' flag to reprocess all chunks
-
-#### Query Command
-Search the knowledge base and generate AI responses.
-
+#### `embed` - Generate Embeddings
 ```bash
-customkb query <config_file> <query_text> [options]
+customkb embed <config> [options]
 ```
+Creates vector embeddings for all text chunks in the database.
 
-Options:
-- `-Q, --query_file`: Load additional query text from file
-- `-c, --context, --context-only`: Return only context without AI response
-- `-R, --role`: Set custom LLM system role
-- `-m, --model`: Specify LLM model to use
-- `-k, --top-k`: Number of results to return
-- `-s, --context-scope`: Context segments per result
-- `-t, --temperature`: Model temperature
-- `-M, --max-tokens`: Maximum output tokens
+**Options:**
+- `-r, --reset-database`: Reset embedding status to reprocess all chunks
+- `-v, --verbose`: Show progress information
 
-#### Edit Command
-Edit the knowledge base configuration file.
-
+**Example:**
 ```bash
-customkb edit <config_file>
+customkb embed myproject.cfg --verbose
 ```
 
-#### Help Command
-Display usage information.
+#### `query` - Search Knowledge Base
+```bash
+customkb query <config> "<query>" [options]
+```
+Performs semantic search and generates AI responses.
 
+**Options:**
+- `-c, --context-only`: Return search results without AI response
+- `-m, --model MODEL`: Override configured LLM model
+- `-k, --top-k N`: Number of results to retrieve (default: 50)
+- `-s, --context-scope N`: Context segments per result (default: 4)
+- `-t, --temperature T`: Response creativity (0.0-2.0)
+- `-M, --max-tokens N`: Maximum response length
+- `-R, --role "ROLE"`: Custom system prompt
+
+**Examples:**
+```bash
+# Simple query
+customkb query myproject.cfg "What are the main features?"
+
+# Context-only search
+customkb query myproject.cfg "authentication" --context-only
+
+# Custom model and parameters
+customkb query myproject.cfg "Explain the architecture" \
+  --model claude-3-5-sonnet-20241022 \
+  --temperature 0.7 \
+  --max-tokens 2000
+```
+
+#### `edit` - Modify Configuration
+```bash
+customkb edit <config>
+```
+Opens the configuration file in your default editor.
+
+#### `help` - Show Usage
 ```bash
 customkb help
 ```
+Displays comprehensive usage information.
 
-#### Version Command
-Display version information.
-
+#### `version` - Display Version
 ```bash
 customkb version [--build]
 ```
+Shows version information with optional build number.
 
-Options:
-- `--build`: Include build number in version output
+### Configuration Guide
 
-## Versioning
+CustomKB uses INI-style configuration files with five sections:
 
-CustomKB uses semantic versioning (MAJOR.MINOR.PATCH.BUILD) to track changes:
+#### [DEFAULT] - Core Settings
+```ini
+[DEFAULT]
+# Embedding model configuration
+vector_model = text-embedding-3-small  # Options: ada-002, 3-small, 3-large
+vector_dimensions = 1536               # Must match model output
+vector_chunks = 500                    # Max chunks to process per batch
 
-- **MAJOR**: Incremented for incompatible API changes
-- **MINOR**: Incremented for new functionality in a backward compatible manner
-- **PATCH**: Incremented for backward compatible bug fixes
-- **BUILD**: Incremented for each development build (automatically updated with git commits)
+# Text processing parameters
+db_min_tokens = 200                    # Minimum chunk size
+db_max_tokens = 400                    # Maximum chunk size
 
-### Version Management
-
-The version management script `version.sh` provides commands for updating version components:
-
-```bash
-# Show version and usage information
-./version.sh
-
-# Increment build number (typically done automatically by git hook)
-./version.sh build
-
-# Increment patch number (for bug fixes)
-./version.sh patch
-
-# Increment minor version (for new features)
-./version.sh minor
-
-# Increment major version (for breaking changes)
-./version.sh major
+# Query configuration
+query_model = gpt-4o-mini              # LLM for responses
+query_max_tokens = 4096                # Max response length
+query_top_k = 50                       # Results to retrieve
+query_context_scope = 4                # Context segments per result
+query_temperature = 0.1                # Response creativity (0-2)
+query_role = You are a helpful assistant who provides accurate, detailed answers.
 ```
 
-## Advanced Configuration
+#### [API] - External Service Settings
+```ini
+[API]
+api_call_delay_seconds = 0.05          # Rate limiting delay
+api_max_retries = 20                   # Retry attempts
+api_max_concurrency = 8                # Parallel API calls
+api_min_concurrency = 3                # Minimum parallel calls
+backoff_exponent = 2                   # Exponential backoff factor
+backoff_jitter = 0.1                   # Randomization factor
+```
 
-Settings are resolved in this order:
-1. Command-line arguments
-2. Environment variables
-3. Configuration file values
-4. Default values
+#### [LIMITS] - Resource Constraints
+```ini
+[LIMITS]
+max_file_size_mb = 100                 # Maximum file size
+max_query_file_size_mb = 1             # Max query file size
+memory_cache_size = 10000              # Cache entries
+api_key_min_length = 20                # Security validation
+max_query_length = 10000               # Query text limit
+```
 
-### Environment Variables
+#### [PERFORMANCE] - Optimization
+```ini
+[PERFORMANCE]
+embedding_batch_size = 100             # Embeddings per batch
+checkpoint_interval = 10               # Save progress frequency
+commit_frequency = 1000                # Database commit interval
+io_thread_pool_size = 4                # Parallel I/O threads
+query_cache_ttl_days = 7               # Cache expiration
+```
 
-- `OPENAI_API_KEY`: OpenAI API key
-- `ANTHROPIC_API_KEY`: Anthropic API key
-- `VECTORDBS`: Base directory for vector databases
-- `NLTK_DATA`: NLTK data directory
-- `VECTOR_MODEL`: Default embedding model
-- `QUERY_MODEL`: Default query model
-- `QUERY_ROLE`: Default system role for AI
-- And many more (see configuration manager)
+#### [ALGORITHMS] - Processing Thresholds
+```ini
+[ALGORITHMS]
+similarity_threshold = 0.6             # Minimum relevance score
+low_similarity_scope_factor = 0.5      # Scope reduction factor
+max_chunk_overlap = 100                # Token overlap between chunks
+heading_search_limit = 200             # Characters to scan for headings
+```
 
-## License
+### Model Support
 
-CustomKB is licensed under MIT License.
+#### Embedding Models
+- **OpenAI**: text-embedding-ada-002, text-embedding-3-small, text-embedding-3-large
+- **Anthropic**: claude-3-embed (coming soon)
+
+#### Language Models
+- **OpenAI GPT-4**: gpt-4o, gpt-4o-mini, gpt-4-turbo
+- **OpenAI o1**: o1-preview, o1-mini
+- **Anthropic Claude**: claude-3-5-sonnet, claude-3-5-haiku, claude-3-opus
+- **Meta Llama**: llama-3.1-8b, llama-3.1-70b (via Ollama)
+
+### Performance Tuning
+
+#### For Large Datasets (100k+ documents)
+```ini
+[PERFORMANCE]
+embedding_batch_size = 200
+api_max_concurrency = 16
+checkpoint_interval = 5
+
+[ALGORITHMS]
+medium_dataset_threshold = 100000
+ivf_centroid_multiplier = 4
+```
+
+#### For High-Accuracy Requirements
+```ini
+[DEFAULT]
+vector_model = text-embedding-3-large
+query_top_k = 100
+query_context_scope = 6
+
+[ALGORITHMS]
+similarity_threshold = 0.7
+```
+
+#### For Fast Response Times
+```ini
+[DEFAULT]
+vector_model = text-embedding-3-small
+query_top_k = 20
+query_model = gpt-4o-mini
+
+[PERFORMANCE]
+query_cache_ttl_days = 30
+```
+
+## 🔧 Advanced Usage
+
+### Domain-Style Knowledge Bases
+```bash
+# Create knowledge base with domain naming
+customkb database example.com.cfg ~/example-docs/*.md
+
+# The system will create:
+# /var/lib/vectordbs/example.com.db
+# /var/lib/vectordbs/example.com.faiss
+```
+
+### Multi-Language Processing
+```bash
+# Process French documents
+customkb database multilang.cfg docs/*.txt --language french
+
+# Supported languages: english, french, german, spanish, italian, 
+# portuguese, dutch, swedish, norwegian, danish, finnish, russian,
+# turkish, arabic, chinese, japanese, korean, indonesian, and more
+```
+
+### Batch Processing Scripts
+```bash
+#!/bin/bash
+# process_knowledge_bases.sh
+
+for config in configs/*.cfg; do
+    echo "Processing $config..."
+    customkb database "$config" data/*.txt
+    customkb embed "$config"
+done
+```
+
+### Integration Examples
+
+#### Python Integration
+```python
+import subprocess
+import json
+
+def query_knowledge_base(config_file, query_text):
+    """Query CustomKB from Python code."""
+    result = subprocess.run(
+        ['customkb', 'query', config_file, query_text, '--context-only'],
+        capture_output=True,
+        text=True
+    )
+    return result.stdout
+
+# Example usage
+context = query_knowledge_base('myproject.cfg', 'How to install?')
+print(context)
+```
+
+#### Shell Pipeline
+```bash
+# Extract all Python code examples
+customkb query myproject.cfg "Python code examples" --context-only | \
+  grep -A 5 -B 5 "```python"
+```
+
+## 🛠️ Troubleshooting
+
+### Common Issues
+
+**"Configuration file not found"**
+- Ensure the .cfg file exists and has correct permissions
+- Check if VECTORDBS environment variable is set correctly
+
+**"API rate limit exceeded"**
+- Adjust `api_call_delay_seconds` in configuration
+- Reduce `api_max_concurrency` for stricter rate limits
+
+**"Out of memory during embedding"**
+- Reduce `embedding_batch_size` in configuration
+- Process files in smaller batches
+
+**"Low similarity scores"**
+- Check if documents and queries are in the same language
+- Consider using a more powerful embedding model
+- Adjust `similarity_threshold` in configuration
+
+### Debug Mode
+
+Enable comprehensive logging:
+```bash
+customkb query myproject.cfg "test query" --debug
+```
+
+Check logs in:
+```
+/var/lib/vectordbs/<kb_name>/logs/<kb_name>.log
+```
+
+## 🤝 Contributing
+
+We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for details.
+
+### Development Setup
+```bash
+# Install development dependencies
+pip install -r requirements-test.txt
+
+# Run tests
+pytest tests/
+
+# Check code style
+flake8 .
+mypy --ignore-missing-imports .
+```
+
+## 📄 License
+
+CustomKB is released under the MIT License. See [LICENSE](LICENSE) file for details.
+
+## 🙏 Acknowledgments
+
+CustomKB is built on excellent open-source projects:
+- [FAISS](https://github.com/facebookresearch/faiss) - Efficient similarity search
+- [LangChain](https://github.com/langchain-ai/langchain) - Text splitting utilities
+- [NLTK](https://www.nltk.org/) - Natural language processing
+- [spaCy](https://spacy.io/) - Advanced NLP features
+
+## 📞 Support
+
+- **Documentation**: [CustomKB Docs](https://customkb.readthedocs.io)
+- **Issues**: [GitHub Issues](https://github.com/Open-Technology-Foundation/customkb/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/Open-Technology-Foundation/customkb/discussions)
+
+---
+
+*CustomKB is actively maintained by the Open Technology Foundation*

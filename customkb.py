@@ -110,7 +110,7 @@ import textwrap
 import signal
 import time
 from pathlib import Path
-from typing import List, Optional, Dict, Any
+# Type hints are used inline, no need to import at module level
 
 # Ensure the project root is in the Python path
 project_root = Path(__file__).parent.absolute()
@@ -119,7 +119,7 @@ if str(project_root) not in sys.path:
 
 # Import modules
 from utils.logging_utils import setup_logging, dashes, elapsed_time
-from config.config_manager import get_fq_cfg_filename
+from config.config_manager import get_fq_cfg_filename, KnowledgeBase
 from database.db_manager import process_database
 from embedding.embed_manager import process_embeddings
 from query.query_manager import process_query
@@ -241,8 +241,8 @@ def main() -> None:
     description=textwrap.dedent(process_query.__doc__),
     formatter_class=argparse.RawDescriptionHelpFormatter,
   )
-  query_parser.add_argument('config_file', help='Knowledgebase Configuration file')
-  query_parser.add_argument('query_text', help='Query text')
+  query_parser.add_argument('config_file', help='Knowledge base configuration file (e.g., myproject.cfg)')
+  query_parser.add_argument('query_text', help='Query text (e.g., "What are the key features?")')
   query_parser.add_argument('-Q', '--query_file', default='', help='Query text from file')
   query_parser.add_argument('-c', '--context', '--context-only', dest='context_only', action='store_true', help='Return only context')
   query_parser.add_argument('-R', '--role', default='', help='LLM System Role')
@@ -262,8 +262,8 @@ def main() -> None:
     description=textwrap.dedent(process_database.__doc__),
     formatter_class=argparse.RawDescriptionHelpFormatter,
   )
-  database_parser.add_argument('config_file', help='Knowledgebase Configuration file')
-  database_parser.add_argument('files', nargs='*', help='List of file paths or patterns to process into the database.')
+  database_parser.add_argument('config_file', help='Knowledge base configuration file (e.g., myproject.cfg)')
+  database_parser.add_argument('files', nargs='*', help='File paths or patterns to process (e.g., *.txt *.md docs/)')
   database_parser.add_argument('-l', '--language', default='english', help='Language for stopwords')
   database_parser.add_argument('-f', '--force', action='store_true', help='Force reprocessing of files already in the database')
   database_parser.add_argument('-q', '--quiet', dest='verbose', action='store_false', help='Disable verbose output')
@@ -277,7 +277,7 @@ def main() -> None:
     description=textwrap.dedent(process_embeddings.__doc__),
     formatter_class=argparse.RawDescriptionHelpFormatter,
   )
-  embed_parser.add_argument('config_file', help='Knowledgebase Configuration file')
+  embed_parser.add_argument('config_file', help='Knowledge base configuration file (e.g., myproject.cfg)')
   embed_parser.add_argument('-r', '--reset-database', action='store_true', help='Reset already-embedded flag in knowledgebase database file')
   embed_parser.add_argument('-q', '--quiet', dest='verbose', action='store_false', help='Disable verbose output')
   embed_parser.add_argument('-v', '--verbose', dest='verbose', action='store_true', help='Enable verbose output (default)')
@@ -290,7 +290,7 @@ def main() -> None:
     description=textwrap.dedent(edit_config.__doc__),
     formatter_class=argparse.RawDescriptionHelpFormatter,
   )
-  edit_parser.add_argument('config_file', help='Knowledgebase Configuration file')
+  edit_parser.add_argument('config_file', help='Knowledge base configuration file (e.g., myproject.cfg)')
   edit_parser.add_argument('-q', '--quiet', dest='verbose', action='store_false', help='Disable verbose output')
   edit_parser.add_argument('-v', '--verbose', dest='verbose', action='store_true', help='Enable verbose output (default)')
   edit_parser.add_argument('-d', '--debug', action='store_true', help='Enable debug output')
