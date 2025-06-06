@@ -7,7 +7,7 @@ Handles loading, parsing, and validating configuration files for knowledge bases
 import os
 import configparser
 import time
-from typing import Dict, Any, Optional, Union, Tuple
+from typing import Dict, Any, Optional, Tuple
 
 from utils.logging_utils import get_logger
 from utils.text_utils import split_filepath, find_file, get_env
@@ -36,36 +36,68 @@ def get_fq_cfg_filename(cfgfile: str) -> Optional[str]:
   Returns:
       The fully-qualified path to the configuration file, or None if not found.
   """
+  from utils.security_utils import validate_file_path, validate_safe_path
+  
+  # Validate input
+  if not cfgfile:
+    logger.error("Configuration file name cannot be empty")
+    return None
+  
+  try:
+    # Basic validation for dangerous characters and path traversal
+    validated_cfgfile = validate_file_path(cfgfile, ['.cfg', ''])
+  except ValueError as e:
+    logger.error(f"Invalid configuration file path: {e}")
+    return None
   # Handle domain-style names
-  if '.' in cfgfile and not cfgfile.endswith('.cfg'):
-    if os.path.exists(f"{cfgfile}.cfg"):
-      return f"{cfgfile}.cfg"
+  if '.' in validated_cfgfile and not validated_cfgfile.endswith('.cfg'):
+    candidate_cfg = f"{validated_cfgfile}.cfg"
+    if os.path.exists(candidate_cfg):
+      # Validate the final path is safe
+      if validate_safe_path(candidate_cfg, VECTORDBS) or validate_safe_path(candidate_cfg, os.getcwd()):
+        return candidate_cfg
     
-    domain_cfg = f"{cfgfile}.cfg"
-    domain_path = find_file(domain_cfg, VECTORDBS)
-    if domain_path:
+    domain_path = find_file(candidate_cfg, VECTORDBS)
+    if domain_path and validate_safe_path(domain_path, VECTORDBS):
       return domain_path
   
   # Handle regular paths
-  _dir, _file, _ext, _fqfn = split_filepath(cfgfile, adddir=False, realpath=False)
+  _dir, _file, _ext, _fqfn = split_filepath(validated_cfgfile, adddir=False, realpath=False)
   if not _ext:
     logger.info('adding ext .cfg')
     _ext = '.cfg'
     _fqfn += _ext
   if _ext != '.cfg':
     logger.error('Not a .cfg file!')
-    return cfgfile
+    return None
     
   if not os.path.exists(_fqfn):
-    logger.warning(f'{_fqfn} does not exist, searching in {VECTORDBS}')
+    if logger:
+      logger.warning(f'{_fqfn} does not exist, searching in {VECTORDBS}')
     if _dir:
-      logger.error(f"File '{_fqfn}' does not exist.")
+      if logger:
+        logger.error(f"File '{_fqfn}' does not exist.")
       return None
     _fqfn = find_file(f"{_file}{_ext}", VECTORDBS)
     if not _fqfn:
-      logger.error(f"File '{_file}{_ext}' could not be found.")
+      if logger:
+        logger.error(f"File '{_file}{_ext}' could not be found.")
       return None
+    
+    # Validate the found file is in a safe location
+    if not validate_safe_path(_fqfn, VECTORDBS):
+      if logger:
+        logger.error(f"Found file '{_fqfn}' is outside allowed directory")
+      return None
+    
     return _fqfn
+  
+  # Validate the existing file path is safe
+  if not (validate_safe_path(_fqfn, VECTORDBS) or validate_safe_path(_fqfn, os.getcwd())):
+    if logger:
+      logger.error(f"File '{_fqfn}' is outside allowed directories")
+    return None
+    
   return _fqfn
 
 class KnowledgeBase:
@@ -108,10 +140,12 @@ class KnowledgeBase:
         else:
           setattr(self, var_name, default_value)
       except ValueError as e:
-        logger.warning(f"Invalid value for {var_name}, using default. Error: {e}")
+        if logger:
+          logger.warning(f"Invalid value for {var_name}, using default. Error: {e}")
         setattr(self, var_name, default_value)
       except Exception as e:
-        logger.error(f"Error initializing {var_name}: {e}")
+        if logger:
+          logger.error(f"Error initializing {var_name}: {e}")
         raise
 
     self.start_time = int(time.time())

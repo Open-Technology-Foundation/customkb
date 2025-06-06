@@ -51,11 +51,13 @@ def get_canonical_model(model_name: str) -> Dict[str, Any]:
   # Fall back to partial match if no exact match found
   for model_id, model_info in models.items():
     if model_name in model_id or (model_info.get('alias') and model_name in model_info['alias']):
-      logger.warning(f"Using partial match: {model_id} for {model_name}")
+      if logger:
+        logger.warning(f"Using partial match: {model_id} for {model_name}")
       return model_info
 
   # No matches found
-  logger.error(f"Model {model_name} not found in Models.json")
+  if logger:
+    logger.error(f"Model {model_name} not found in Models.json")
   raise KeyError(f"Model {model_name} not found in Models.json")
 
 #fin

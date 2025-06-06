@@ -17,7 +17,7 @@ from config.config_manager import KnowledgeBase, get_fq_cfg_filename
 # Import NLTK for text processing
 import nltk
 from nltk.corpus import stopwords
-from nltk.tokenize import word_tokenize, sent_tokenize
+from nltk.tokenize import word_tokenize
 from nltk.stem import WordNetLemmatizer
 import spacy
 from langchain_text_splitters import (
@@ -25,7 +25,6 @@ from langchain_text_splitters import (
   MarkdownTextSplitter,
   Language
 )
-from tokenizers import Tokenizer
 
 # Set up NLTK data path
 NLTK_DATA = os.getenv('NLTK_DATA')
@@ -235,49 +234,12 @@ def extract_metadata(text: str, file_path: str) -> Dict[str, Any]:
       if entities:
         metadata["entities"] = entities
     except Exception as e:
-      logger.warning(f"Error extracting entities: {e}")
-  if heading_match:
-    metadata["heading"] = heading_match.group(2).strip()
-  
-  # Try to identify document section type
-  if text.startswith('#'):
-    metadata["section_type"] = "heading"
-  elif re.search(r'```\w*\n[\s\S]*?```', text):
-    metadata["section_type"] = "code_block"
-  elif re.search(r'<table[\s>].*?</table>', text, re.DOTALL | re.IGNORECASE):
-    metadata["section_type"] = "table"
-  elif re.search(r'<(ul|ol)[\s>].*?</(ul|ol)>', text, re.DOTALL | re.IGNORECASE):
-    metadata["section_type"] = "list"
-  elif re.search(r'^\s*[-*•]\s', text, re.MULTILINE):
-    metadata["section_type"] = "bullet_list"
-  elif re.search(r'^\s*\d+[.)]\s', text, re.MULTILINE):
-    metadata["section_type"] = "numbered_list"
-  
-  # Try to identify common document sections
-  if re.search(r'\b(summary|overview|introduction|conclusion|abstract)\b', text[:200], re.IGNORECASE):
-    section_match = re.search(r'\b(summary|overview|introduction|conclusion|abstract)\b', text[:200], re.IGNORECASE)
-    metadata["document_section"] = section_match.group(1).lower()
-  
-  # Extract named entities if spaCy is available
-  if nlp:
-    try:
-      doc = nlp(text[:500])  # Process first 500 chars for efficiency
-      entities = {}
-      for ent in doc.ents:
-        if ent.label_ not in entities:
-          entities[ent.label_] = []
-        if ent.text not in entities[ent.label_]:
-          entities[ent.label_].append(ent.text)
-      
-      # Add only if entities were found
-      if entities:
-        metadata["entities"] = entities
-    except Exception as e:
-      logger.warning(f"Error extracting entities: {e}")
+      if logger:
+        logger.warning(f"Error extracting entities: {e}")
   
   return metadata
 
-def process_database(args: argparse.Namespace) -> str:
+def process_database(args: argparse.Namespace, logger) -> str:
   """
   Process and store text files into the CustomKB knowledge base.
   
@@ -293,13 +255,11 @@ def process_database(args: argparse.Namespace) -> str:
           force: Whether to reprocess files already in the database
           verbose: Enable verbose output
           debug: Enable debug output
+      logger: Initialized logger instance
 
   Returns:
       A status message indicating the number of files processed and skipped.
   """
-  global logger
-  logger = setup_logging(args.verbose, args.debug)
-
   # Set language for stopwords
   language = args.language
   logger.info(f"{language=}")
@@ -338,7 +298,8 @@ def process_database(args: argparse.Namespace) -> str:
       try:
         Stop_Words.update(stopwords.words(lang))
       except:
-        logger.warning(f"Failed to load stopwords for {lang}")
+        if logger:
+          logger.warning(f"Failed to load stopwords for {lang}")
 
   # Pre-scan to get actual total file count
   all_files = []
@@ -370,12 +331,17 @@ def process_database(args: argparse.Namespace) -> str:
         
         # Efficiently query which file basenames already exist
         if basenames:
-          placeholders = ','.join(['?'] * len(basenames))
-          kb.sql_cursor.execute(f"SELECT DISTINCT sourcedoc FROM docs WHERE sourcedoc IN ({placeholders})", basenames)
+          from utils.security_utils import safe_sql_in_query
+          # Convert to list of strings (safe for IN query)
+          safe_basenames = [str(name) for name in basenames]
+          query_template = "SELECT DISTINCT sourcedoc FROM docs WHERE sourcedoc IN ({placeholders})"
+          kb.sql_cursor.execute(query_template.format(placeholders=','.join(['?'] * len(safe_basenames))), safe_basenames)
           existing_basenames = set(row[0] for row in kb.sql_cursor.fetchall())
-          logger.debug(f"Found {len(existing_basenames)} existing files in database")
+          if logger:
+            logger.debug(f"Found {len(existing_basenames)} existing files in database")
       except sqlite3.Error as e:
-        logger.warning(f"Error checking existing files: {e}, will process all files in batch")
+        if logger:
+          logger.warning(f"Error checking existing files: {e}, will process all files in batch")
     
     # Process each file in the batch
     for pfile in batch:
@@ -458,7 +424,8 @@ def connect_to_database(kb: KnowledgeBase) -> None:
       
       # Commit the index creation
       kb.sql_connection.commit()
-      logger.debug("Database schema and indexes verified")
+      if logger:
+        logger.debug("Database schema and indexes verified")
       
     except sqlite3.Error as e:
       raise Exception(f"Error setting up database schema: {e}")
@@ -512,14 +479,45 @@ def process_text_file(kb: KnowledgeBase, sourcefile: str, splitter: Any,
     logger.info(f"Skipping {sourcefile} (already in database, use --force to reprocess)")
     return False
     
-  logger.info(f"Chunking {sourcefile}")
+  from utils.logging_utils import log_file_operation, log_operation_error, OperationLogger
+  
+  # Log file processing start with enhanced context
+  log_file_operation(logger, "processing_start", sourcefile, 
+                    file_type=file_type, language=language, force=force)
 
-  # Read file content
+  # Read file content with validation
   try:
-    with open(sourcefile, 'r', encoding='utf-8') as file:
+    from utils.security_utils import validate_file_path
+    
+    # Validate the source file path
+    try:
+      validated_sourcefile = validate_file_path(sourcefile)
+    except ValueError as e:
+      log_operation_error(logger, "file_validation", e, 
+                         file_path=sourcefile, file_type=file_type)
+      return False
+    
+    # Check file size (prevent extremely large files)
+    try:
+      file_size = os.path.getsize(validated_sourcefile)
+      max_file_size = 100 * 1024 * 1024  # 100MB limit
+      if file_size > max_file_size:
+        log_operation_error(logger, "file_size_check", 
+                           ValueError(f"File too large: {file_size} bytes"), 
+                           file_path=validated_sourcefile, 
+                           file_size=file_size, 
+                           max_size=max_file_size)
+        return False
+    except OSError as e:
+      log_operation_error(logger, "file_access", e, 
+                         file_path=validated_sourcefile)
+      return False
+    
+    with open(validated_sourcefile, 'r', encoding='utf-8') as file:
       content = file.read()
   except IOError as e:
-    logger.error(f"Failed to read {sourcefile}: {e}")
+    log_operation_error(logger, "file_read", e, 
+                       file_path=validated_sourcefile, file_size=file_size)
     return False
 
   # Split content into chunks
@@ -538,7 +536,8 @@ def process_text_file(kb: KnowledgeBase, sourcefile: str, splitter: Any,
       # Fallback to basic chunking
       chunks = [content[i:i+kb.db_max_tokens] for i in range(0, len(content), kb.db_max_tokens)]
       
-    logger.debug(f"Split {sourcefile} into {len(chunks)} chunks")
+    if logger:
+      logger.debug(f"Split {sourcefile} into {len(chunks)} chunks")
   except Exception as e:
     logger.error(f"Failed to split chunks for {sourcefile}: {e}")
     return
@@ -563,7 +562,8 @@ def process_text_file(kb: KnowledgeBase, sourcefile: str, splitter: Any,
           try:
             Stop_Words.update(stopwords.words(lang))
           except:
-            logger.warning(f"Failed to load stopwords for {lang}")
+            if logger:
+              logger.warning(f"Failed to load stopwords for {lang}")
 
   # Delete any existing entries with this basename
   kb.sql_cursor.execute(
@@ -587,8 +587,14 @@ def process_text_file(kb: KnowledgeBase, sourcefile: str, splitter: Any,
     if not clean_chunk:
       continue
       
-    # Store metadata as JSON string in the database
-    metadata_str = str(metadata)
+    # Store metadata as JSON string in the database (safer than Python dict string)
+    import json
+    try:
+      metadata_str = json.dumps(metadata)
+    except (TypeError, ValueError) as e:
+      if logger:
+        logger.warning(f"Could not serialize metadata to JSON: {e}")
+      metadata_str = "{}"
     
     # Add chunk with metadata
     kb.sql_cursor.execute(

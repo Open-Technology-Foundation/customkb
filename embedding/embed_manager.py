@@ -1,7 +1,10 @@
 #!/usr/bin/env python
 """
-Embedding management for CustomKB.
-Handles the generation and storage of vector embeddings.
+Improved Embedding management for CustomKB.
+Handles the generation and storage of vector embeddings with:
+- Checkpoint updating after each batch
+- Forced delay between API calls
+- More robust error handling
 """
 
 import os
@@ -13,7 +16,6 @@ import argparse
 import asyncio
 import hashlib
 import json
-from pathlib import Path
 from typing import List, Tuple, Optional, Dict, Any, Set
 from concurrent.futures import ThreadPoolExecutor
 
@@ -21,19 +23,48 @@ from utils.logging_utils import setup_logging, get_logger, time_to_finish
 from config.config_manager import KnowledgeBase, get_fq_cfg_filename
 from database.db_manager import connect_to_database, close_database
 
-# Import OpenAI client
+# Import OpenAI client with validation
 from openai import OpenAI, AsyncOpenAI
-OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
-if not OPENAI_API_KEY:
-  raise EnvironmentError("OPENAI_API_KEY environment variable not set.")
-openai_client = OpenAI(api_key=OPENAI_API_KEY)
-async_openai_client = AsyncOpenAI(api_key=OPENAI_API_KEY)
+from utils.security_utils import validate_api_key, safe_log_error
+
+def load_and_validate_openai_key():
+  """Load and validate OpenAI API key securely."""
+  openai_key = os.getenv('OPENAI_API_KEY')
+  if not openai_key:
+    raise EnvironmentError("OPENAI_API_KEY environment variable not set.")
+  
+  if not validate_api_key(openai_key, 'sk-', 40):
+    raise ValueError("Invalid OpenAI API key format")
+  
+  return openai_key
+
+try:
+  OPENAI_API_KEY = load_and_validate_openai_key()
+  openai_client = OpenAI(api_key=OPENAI_API_KEY)
+  async_openai_client = AsyncOpenAI(api_key=OPENAI_API_KEY)
+except (EnvironmentError, ValueError) as e:
+  # Don't use safe_log_error during module initialization
+  # as logging may not be set up yet
+  print(f"ERROR: OpenAI API key validation failed: {e}", file=sys.stderr)
+  raise
 
 logger = get_logger(__name__)
 
 # Embedding cache directory
 CACHE_DIR = os.path.join(os.getenv('VECTORDBS', '/var/lib/vectordbs'), '.embedding_cache')
 os.makedirs(CACHE_DIR, exist_ok=True)
+
+# New configuration for rate limiting and checkpointing
+API_CALL_DELAY = 0.05  # Forced delay of 50ms between API calls
+MAX_BATCH_SIZE = 100   # Maximum number of chunks to send in a single API call
+CHECKPOINT_INTERVAL = 10  # Save progress after every 10 successful batches
+
+# Memory cache configuration
+MEMORY_CACHE_SIZE = 10000  # Number of embeddings to keep in memory
+
+# In-memory embedding cache
+embedding_memory_cache = {}
+embedding_memory_cache_keys = []
 
 def get_cache_key(text: str, model: str) -> str:
   """
@@ -51,7 +82,7 @@ def get_cache_key(text: str, model: str) -> str:
 
 def get_cached_embedding(text: str, model: str) -> Optional[List[float]]:
   """
-  Retrieve a cached embedding if it exists.
+  Retrieve a cached embedding if it exists, checking memory first then disk.
   
   Args:
       text: The text to embed.
@@ -61,20 +92,47 @@ def get_cached_embedding(text: str, model: str) -> Optional[List[float]]:
       The cached embedding or None if not found.
   """
   cache_key = get_cache_key(text, model)
+  
+  # First check in-memory cache (faster)
+  if cache_key in embedding_memory_cache:
+    return embedding_memory_cache[cache_key]
+  
+  # Then check disk cache
   cache_file = os.path.join(CACHE_DIR, f"{cache_key}.json")
   
   if os.path.exists(cache_file):
     try:
       with open(cache_file, 'r') as f:
-        return json.load(f)
+        embedding = json.load(f)
+        # Store in memory cache for future use
+        add_to_memory_cache(cache_key, embedding)
+        return embedding
     except (json.JSONDecodeError, IOError):
       return None
   
   return None
 
+def add_to_memory_cache(cache_key: str, embedding: List[float]) -> None:
+  """
+  Add an embedding to the in-memory cache with LRU eviction.
+  
+  Args:
+      cache_key: The cache key.
+      embedding: The embedding vector.
+  """
+  # If cache is full, remove oldest item
+  if len(embedding_memory_cache_keys) >= MEMORY_CACHE_SIZE:
+    oldest_key = embedding_memory_cache_keys.pop(0)
+    if oldest_key in embedding_memory_cache:
+      del embedding_memory_cache[oldest_key]
+  
+  # Add to memory cache
+  embedding_memory_cache[cache_key] = embedding
+  embedding_memory_cache_keys.append(cache_key)
+
 def save_embedding_to_cache(text: str, model: str, embedding: List[float]) -> None:
   """
-  Save an embedding to the cache.
+  Save an embedding to both memory and disk cache.
   
   Args:
       text: The text that was embedded.
@@ -82,13 +140,24 @@ def save_embedding_to_cache(text: str, model: str, embedding: List[float]) -> No
       embedding: The embedding vector.
   """
   cache_key = get_cache_key(text, model)
+  
+  # Save to memory cache for immediate access
+  add_to_memory_cache(cache_key, embedding)
+  
+  # Save to disk asynchronously using a thread to avoid blocking
   cache_file = os.path.join(CACHE_DIR, f"{cache_key}.json")
   
-  try:
-    with open(cache_file, 'w') as f:
-      json.dump(embedding, f)
-  except IOError as e:
-    logger.warning(f"Failed to cache embedding: {e}")
+  def save_to_disk():
+    try:
+      with open(cache_file, 'w') as f:
+        json.dump(embedding, f)
+    except IOError as e:
+      logger.warning(f"Failed to cache embedding: {e}")
+  
+  # Use thread pool for disk I/O to avoid blocking the main process
+  executor = ThreadPoolExecutor(max_workers=4)
+  executor.submit(save_to_disk)
+  executor.shutdown(wait=False)
 
 def get_optimal_faiss_index(dimensions: int, dataset_size: int) -> faiss.Index:
   """
@@ -140,8 +209,11 @@ def calculate_optimal_batch_size(chunks: List[str], model: str, max_batch_size: 
   Returns:
       An optimal batch size.
   """
-  # Approximate tokens (rough estimate)
-  avg_tokens = sum(len(chunk.split()) * 1.3 for chunk in chunks) / len(chunks)
+  # More efficient token estimation
+  # Sample a few chunks rather than processing all of them
+  sample_size = min(10, len(chunks))
+  sample_chunks = chunks[:sample_size]
+  avg_tokens = sum(len(chunk.split()) * 1.3 for chunk in sample_chunks) / sample_size
   
   # Token limits per model
   model_limits = {
@@ -180,83 +252,189 @@ async def process_embedding_batch_async(kb: KnowledgeBase, chunks: List[str]) ->
   
   uncached_chunks = [chunks[i] for i in uncached_indices]
   
-  while True:
-    try:
-      response = await async_openai_client.embeddings.create(
-        input=uncached_chunks, 
-        model=kb.vector_model
-      )
-      new_embeddings = [data.embedding for data in response.data]
-      
-      # Cache the new embeddings
-      for i, emb in zip(uncached_indices, new_embeddings):
-        save_embedding_to_cache(chunks[i], kb.vector_model, emb)
-      
-      # Merge cached and new embeddings
-      result = cached_embeddings.copy()
-      for i, emb in zip(uncached_indices, new_embeddings):
-        result[i] = emb
+  # Split into smaller sub-batches to improve reliability
+  sub_batch_size = min(MAX_BATCH_SIZE, len(uncached_chunks))
+  sub_batches = [uncached_chunks[i:i+sub_batch_size] for i in range(0, len(uncached_chunks), sub_batch_size)]
+  sub_indices = [uncached_indices[i:i+sub_batch_size] for i in range(0, len(uncached_indices), sub_batch_size)]
+  
+  all_embeddings = []
+  all_indices = []
+  
+  for sub_batch, sub_idx in zip(sub_batches, sub_indices):
+    tries = 0
+    while True:
+      try:
+        # Add forced delay to avoid rate limiting
+        await asyncio.sleep(API_CALL_DELAY)
         
-      return [emb for emb in result if emb is not None]
-    except Exception as e:
-      logger.error(e)
-      logger.error(f"{tries=} {kb.vector_model=}")
-      tries += 1
-      if tries > max_tries:
-        logger.error(e)
-        logger.error(f"{tries=}\n{kb.vector_model=}\n{uncached_chunks=}\n")
-        sys.exit(1)
-      # Exponential backoff with jitter
-      backoff = (tries ** 2) + (0.1 * np.random.random())
-      await asyncio.sleep(backoff)
+        response = await async_openai_client.embeddings.create(
+          input=sub_batch, 
+          model=kb.vector_model
+        )
+        
+        new_embeddings = [data.embedding for data in response.data]
+        
+        # Cache the new embeddings
+        for i, chunk_idx, emb in zip(range(len(sub_batch)), sub_idx, new_embeddings):
+          save_embedding_to_cache(chunks[chunk_idx], kb.vector_model, emb)
+          all_embeddings.append((chunk_idx, emb))
+        
+        all_indices.extend(sub_idx)
+        break
+      except Exception as e:
+        from utils.security_utils import safe_log_error
+        safe_log_error(f"Embedding API error: {e}")
+        safe_log_error(f"Retry attempt {tries} for model {kb.vector_model}")
+        tries += 1
+        if tries > max_tries:
+          safe_log_error(f"Max retries reached for sub-batch. Skipping batch.")
+          safe_log_error(f"Failed after {tries} attempts with model {kb.vector_model}")
+          # Skip this batch instead of exiting the program
+          break
+        # Exponential backoff with jitter
+        backoff = (tries ** 2) + (0.1 * np.random.random())
+        logger.info(f"Rate limit hit. Backing off for {backoff:.2f} seconds")
+        await asyncio.sleep(backoff)
+  
+  # Merge cached and new embeddings
+  result = cached_embeddings.copy()
+  for idx, emb in all_embeddings:
+    result[idx] = emb
+      
+  return [emb for emb in result if emb is not None]
 
-async def process_all_batches(kb: KnowledgeBase, index: faiss.IndexIDMap, 
-                             all_chunks: List[List[str]], all_ids: List[List[int]]) -> None:
+async def process_batch_and_update(kb: KnowledgeBase, index: faiss.IndexIDMap, 
+                                 chunks: List[str], ids: List[int]) -> Set[int]:
   """
-  Process all batches of embeddings concurrently.
+  Process a batch and update the database with success status.
+  
+  Args:
+      kb: The KnowledgeBase instance.
+      index: The FAISS index.
+      chunks: List of text chunks.
+      ids: List of corresponding IDs.
+      
+  Returns:
+      Set of successfully processed IDs.
+  """
+  try:
+    # Process the batch
+    embeddings_list = await process_embedding_batch_async(kb, chunks)
+    
+    if not embeddings_list:
+      logger.warning(f"No embeddings were generated for batch")
+      return set()
+    
+    # Add embeddings to index
+    embeddings = np.array(embeddings_list, dtype=np.float32)
+    ids_array = np.array(ids, dtype=np.int64)
+    index.add_with_ids(embeddings, ids_array)
+    
+    # Return successfully processed IDs
+    return set(ids)
+  except Exception as e:
+    logger.error(f"Error processing batch: {e}")
+    return set()
+
+async def process_all_batches_with_checkpoints(kb: KnowledgeBase, index: faiss.IndexIDMap, 
+                                          all_chunks: List[List[str]], all_ids: List[List[int]]) -> Set[int]:
+  """
+  Process all batches of embeddings with checkpointing and concurrency.
   
   Args:
       kb: The KnowledgeBase instance.
       index: The FAISS index.
       all_chunks: List of batches of text chunks.
       all_ids: List of batches of corresponding IDs.
+      
+  Returns:
+      Set of all successfully processed IDs.
   """
-  tasks = []
+  all_processed_ids = set()
+  checkpoint_counter = 0
   
-  # Create async tasks for each batch
-  for chunks in all_chunks:
-    tasks.append(process_embedding_batch_async(kb, chunks))
+  # Set concurrency limit based on dataset size
+  # For larger datasets, process more batches concurrently
+  dataset_size = sum(len(chunk_batch) for chunk_batch in all_chunks)
+  concurrency_limit = min(8, max(3, dataset_size // 1000))
+  logger.info(f"Using concurrency limit of {concurrency_limit} for embedding API calls")
   
-  # Process batches concurrently
-  embeddings_batches = await asyncio.gather(*tasks)
+  # Process batches in parallel with a semaphore to limit concurrent API calls
+  semaphore = asyncio.Semaphore(concurrency_limit)
   
-  # Add embeddings to index
-  for embeddings_list, ids in zip(embeddings_batches, all_ids):
-    embeddings = np.array(embeddings_list, dtype=np.float32)
-    ids_array = np.array(ids, dtype=np.int64)
-    index.add_with_ids(embeddings, ids_array)
+  async def process_batch_with_semaphore(i, chunks, ids):
+    async with semaphore:
+      logger.info(f"Processing batch {i+1}/{len(all_chunks)}")
+      return await process_batch_and_update(kb, index, chunks, ids)
   
-  # Save the index
+  # Create tasks for batch processing with the semaphore for concurrent processing
+  # Process batches in smaller groups to allow checkpointing
+  for batch_group_idx in range(0, len(all_chunks), CHECKPOINT_INTERVAL):
+    # Get a group of batches to process
+    batch_group = all_chunks[batch_group_idx:batch_group_idx + CHECKPOINT_INTERVAL]
+    id_group = all_ids[batch_group_idx:batch_group_idx + CHECKPOINT_INTERVAL]
+    
+    # Process this group of batches concurrently
+    tasks = []
+    for i, (chunks, ids) in enumerate(zip(batch_group, id_group)):
+      tasks.append(process_batch_with_semaphore(batch_group_idx + i, chunks, ids))
+    
+    # Wait for all tasks in this group to complete
+    batch_results = await asyncio.gather(*tasks)
+    
+    # Combine results
+    for successful_ids in batch_results:
+      all_processed_ids.update(successful_ids)
+    
+    # Checkpoint after each group
+    logger.info(f"Checkpoint: saving progress after {len(batch_group)} batches")
+    
+    # Save FAISS index
+    faiss.write_index(index, kb.knowledge_base_vector)
+    
+    # Update database to mark processed chunks as embedded
+    if all_processed_ids:
+      # Process in smaller batches to avoid "too many SQL variables" error
+      batch_size = 500  # SQLite typically has a limit of 999 variables
+      processed_ids_list = list(all_processed_ids)
+      
+      for i in range(0, len(processed_ids_list), batch_size):
+        batch = processed_ids_list[i:i+batch_size]
+        from utils.security_utils import safe_sql_in_query
+        # Use safe SQL execution for ID list
+        query_template = "UPDATE docs SET embedded=1 WHERE id IN ({placeholders})"
+        safe_sql_in_query(kb.sql_cursor, query_template, batch)
+      
+      kb.sql_connection.commit()
+  
+  # Final save
   faiss.write_index(index, kb.knowledge_base_vector)
+  return all_processed_ids
 
-def process_embeddings(args: argparse.Namespace) -> str:
+def process_embeddings(args: argparse.Namespace, logger) -> str:
   """
   Generate embeddings for the text data stored in the CustomKB knowledge base.
-
+  
+  Takes text chunks from the database and generates vector embeddings using AI models.
+  Features optimizations including checkpoint updating, batch processing, forced delays 
+  between API calls, and local embedding caching for redundant texts.
+  
   Args:
-      args: Command-line arguments.
+      args: Command-line arguments containing:
+          config_file: Path to knowledge base configuration
+          reset_database: Flag to reset already-embedded status in database
+          verbose: Enable verbose output
+          debug: Enable debug output
+      logger: Initialized logger instance
 
   Returns:
-      A status message indicating the result of the operation.
+      A status message indicating the number of embeddings created and saved.
   """
-  global logger
-  logger = setup_logging(args.verbose, args.debug)
-
   # Get configuration file
   config_file = get_fq_cfg_filename(args.config_file)
   if not config_file:
     return "Error: Configuration file not found."
-
+    
   logger.info(f"{config_file=}")
   reset_database = args.reset_database
 
@@ -264,6 +442,13 @@ def process_embeddings(args: argparse.Namespace) -> str:
   kb = KnowledgeBase(config_file)
   if args.verbose:
     kb.save_config()
+
+  from utils.logging_utils import log_model_operation, OperationLogger
+  
+  # Log embedding operation start
+  log_model_operation(logger, "embedding_start", kb.vector_model,
+                     vector_dimensions=kb.vector_dimensions,
+                     vector_chunks=kb.vector_chunks)
 
   logger.info(f"Embedding data from database {kb.knowledge_base_db} to vector file {kb.knowledge_base_vector}.")
 
@@ -284,7 +469,7 @@ def process_embeddings(args: argparse.Namespace) -> str:
   rows = kb.sql_cursor.fetchall()
   if not rows:
     close_database(kb)
-    return f"Error: No rows were found to embed."
+    return f"No rows were found to embed."
 
   logger.info(f"{len(rows)} found for embedding.")
 
@@ -323,8 +508,9 @@ def process_embeddings(args: argparse.Namespace) -> str:
   
   # Calculate optimal batch size
   sample_chunks = [row[1] for row in rows[:min(100, len(rows))]]
-  optimal_batch_size = calculate_optimal_batch_size(sample_chunks, kb.vector_model, kb.vector_chunks)
-  logger.info(f"Using optimal batch size of {optimal_batch_size} (configured max: {kb.vector_chunks})")
+  configured_batch_size = kb.vector_chunks
+  optimal_batch_size = calculate_optimal_batch_size(sample_chunks, kb.vector_model, configured_batch_size)
+  logger.info(f"Using optimal batch size of {optimal_batch_size} (configured max: {configured_batch_size})")
   
   # Deduplicate texts to avoid embedding the same text multiple times
   text_to_ids: Dict[str, List[int]] = {}
@@ -357,21 +543,30 @@ def process_embeddings(args: argparse.Namespace) -> str:
     all_chunks.append(current_chunks)
     all_ids.append(current_ids)
   
-  # Process all batches using asyncio
-  asyncio.run(process_all_batches(kb, index, all_chunks, all_ids))
+  # Process all batches using asyncio with checkpointing
+  all_processed_ids = asyncio.run(process_all_batches_with_checkpoints(kb, index, all_chunks, all_ids))
   
   # Handle duplicated texts - ensure all copies get marked as embedded
-  all_processed_ids = set()
+  all_duplicate_ids = set()
   for text, id_list in text_to_ids.items():
-    # Add all ids from duplicate texts
-    for row_id in id_list:
-      all_processed_ids.add(row_id)
+    # Add all ids from duplicate texts if the primary was successfully processed
+    if id_list[0] in all_processed_ids:
+      all_duplicate_ids.update(id_list)
   
   # Mark all rows as embedded
-  placeholders = ','.join(['?'] * len(all_processed_ids))
-  kb.sql_cursor.execute(f"UPDATE docs SET embedded=1 WHERE id IN ({placeholders});", 
-                      list(all_processed_ids))
-  kb.sql_connection.commit()
+  if all_duplicate_ids:
+    # Process in smaller batches to avoid "too many SQL variables" error
+    batch_size = 500  # SQLite typically has a limit of 999 variables
+    duplicate_ids_list = list(all_duplicate_ids)
+    
+    for i in range(0, len(duplicate_ids_list), batch_size):
+      batch = duplicate_ids_list[i:i+batch_size]
+      from utils.security_utils import safe_sql_in_query
+      # Use safe SQL execution for ID list
+      query_template = "UPDATE docs SET embedded=1 WHERE id IN ({placeholders})"
+      safe_sql_in_query(kb.sql_cursor, query_template, batch)
+    
+    kb.sql_connection.commit()
   
   # Save final index
   if hasattr(index.index, 'train_mode'):
@@ -381,60 +576,6 @@ def process_embeddings(args: argparse.Namespace) -> str:
   # Close database connection
   close_database(kb)
 
-  return f"{len(rows)} embeddings (with {len(unique_rows)} unique texts) saved to {kb.knowledge_base_vector}"
-
-# Legacy method kept for backward compatibility
-def process_embedding_batch(kb: KnowledgeBase, index: faiss.IndexIDMap,
-                           chunks: List[str], ids: List[int]) -> None:
-  """
-  Process a batch of text chunks to generate embeddings and add to the FAISS index.
-
-  Args:
-      kb: The KnowledgeBase instance.
-      index: The FAISS index.
-      chunks: List of text chunks to embed.
-      ids: List of corresponding IDs.
-  """
-  max_tries = 20
-  tries = 0
-
-  # Check cache first
-  embeddings_list = []
-  uncached_indices = []
-  uncached_chunks = []
-  
-  for i, chunk in enumerate(chunks):
-    cached_emb = get_cached_embedding(chunk, kb.vector_model)
-    if cached_emb:
-      embeddings_list.append(cached_emb)
-    else:
-      embeddings_list.append(None)
-      uncached_indices.append(i)
-      uncached_chunks.append(chunk)
-  
-  if uncached_chunks:
-    while True:
-      try:
-        response = openai_client.embeddings.create(input=uncached_chunks, model=kb.vector_model)
-        for i, data in enumerate(response.data):
-          idx = uncached_indices[i]
-          embeddings_list[idx] = data.embedding
-          save_embedding_to_cache(chunks[idx], kb.vector_model, data.embedding)
-        break
-      except Exception as e:
-        logger.error(e)
-        logger.error(f"{tries=} {kb.vector_model=}")
-        tries += 1
-        if tries > max_tries:
-          logger.error(e)
-          logger.error(f"{tries=}\n{kb.vector_model=}\n{chunks=}\n")
-          sys.exit(1)
-        backoff = (tries**2) + (0.1 * np.random.random())
-        time.sleep(backoff)
-
-  embeddings = np.array(embeddings_list, dtype=np.float32)
-  ids_array = np.array(ids, dtype=np.int64)
-  index.add_with_ids(embeddings, ids_array)
-  faiss.write_index(index, kb.knowledge_base_vector)
+  return f"{len(all_duplicate_ids)} embeddings (from {len(rows)} total rows with {len(unique_rows)} unique texts) saved to {kb.knowledge_base_vector}"
 
 #fin

@@ -16,29 +16,50 @@ import hashlib
 import json
 import time
 from concurrent.futures import ThreadPoolExecutor
-from typing import List, Tuple, Dict, Any, Optional, Set, Union
+from typing import List, Tuple, Dict, Any, Optional, Set
 from datetime import datetime
-from pathlib import Path
 
 from utils.logging_utils import setup_logging, get_logger, elapsed_time
 from utils.text_utils import clean_text
 from config.config_manager import KnowledgeBase, get_fq_cfg_filename
 from database.db_manager import connect_to_database, close_database
 
-# Import AI clients
+# Import AI clients with validation
 from openai import OpenAI, AsyncOpenAI
-OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
-if not OPENAI_API_KEY:
-  raise EnvironmentError("OPENAI_API_KEY environment variable not set.")
-openai_client = OpenAI(api_key=OPENAI_API_KEY)
-async_openai_client = AsyncOpenAI(api_key=OPENAI_API_KEY)
-
 from anthropic import Anthropic, AsyncAnthropic
-ANTHROPIC_API_KEY = os.getenv('ANTHROPIC_API_KEY')
-if not ANTHROPIC_API_KEY:
-  raise EnvironmentError("ANTHROPIC_API_KEY environment variable not set.")
-anthropic_client = Anthropic(api_key=ANTHROPIC_API_KEY)
-async_anthropic_client = AsyncAnthropic(api_key=ANTHROPIC_API_KEY)
+from utils.security_utils import validate_api_key, safe_log_error
+
+def load_and_validate_api_keys():
+  """Load and validate API keys securely."""
+  # Load OpenAI API key
+  openai_key = os.getenv('OPENAI_API_KEY')
+  if not openai_key:
+    raise EnvironmentError("OPENAI_API_KEY environment variable not set.")
+  
+  if not validate_api_key(openai_key, 'sk-', 40):
+    raise ValueError("Invalid OpenAI API key format")
+  
+  # Load Anthropic API key
+  anthropic_key = os.getenv('ANTHROPIC_API_KEY')
+  if not anthropic_key:
+    raise EnvironmentError("ANTHROPIC_API_KEY environment variable not set.")
+  
+  if not validate_api_key(anthropic_key, 'sk-ant-', 95):
+    raise ValueError("Invalid Anthropic API key format")
+  
+  return openai_key, anthropic_key
+
+try:
+  OPENAI_API_KEY, ANTHROPIC_API_KEY = load_and_validate_api_keys()
+  openai_client = OpenAI(api_key=OPENAI_API_KEY)
+  async_openai_client = AsyncOpenAI(api_key=OPENAI_API_KEY)
+  anthropic_client = Anthropic(api_key=ANTHROPIC_API_KEY)
+  async_anthropic_client = AsyncAnthropic(api_key=ANTHROPIC_API_KEY)
+except (EnvironmentError, ValueError) as e:
+  # Don't use safe_log_error during module initialization
+  # as logging may not be set up yet
+  print(f"ERROR: API key validation failed: {e}", file=sys.stderr)
+  raise
 
 # Llama client
 llama_client = OpenAI(api_key='ollama', base_url='http://localhost:11434/v1')
@@ -204,32 +225,6 @@ def fetch_document_by_id(kb: KnowledgeBase, doc_id: int) -> Optional[Tuple[int, 
     logger.error(f"SQLite error: {e}")
     return None
 
-def fetch_context_documents(kb: KnowledgeBase, sourcedoc: str, start_sid: int, end_sid: int, 
-                          context_scope: int) -> List[Tuple[int, int, str, str]]:
-  """
-  Fetch context documents for a given source document and sid range.
-  
-  Args:
-      kb: The KnowledgeBase instance.
-      sourcedoc: The source document name.
-      start_sid: The start sid.
-      end_sid: The end sid.
-      context_scope: The context scope.
-      
-  Returns:
-      A list of tuples containing document information.
-  """
-  try:
-    kb.sql_cursor.execute(
-      "SELECT id, sid, sourcedoc, originaltext FROM docs "
-      "WHERE sourcedoc=? AND sid>=? AND sid<=? "
-      "ORDER BY sid LIMIT ?",
-      (sourcedoc, int(start_sid), int(end_sid), context_scope))
-      
-    return kb.sql_cursor.fetchall()
-  except sqlite3.Error as e:
-    logger.error(f"SQLite error fetching context: {e}")
-    return []
 
 async def process_reference_batch(kb: KnowledgeBase, batch: List[Tuple[int, float]]) -> List[List[Any]]:
   """
@@ -278,19 +273,17 @@ async def process_reference_batch(kb: KnowledgeBase, batch: List[Tuple[int, floa
       
   return references
 
-async def process_query_async(args: argparse.Namespace) -> str:
+async def process_query_async(args: argparse.Namespace, logger) -> str:
   """
   Execute a semantic query asynchronously on the CustomKB knowledge base.
 
   Args:
       args: Command-line arguments.
+      logger: Initialized logger instance.
 
   Returns:
       The query response or context.
   """
-  global logger
-  logger = setup_logging(args.verbose, args.debug)
-
   # Get configuration file
   cfgfile = get_fq_cfg_filename(args.config_file)
   if not cfgfile:
@@ -302,8 +295,32 @@ async def process_query_async(args: argparse.Namespace) -> str:
   query_text = args.query_text
   if args.query_file:
     try:
-      with open(args.query_file, 'r') as file:
-        query_text = file.read() + f"\n{query_text}"
+      from utils.security_utils import validate_file_path, sanitize_query_text
+      
+      # Validate the query file path
+      try:
+        validated_query_file = validate_file_path(args.query_file, ['.txt', '.md', '.query'])
+      except ValueError as e:
+        logger.error(f"Invalid query file path: {e}")
+        return f"Error: Invalid query file path: {e}"
+      
+      # Check file size limit for query files
+      try:
+        file_size = os.path.getsize(validated_query_file)
+        max_query_file_size = 1024 * 1024  # 1MB limit for query files
+        if file_size > max_query_file_size:
+          logger.error(f"Query file too large: {file_size} bytes (max: {max_query_file_size})")
+          return f"Error: Query file too large (max 1MB)"
+      except OSError as e:
+        logger.error(f"Cannot access query file: {e}")
+        return f"Error: Cannot access query file: {e}"
+      
+      with open(validated_query_file, 'r') as file:
+        additional_query = file.read()
+        # Sanitize the loaded query text
+        additional_query = sanitize_query_text(additional_query)
+        query_text = additional_query + f"\n{query_text}"
+        
     except IOError as e:
       logger.error(f"Error reading file: {e}")
       return f"Error reading query file: {e}"
@@ -404,7 +421,7 @@ async def process_query_async(args: argparse.Namespace) -> str:
   # Generate AI response
   return await generate_ai_response(kb, reference_string, query_text)
 
-def process_query(args: argparse.Namespace) -> str:
+def process_query(args: argparse.Namespace, logger) -> str:
   """
   Execute a semantic query on the CustomKB knowledge base and generate an AI-based response.
   
@@ -426,11 +443,12 @@ def process_query(args: argparse.Namespace) -> str:
           max_tokens: Maximum tokens for the response
           verbose: Enable verbose output
           debug: Enable debug output
+      logger: Initialized logger instance
 
   Returns:
       The AI-generated response or retrieved context, depending on the context_only flag.
   """
-  return asyncio.run(process_query_async(args))
+  return asyncio.run(process_query_async(args, logger))
 
 def build_reference_string(kb: KnowledgeBase, reference: List[List[Any]], 
                           context_files_content: List[Tuple[str, str]] = None) -> str:
@@ -474,9 +492,22 @@ def build_reference_string(kb: KnowledgeBase, reference: List[List[Any]],
     
     if metadata_str:
       try:
-        # Safely evaluate the metadata string to a dictionary
-        import ast
-        metadata = ast.literal_eval(metadata_str)
+        # Safely parse metadata using JSON instead of ast.literal_eval
+        from utils.security_utils import safe_json_loads
+        
+        # Try to parse as JSON first (safer)
+        try:
+          metadata = safe_json_loads(metadata_str)
+        except ValueError:
+          # Fallback: if it's not JSON, try to convert Python dict string to JSON
+          # This handles cases where metadata was stored as Python dict strings
+          try:
+            # Replace Python dict syntax with JSON syntax
+            json_str = metadata_str.replace("'", '"').replace('True', 'true').replace('False', 'false').replace('None', 'null')
+            metadata = safe_json_loads(json_str)
+          except ValueError:
+            logger.warning(f"Could not parse metadata: {metadata_str[:100]}...")
+            metadata = {}
         
         # Add relevant metadata as attributes
         metadata_elems = []
@@ -528,138 +559,103 @@ async def generate_ai_response(kb: KnowledgeBase, reference_string: str, query_t
   # Replace datetime placeholder in query role
   kb.query_role = kb.query_role.replace('{{datetime}}', datetime.now().isoformat())
 
+  from utils.logging_utils import log_model_operation, log_operation_error, OperationLogger
+  
   # Generate response using the appropriate model
   try:
-    if kb.query_model.startswith('gpt'):
-      response = await async_openai_client.chat.completions.create(
-        model=kb.query_model,
-        messages=[
-          {"role": "system", "content": kb.query_role},
-          {"role": "user", "content": f"{reference_string}\n\n{query_text}"}
-        ],
-        temperature=kb.query_temperature,
-        max_tokens=kb.query_max_tokens,
-        stop=None
-      )
-      logger.info(f"Elapsed Time: {elapsed_time(kb.start_time)}")
-      return response.choices[0].message.content
+    with OperationLogger(logger, "ai_response_generation", 
+                        model=kb.query_model, 
+                        temperature=kb.query_temperature,
+                        max_tokens=kb.query_max_tokens) as op_logger:
+      
+      if kb.query_model.startswith('gpt'):
+        op_logger.add_context(provider="openai", model_type="gpt")
+        response = await async_openai_client.chat.completions.create(
+          model=kb.query_model,
+          messages=[
+            {"role": "system", "content": kb.query_role},
+            {"role": "user", "content": f"{reference_string}\n\n{query_text}"}
+          ],
+          temperature=kb.query_temperature,
+          max_tokens=kb.query_max_tokens,
+          stop=None
+        )
+        
+        response_content = response.choices[0].message.content
+        op_logger.add_context(
+          response_tokens=len(response_content.split()) if response_content else 0,
+          input_tokens=len(f"{kb.query_role}\n{reference_string}\n{query_text}".split())
+        )
+        
+        logger.info(f"Elapsed Time: {elapsed_time(kb.start_time)}")
+        return response_content
 
-    elif kb.query_model.startswith('o1') or kb.query_model.startswith('o3'):
-      response = await async_openai_client.chat.completions.create(
-        model=kb.query_model,
-        messages=[
-          {"role": "user", "content": f"{kb.query_role}\n\n{reference_string}\n\n{query_text}\n"}
-        ],
-      )
-      logger.info(f"Elapsed Time: {elapsed_time(kb.start_time)}")
-      return response.choices[0].message.content
+      elif kb.query_model.startswith('o1') or kb.query_model.startswith('o3'):
+        op_logger.add_context(provider="openai", model_type="o1")
+        response = await async_openai_client.chat.completions.create(
+          model=kb.query_model,
+          messages=[
+            {"role": "user", "content": f"{kb.query_role}\n\n{reference_string}\n\n{query_text}\n"}
+          ],
+        )
+        
+        response_content = response.choices[0].message.content
+        op_logger.add_context(
+          response_tokens=len(response_content.split()) if response_content else 0
+        )
+        
+        logger.info(f"Elapsed Time: {elapsed_time(kb.start_time)}")
+        return response_content
 
-    elif kb.query_model.startswith('claude'):
-      message = await async_anthropic_client.messages.create(
-        max_tokens=kb.query_max_tokens,
-        messages=[{"role": "user", "content": f"{reference_string}\n\n{query_text}"}],
-        model=kb.query_model,
-        system=kb.query_role,
-        temperature=kb.query_temperature
-      )
-      logger.info(f"Elapsed Time: {elapsed_time(kb.start_time)}")
-      return message.content[0].text
+      elif kb.query_model.startswith('claude'):
+        op_logger.add_context(provider="anthropic", model_type="claude")
+        message = await async_anthropic_client.messages.create(
+          max_tokens=kb.query_max_tokens,
+          messages=[{"role": "user", "content": f"{reference_string}\n\n{query_text}"}],
+          model=kb.query_model,
+          system=kb.query_role,
+          temperature=kb.query_temperature
+        )
+        
+        response_content = message.content[0].text
+        op_logger.add_context(
+          response_tokens=len(response_content.split()) if response_content else 0,
+          input_tokens=len(f"{kb.query_role}\n{reference_string}\n{query_text}".split())
+        )
+        
+        logger.info(f"Elapsed Time: {elapsed_time(kb.start_time)}")
+        return response_content
 
-    else:
-      # Fallback to synchronous for non-async clients (llama)
-      response = llama_client.chat.completions.create(
-        model=kb.query_model,
-        messages=[
-          {"role": "system", "content": kb.query_role},
-          {"role": "user", "content": f"{reference_string}\n\n{query_text}"}
-        ],
-        temperature=kb.query_temperature,
-        max_tokens=kb.query_max_tokens,
-        stop=None
-      )
-      logger.info(f"Elapsed Time: {elapsed_time(kb.start_time)}")
-      return response.choices[0].message.content
+      else:
+        # Fallback to synchronous for non-async clients (llama)
+        op_logger.add_context(provider="ollama", model_type="llama")
+        response = llama_client.chat.completions.create(
+          model=kb.query_model,
+          messages=[
+            {"role": "system", "content": kb.query_role},
+            {"role": "user", "content": f"{reference_string}\n\n{query_text}"}
+          ],
+          temperature=kb.query_temperature,
+          max_tokens=kb.query_max_tokens,
+          stop=None
+        )
+        
+        response_content = response.choices[0].message.content
+        op_logger.add_context(
+          response_tokens=len(response_content.split()) if response_content else 0,
+          input_tokens=len(f"{kb.query_role}\n{reference_string}\n{query_text}".split())
+        )
+        
+        logger.info(f"Elapsed Time: {elapsed_time(kb.start_time)}")
+        return response_content
   except Exception as e:
-    logger.error(f"Error generating AI response: {e}")
+    log_operation_error(logger, "ai_response_generation", e,
+                       model=kb.query_model,
+                       temperature=kb.query_temperature,
+                       max_tokens=kb.query_max_tokens,
+                       query_length=len(query_text),
+                       context_length=len(reference_string))
     return f"Error: Failed to generate response: {e}"
 
-# Legacy synchronous methods kept for backward compatibility
-
-def generate_ai_response_sync(kb: KnowledgeBase, reference_string: str, query_text: str) -> str:
-  """
-  Generate an AI response synchronously based on the reference string and query text.
-
-  Args:
-      kb: The KnowledgeBase instance.
-      reference_string: The formatted reference string.
-      query_text: The user's query text.
-
-  Returns:
-      The AI-generated response.
-  """
-  # Replace datetime placeholder in query role
-  kb.query_role = kb.query_role.replace('{{datetime}}', datetime.now().isoformat())
-
-  # Generate response using the appropriate model
-  if kb.query_model.startswith('gpt'):
-    try:
-      response = openai_client.chat.completions.create(
-        model=kb.query_model,
-        messages=[
-          {"role": "system", "content": kb.query_role},
-          {"role": "user", "content": f"{reference_string}\n\n{query_text}"}
-        ],
-        temperature=kb.query_temperature,
-        max_tokens=kb.query_max_tokens,
-        stop=None
-      )
-      logger.info(f"Elapsed Time: {elapsed_time(kb.start_time)}")
-      return response.choices[0].message.content
-    except Exception as e:
-      return f"Error: Error querying OpenAI: {e}"
-
-  elif kb.query_model.startswith('o1') or kb.query_model.startswith('o3'):
-    try:
-      response = openai_client.chat.completions.create(
-        model=kb.query_model,
-        messages=[
-          {"role": "user", "content": f"{kb.query_role}\n\n{reference_string}\n\n{query_text}\n"}
-        ],
-      )
-      logger.info(f"Elapsed Time: {elapsed_time(kb.start_time)}")
-      return response.choices[0].message.content
-    except Exception as e:
-      return f"Error: Error querying OpenAI o1/o3: {e}"
-
-  elif kb.query_model.startswith('claude'):
-    try:
-      message = anthropic_client.messages.create(
-        max_tokens=kb.query_max_tokens,
-        messages=[{"role": "user", "content": f"{reference_string}\n\n{query_text}"}],
-        model=kb.query_model,
-        system=kb.query_role,
-        temperature=kb.query_temperature
-      )
-      logger.info(f"Elapsed Time: {elapsed_time(kb.start_time)}")
-      return message.content[0].text
-    except Exception as e:
-      return f"Error: Error querying Anthropic: {e}"
-
-  else:
-    try:
-      response = llama_client.chat.completions.create(
-        model=kb.query_model,
-        messages=[
-          {"role": "system", "content": kb.query_role},
-          {"role": "user", "content": f"{reference_string}\n\n{query_text}"}
-        ],
-        temperature=kb.query_temperature,
-        max_tokens=kb.query_max_tokens,
-        stop=None
-      )
-      logger.info(f"Elapsed Time: {elapsed_time(kb.start_time)}")
-      return response.choices[0].message.content
-    except Exception as e:
-      return f"Error: Error querying llama: {e}"
 
 #fin

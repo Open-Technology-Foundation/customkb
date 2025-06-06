@@ -110,7 +110,7 @@ import textwrap
 import signal
 import time
 from pathlib import Path
-from typing import List, Optional, Dict, Any, Union
+from typing import List, Optional, Dict, Any
 
 # Ensure the project root is in the Python path
 project_root = Path(__file__).parent.absolute()
@@ -121,12 +121,12 @@ if str(project_root) not in sys.path:
 from utils.logging_utils import setup_logging, dashes, elapsed_time
 from config.config_manager import get_fq_cfg_filename
 from database.db_manager import process_database
-from embedding.embed_manager_improved import process_embeddings
+from embedding.embed_manager import process_embeddings
 from query.query_manager import process_query
 from models.model_manager import get_canonical_model
 from utils.text_utils import get_env
 
-# Initialize logger
+# Initialize module logger
 logger = None
 
 def customkb_usage() -> str:
@@ -139,7 +139,7 @@ def customkb_usage() -> str:
 {dashes(0, '=')}'''
   return helpstr
 
-def edit_config(args: argparse.Namespace) -> int:
+def edit_config(args: argparse.Namespace, logger) -> int:
   """
   Edit the knowledge base configuration file.
   
@@ -152,15 +152,16 @@ def edit_config(args: argparse.Namespace) -> int:
           config_file: Path to knowledge base configuration
           verbose: Enable verbose output
           debug: Enable debug output
+      logger: Initialized logger instance
           
   Returns:
       0 on success, 1 on failure.
   """
-  global logger
-  logger = setup_logging(args.verbose, args.debug)
+  # Get config file path
   config_file = get_fq_cfg_filename(args.config_file)
   if not config_file:
     sys.exit(1)
+    
   logger.debug(f"{config_file=}")
 
   editor = os.getenv('EDITOR')
@@ -170,11 +171,33 @@ def edit_config(args: argparse.Namespace) -> int:
 
   try:
     import subprocess
-    _ = os.path.getmtime(config_file)
-    subprocess.run(f'{editor} {config_file}', shell=True)
-    return 0
+    from utils.security_utils import validate_file_path, safe_log_error
+    
+    # Validate the config file path
+    try:
+      validated_config = validate_file_path(config_file, ['.cfg'])
+    except ValueError as e:
+      logger.error(f'Invalid config file path: {e}')
+      return 1
+    
+    # Check if file exists
+    if not os.path.exists(validated_config):
+      logger.error(f'Config file does not exist: {validated_config}')
+      return 1
+    
+    # Use safe subprocess call without shell=True
+    try:
+      subprocess.run([editor, validated_config], check=True)
+      return 0
+    except subprocess.CalledProcessError as e:
+      safe_log_error(f'Editor process failed: {e}')
+      return 1
+    except FileNotFoundError:
+      logger.error(f'Editor not found: {editor}. Please check EDITOR environment variable.')
+      return 1
+      
   except Exception as e:
-    logger.error(f'Edit error: {str(e)}')
+    safe_log_error(f'Edit error: {e}')
     return 1
 
 def main() -> None:
@@ -183,9 +206,14 @@ def main() -> None:
   This function sets up command-line argument parsing, handles user commands,
   and dispatches to the appropriate subcommands.
   """
+  global logger
+  
   # Set up signal handler for graceful exit
   def signal_handler(sig, frame):
-    print('^C', file=sys.stderr)
+    if logger:
+      logger.info("Interrupted by user (Ctrl+C)")
+    else:
+      print('^C', file=sys.stderr)
     sys.exit(1)
   signal.signal(signal.SIGINT, signal_handler)
 
@@ -280,12 +308,55 @@ def main() -> None:
   args = main_parser.parse_args()
   process_start_time = int(time.time())
 
+  # Handle help/version commands without any logging
+  if args.command in ['help', 'version']:
+    if args.command == 'help':
+      print(customkb_usage())
+    elif args.command == 'version':
+      from version import get_version
+      version_info = f"CustomKB {get_version(args.build)}"
+      print(version_info)
+    sys.exit(0)
+
+  # For all other commands, setup KB-specific logging with fail-fast behavior
+  verbose = getattr(args, 'verbose', True)
+  debug = getattr(args, 'debug', False)
+  
+  # Extract KB info from config file for logging setup
+  from config.config_manager import get_fq_cfg_filename
+  from utils.logging_utils import get_kb_info_from_config
+  
+  config_file_fq = get_fq_cfg_filename(args.config_file)
+  if not config_file_fq:
+    print("Error: Configuration file not found.", file=sys.stderr)
+    sys.exit(1)
+    
+  try:
+    kb_directory, kb_name = get_kb_info_from_config(config_file_fq)
+  except Exception as e:
+    print(f"Error: Failed to extract KB info from config file: {e}", file=sys.stderr)
+    sys.exit(1)
+  
+  # Setup KB-specific logging - FAIL FAST if logging cannot be initialized
+  logger = setup_logging(verbose, debug, 
+                        config_file=config_file_fq,
+                        kb_directory=kb_directory, 
+                        kb_name=kb_name)
+  
+  if logger is None:
+    print("Error: Failed to initialize logging system. Application cannot continue.", file=sys.stderr)
+    sys.exit(1)
+
   # Execute the appropriate command
   try:
     if args.command == 'database':
-      print(process_database(args))
+      result = process_database(args, logger)
+      print(result)  # Keep print for user output
+      logger.debug(f"Database command completed: {result}")
     elif args.command == 'embed':
-      print(process_embeddings(args))
+      result = process_embeddings(args, logger)
+      print(result)  # Keep print for user output
+      logger.debug(f"Embed command completed: {result}")
     elif args.command == 'query':
       # Set environment variables from command line arguments
       if args.model:
@@ -301,24 +372,27 @@ def main() -> None:
         os.environ['QUERY_MAX_TOKENS'] = args.max_tokens
       if args.role:
         os.environ['QUERY_ROLE'] = args.role
-      print(process_query(args))
+      result = process_query(args, logger)
+      print(result)  # Keep print for user output
+      logger.debug(f"Query command completed")
     elif args.command == 'edit':
-      print(edit_config(args))
-    elif args.command == 'help':
-      print(customkb_usage())
-      sys.exit(0)
-    elif args.command == 'version':
-      from version import get_version
-      print(f"CustomKB {get_version(args.build)}")
-      sys.exit(0)
+      result = edit_config(args, logger)
+      if result == 0:
+        logger.info("Configuration file edited successfully")
+      else:
+        logger.error("Failed to edit configuration file")
+      sys.exit(result)
     else:
       logger.error(f'Unknown command: {args.command}')
       sys.exit(1)
   except Exception as e:
-    print(f"Error: {str(e)}", file=sys.stderr)
+    logger.error(f"Application error: {e}")
     sys.exit(1)
   finally:
-    print(f'Elapsed Time: {elapsed_time(process_start_time)}', file=sys.stderr)
+    elapsed = elapsed_time(process_start_time)
+    logger.info(f'Elapsed Time: {elapsed}')
+    if not verbose:  # Only print to stderr if not verbose (to avoid duplicate with log)
+      print(f'Elapsed Time: {elapsed}', file=sys.stderr)
 
 if __name__ == "__main__":
   main()

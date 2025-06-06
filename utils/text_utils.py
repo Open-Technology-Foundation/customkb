@@ -7,7 +7,7 @@ Provides text cleaning, tokenization, file handling, and environment variable ma
 import os
 import re
 import glob
-from typing import List, Tuple, Optional, Any, Set, Union
+from typing import List, Tuple, Optional, Any, Set
 
 from nltk.tokenize import word_tokenize
 from utils.logging_utils import get_logger
