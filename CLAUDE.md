@@ -113,13 +113,23 @@ Always validate user input:
 ```python
 from utils.security_utils import validate_file_path, validate_api_key
 
-# File path validation
+# File path validation (default - strict security)
 safe_path = validate_file_path(user_input, allowed_extensions=['.cfg'])
+
+# Knowledge base config validation (allows absolute paths and relative traversal)
+kb_config_path = validate_file_path(config_input, ['.cfg'], 
+                                   allow_absolute=True, 
+                                   allow_relative_traversal=True)
 
 # API key validation
 if not validate_api_key(api_key, min_length=20):
   raise ValueError("Invalid API key format")
 ```
+
+**Path Validation Parameters:**
+- `allow_absolute`: Set to `True` for trusted user input like KB config paths
+- `allow_relative_traversal`: Set to `True` to allow `../` in relative paths
+- Use defaults (`False`) for untrusted input like web requests
 
 ### Error Handling
 
@@ -131,6 +141,51 @@ except sqlite3.DatabaseError as e:
   logger.error(f"Database operation failed: {e}")
   raise DatabaseError(f"Failed to process chunk: {e}") from e
 ```
+
+## Knowledge Base Configuration Paths
+
+CustomKB supports three flexible ways to specify knowledge base configuration files:
+
+### Case 1: Absolute Path to Config File
+```bash
+customkb query /var/lib/vectordbs/myproject/myproject.cfg 'search query'
+customkb query /home/user/projects/kb/config.cfg 'search query'
+```
+- Direct path to `.cfg` file anywhere in the filesystem
+- KB files (`.db`, `.faiss`, `logs/`) created in same directory as config
+- Most explicit and reliable method
+
+### Case 2: Knowledge Base Name (searches VECTORDBS)
+```bash
+customkb query myproject 'search query'
+```
+- Searches `$VECTORDBS` directory for `myproject/myproject.cfg`
+- Default `VECTORDBS=/var/lib/vectordbs`
+- Convenient for standard installations
+
+### Case 3: Relative Path with Traversal
+```bash
+# From /var/lib/vectordbs/okusiassociates/
+customkb query ../okusimail/okusimail.cfg 'search query'
+```
+- Allows `../` to reference sibling directories
+- Useful for projects with multiple related knowledge bases
+- Maintains security while allowing legitimate navigation
+
+### Implementation Notes
+
+The path resolution uses enhanced security validation:
+```python
+# In config_manager.py
+validated_cfgfile = validate_file_path(cfgfile, ['.cfg', ''], 
+                                      allow_absolute=True, 
+                                      allow_relative_traversal=True)
+```
+
+This approach:
+- **Allows** absolute paths and relative traversal for KB configs (trusted user input)
+- **Maintains** strict validation for other security checks (dangerous characters, etc.)
+- **Preserves** VECTORDBS search functionality for backward compatibility
 
 ## Common Development Tasks
 
@@ -299,6 +354,9 @@ SELECT DISTINCT file_hash FROM chunks;
 2. **Missing Imports**: Check relative imports from other modules
 3. **Hardcoded Paths**: Use `VECTORDBS` environment variable
 4. **Unvalidated Input**: Always validate user-provided paths and data
+   - Use `validate_file_path()` with appropriate parameters for the use case
+   - KB config paths: `allow_absolute=True, allow_relative_traversal=True`
+   - Untrusted input: use defaults (strict validation)
 5. **Synchronous API Calls**: Use async patterns from embed_manager.py
 6. **Memory Leaks**: Clear large objects, use generators for big files
 7. **SQL Injection**: Use parameterized queries, never string formatting

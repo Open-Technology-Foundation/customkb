@@ -16,7 +16,8 @@ from utils.logging_utils import get_logger
 logger = get_logger(__name__)
 
 def validate_file_path(filepath: str, allowed_extensions: List[str] = None, 
-                      base_dir: str = None) -> str:
+                      base_dir: str = None, allow_absolute: bool = False, 
+                      allow_relative_traversal: bool = False) -> str:
   """
   Validate and sanitize file paths to prevent path traversal attacks.
   
@@ -24,6 +25,8 @@ def validate_file_path(filepath: str, allowed_extensions: List[str] = None,
       filepath: The file path to validate
       allowed_extensions: List of allowed file extensions (e.g., ['.txt', '.md'])
       base_dir: Base directory to restrict access to
+      allow_absolute: Whether to allow absolute paths (default: False)
+      allow_relative_traversal: Whether to allow .. in relative paths (default: False)
       
   Returns:
       Sanitized file path
@@ -42,24 +45,25 @@ def validate_file_path(filepath: str, allowed_extensions: List[str] = None,
   
   # Check for actual path traversal (not just any double dots in filenames)
   # Split path into components and check if any component is exactly '..'
-  try:
-    path_parts = Path(clean_path).parts
-    if any(part == '..' for part in path_parts):
-      raise ValueError("Invalid file path: path traversal detected")
-  except (OSError, ValueError) as e:
-    # If path parsing fails, it might be malformed
-    if '..' in clean_path and ('/..' in clean_path or '../' in clean_path or '\\..\\' in clean_path or clean_path.startswith('..')):
-      raise ValueError("Invalid file path: path traversal detected")
+  if not allow_relative_traversal:
+    try:
+      path_parts = Path(clean_path).parts
+      if any(part == '..' for part in path_parts):
+        raise ValueError("Invalid file path: path traversal detected")
+    except (OSError, ValueError) as e:
+      # If path parsing fails, it might be malformed
+      if '..' in clean_path and ('/..' in clean_path or '../' in clean_path or '\\..\\' in clean_path or clean_path.startswith('..')):
+        raise ValueError("Invalid file path: path traversal detected")
   
   # Check for absolute paths (unless explicitly allowed)
   if clean_path.startswith('/') or (len(clean_path) > 1 and clean_path[1] == ':'):
-    # Allow absolute paths only if they're within base_dir
+    # Allow absolute paths only if they're within base_dir or explicitly allowed
     if base_dir:
       abs_path = os.path.abspath(clean_path)
       abs_base = os.path.abspath(base_dir)
       if not abs_path.startswith(abs_base):
         raise ValueError("File path outside allowed directory")
-    else:
+    elif not allow_absolute:
       raise ValueError("Absolute paths not allowed")
   
   # Validate file extension

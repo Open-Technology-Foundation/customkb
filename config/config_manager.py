@@ -75,7 +75,8 @@ def get_fq_cfg_filename(cfgfile: str) -> Optional[str]:
   
   try:
     # Security validation: prevent path traversal and dangerous characters
-    validated_cfgfile = validate_file_path(cfgfile, ['.cfg', ''])
+    # Allow absolute paths and relative traversal for KB config files (trusted user input)
+    validated_cfgfile = validate_file_path(cfgfile, ['.cfg', ''], allow_absolute=True, allow_relative_traversal=True)
   except ValueError as e:
     logger.error(f"Invalid configuration file path: {e}")
     return None
@@ -83,9 +84,7 @@ def get_fq_cfg_filename(cfgfile: str) -> Optional[str]:
   if '.' in validated_cfgfile and not validated_cfgfile.endswith('.cfg'):
     candidate_cfg = f"{validated_cfgfile}.cfg"
     if os.path.exists(candidate_cfg):
-      # Security check: ensure path is within allowed directories
-      if validate_safe_path(candidate_cfg, VECTORDBS) or validate_safe_path(candidate_cfg, os.getcwd()):
-        return candidate_cfg
+      return candidate_cfg
     
     domain_path = find_file(candidate_cfg, VECTORDBS)
     if domain_path and validate_safe_path(domain_path, VECTORDBS):
@@ -122,12 +121,6 @@ def get_fq_cfg_filename(cfgfile: str) -> Optional[str]:
     
     return _fqfn
   
-  # Validate the existing file path is safe
-  if not (validate_safe_path(_fqfn, VECTORDBS) or validate_safe_path(_fqfn, os.getcwd())):
-    if logger:
-      logger.error(f"File '{_fqfn}' is outside allowed directories")
-    return None
-    
   return _fqfn
 
 class KnowledgeBase:

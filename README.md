@@ -96,6 +96,11 @@ CustomKB is a production-ready knowledge base system that transforms your docume
    customkb query myproject.cfg "How do I configure the vector model?"
    ```
 
+> **💡 Flexible Path Handling**: CustomKB supports multiple ways to specify knowledge base locations:
+> - **Direct config path**: `/path/to/project.cfg`
+> - **Relative traversal**: `../sibling-project/config.cfg`
+> - **KB name search**: `myproject` (searches `$VECTORDBS`)
+
 ## 📖 Detailed Documentation
 
 ### Command Reference
@@ -149,8 +154,17 @@ Performs semantic search and generates AI responses.
 
 **Examples:**
 ```bash
-# Simple query
+# Simple query with config file
 customkb query myproject.cfg "What are the main features?"
+
+# Absolute path to knowledge base
+customkb query /var/lib/vectordbs/docs/docs.cfg "How to install?"
+
+# Relative path with directory traversal
+customkb query ../other-project/config.cfg "What's new?"
+
+# KB name search (searches $VECTORDBS directory)
+customkb query myproject "What are the main features?"
 
 # Context-only search
 customkb query myproject.cfg "authentication" --context-only
@@ -256,6 +270,65 @@ heading_search_limit = 200             # Characters to scan for headings
 - **OpenAI o1**: o1-preview, o1-mini
 - **Anthropic Claude**: claude-3-5-sonnet, claude-3-5-haiku, claude-3-opus
 - **Meta Llama**: llama-3.1-8b, llama-3.1-70b (via Ollama)
+
+### Knowledge Base Organization
+
+#### Configuration Path Flexibility
+
+CustomKB supports three different approaches for organizing and accessing knowledge bases:
+
+**1. Absolute Paths** - Direct file system access:
+```bash
+# Config file anywhere in the filesystem
+customkb query /home/user/projects/docs/docs.cfg "search terms"
+customkb query /var/lib/vectordbs/company/hr.cfg "policy questions"
+
+# KB files created in same directory as config:
+# /home/user/projects/docs/docs.db
+# /home/user/projects/docs/docs.faiss
+# /home/user/projects/docs/logs/
+```
+
+**2. Relative Paths with Directory Traversal** - Navigate between related KBs:
+```bash
+# From /var/lib/vectordbs/project-a/ directory
+customkb query ../project-b/config.cfg "cross-project search"
+customkb query ../../archives/old-docs.cfg "historical data"
+```
+
+**3. Knowledge Base Name Search** - Convenient VECTORDBS lookup:
+```bash
+# Searches $VECTORDBS/myproject/myproject.cfg
+customkb query myproject "search terms"
+
+# Set custom search location
+export VECTORDBS="/custom/kb/location"
+customkb query docs "search terms"  # Looks in /custom/kb/location/docs/docs.cfg
+```
+
+#### Multi-Project Setup Example
+
+Organize related knowledge bases for easy cross-referencing:
+```
+/var/lib/vectordbs/
+├── company-docs/
+│   ├── company-docs.cfg
+│   ├── company-docs.db
+│   └── company-docs.faiss
+├── api-reference/
+│   ├── api-reference.cfg
+│   ├── api-reference.db
+│   └── api-reference.faiss
+└── customer-support/
+    ├── customer-support.cfg
+    ├── customer-support.db
+    └── customer-support.faiss
+
+# Query any KB from any location
+customkb query company-docs "HR policies"
+customkb query ../api-reference/api-reference.cfg "authentication"
+customkb query /var/lib/vectordbs/customer-support/customer-support.cfg "tickets"
+```
 
 ### Performance Tuning
 

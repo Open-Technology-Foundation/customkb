@@ -509,9 +509,32 @@ from utils.text_utils import clean_text, enhanced_clean_text
 cleaned = clean_text(raw_text, preserve_entities=True)
 
 # Security
-from utils.security_utils import validate_api_key, safe_log_error
+from utils.security_utils import validate_file_path, validate_api_key, safe_log_error
+
+# Path validation with new parameters
+validated_path = validate_file_path(
+    filepath='../config.cfg',
+    allowed_extensions=['.cfg'],
+    base_dir=None,
+    allow_absolute=True,           # Allow absolute paths
+    allow_relative_traversal=True  # Allow ../ in paths
+)
+
 is_valid = validate_api_key(key, min_length=20)
 ```
+
+#### validate_file_path Parameters
+
+- **filepath** (`str`): Path to validate
+- **allowed_extensions** (`List[str]`): Allowed file extensions (e.g., `['.cfg', '.txt']`)
+- **base_dir** (`str`, optional): Base directory to restrict access to
+- **allow_absolute** (`bool`, default `False`): Whether to allow absolute paths
+- **allow_relative_traversal** (`bool`, default `False`): Whether to allow `../` in paths
+
+**Use Cases**:
+- **Default** (strict): Web requests, untrusted input
+- **KB configs**: `allow_absolute=True, allow_relative_traversal=True`
+- **Restricted paths**: Use `base_dir` parameter
 
 ## Performance Considerations
 
@@ -582,11 +605,25 @@ is_valid = validate_api_key(key, min_length=20)
 
 1. **Path Validation**:
    ```python
-   from utils.security_utils import validate_safe_path
+   from utils.security_utils import validate_file_path, validate_safe_path
    
-   if not validate_safe_path(user_path, allowed_dir):
-       raise SecurityError("Invalid path")
+   # Strict validation for untrusted input (default behavior)
+   safe_path = validate_file_path(user_input, ['.txt', '.md'])
+   
+   # Flexible validation for KB config files (trusted command-line input)
+   config_path = validate_file_path(kb_config, ['.cfg'], 
+                                   allow_absolute=True,
+                                   allow_relative_traversal=True)
+   
+   # Directory containment check
+   if not validate_safe_path(resolved_path, base_directory):
+       raise SecurityError("Path outside allowed directory")
    ```
+
+   **Path Validation Parameters**:
+   - `allow_absolute`: Set `True` for trusted sources (CLI args, config files)
+   - `allow_relative_traversal`: Set `True` to allow `../` in relative paths
+   - Use defaults (`False`) for web requests or untrusted sources
 
 2. **Query Sanitization**:
    ```python

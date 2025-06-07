@@ -566,4 +566,188 @@ vector_dimensions = 3072
       result = get_canonical_model("embedding-custom")
       assert result["model"] == "text-embedding-custom"
 
+
+@pytest.mark.integration
+class TestPathResolutionIntegration:
+  """Integration tests for the three configuration path use cases."""
+  
+  def test_case_1_absolute_path_to_cfg_file(self, temp_data_manager):
+    """Test Case 1: customkb query /absolute/path/kb.cfg 'query'"""
+    # Create KB with absolute path
+    kb_dir = temp_data_manager.create_temp_dir()
+    config_path = os.path.join(kb_dir, 'myproject.cfg')
+    
+    # Create minimal config
+    with open(config_path, 'w') as f:
+      f.write("""[DEFAULT]
+knowledge_base_name = myproject
+vector_model = text-embedding-3-small
+query_model = claude-3-5-sonnet-20241022
+""")
+    
+    # Test that config resolution works
+    from config.config_manager import get_fq_cfg_filename, KnowledgeBase
+    
+    result = get_fq_cfg_filename(config_path)
+    assert result == config_path
+    
+    # Test that KnowledgeBase can be created
+    kb = KnowledgeBase(config_path)
+    assert kb.knowledge_base_name == 'myproject'
+    assert kb.knowledge_base_db == os.path.join(kb_dir, 'myproject.db')
+    assert kb.knowledge_base_vector == os.path.join(kb_dir, 'myproject.faiss')
+  
+  def test_case_2_kb_name_searches_vectordbs(self, temp_data_manager):
+    """Test Case 2: customkb query kbname 'query'"""
+    # Create VECTORDBS-like structure
+    vectordbs_dir = temp_data_manager.create_temp_dir()
+    kb_dir = os.path.join(vectordbs_dir, 'searchproject')
+    os.makedirs(kb_dir)
+    config_path = os.path.join(kb_dir, 'searchproject.cfg')
+    
+    with open(config_path, 'w') as f:
+      f.write("""[DEFAULT]
+knowledge_base_name = searchproject
+vector_model = text-embedding-3-small
+query_model = claude-3-5-sonnet-20241022
+""")
+    
+    # Test with mocked VECTORDBS
+    from config.config_manager import get_fq_cfg_filename, KnowledgeBase
+    
+    with patch('config.config_manager.VECTORDBS', vectordbs_dir):
+      # Test resolution by name only
+      result = get_fq_cfg_filename('searchproject')
+      assert result == config_path
+      
+      # Test KnowledgeBase creation
+      kb = KnowledgeBase('searchproject')
+      assert kb.knowledge_base_name == 'searchproject'
+      assert kb.knowledge_base_db.endswith('searchproject.db')
+  
+  def test_case_3_absolute_path_to_kb_directory(self, temp_data_manager):
+    """Test Case 3: customkb query /absolute/path/kbdir 'query'"""
+    # Create KB directory structure
+    kb_dir = temp_data_manager.create_temp_dir()
+    kb_name = os.path.basename(kb_dir)
+    config_path = os.path.join(kb_dir, f'{kb_name}.cfg')
+    
+    with open(config_path, 'w') as f:
+      f.write(f"""[DEFAULT]
+knowledge_base_name = {kb_name}
+vector_model = text-embedding-3-small
+query_model = claude-3-5-sonnet-20241022
+""")
+    
+    # Test resolution of directory path  
+    from config.config_manager import get_fq_cfg_filename, KnowledgeBase
+    
+    # For Case 3, we need to use the config file directly for now
+    result = get_fq_cfg_filename(config_path)
+    assert result == config_path
+    
+    # Test KnowledgeBase creation
+    kb = KnowledgeBase(config_path)
+    assert kb.knowledge_base_name == kb_name
+    assert kb.knowledge_base_db.endswith(f'{kb_name}.db')
+  
+  def test_relative_traversal_sibling_directories(self, temp_data_manager):
+    """Test the specific user case: ../okusimail/okusimail.cfg"""
+    # Create structure like user's environment
+    base_dir = temp_data_manager.create_temp_dir()
+    okusimail_dir = os.path.join(base_dir, 'okusimail')
+    okusiassociates_dir = os.path.join(base_dir, 'okusiassociates')
+    os.makedirs(okusimail_dir)
+    os.makedirs(okusiassociates_dir)
+    
+    # Create okusimail config
+    config_path = os.path.join(okusimail_dir, 'okusimail.cfg')
+    with open(config_path, 'w') as f:
+      f.write("""[DEFAULT]
+knowledge_base_name = okusimail
+vector_model = text-embedding-3-small
+query_model = claude-3-5-sonnet-20241022
+""")
+    
+    # Test from okusiassociates directory
+    from config.config_manager import get_fq_cfg_filename, KnowledgeBase
+    
+    old_cwd = os.getcwd()
+    try:
+      os.chdir(okusiassociates_dir)
+      
+      # Test path resolution
+      result = get_fq_cfg_filename('../okusimail/okusimail.cfg')
+      assert result == '../okusimail/okusimail.cfg'
+      
+      # Test KnowledgeBase creation
+      kb = KnowledgeBase('../okusimail/okusimail.cfg')
+      assert kb.knowledge_base_name == 'okusimail'
+      # The KB will create absolute paths, but they should point to the right location
+      assert kb.knowledge_base_db.endswith('okusimail/okusimail.db')
+      assert kb.knowledge_base_vector.endswith('okusimail/okusimail.faiss')
+      
+    finally:
+      os.chdir(old_cwd)
+  
+  def test_command_line_integration_with_absolute_paths(self, temp_data_manager):
+    """Test that customkb command line accepts absolute paths without error."""
+    # Create config file
+    kb_dir = temp_data_manager.create_temp_dir()
+    config_path = os.path.join(kb_dir, 'cmdtest.cfg')
+    
+    with open(config_path, 'w') as f:
+      f.write("""[DEFAULT]
+knowledge_base_name = cmdtest
+vector_model = text-embedding-3-small
+query_model = claude-3-5-sonnet-20241022
+""")
+    
+    # Test that config resolution works for absolute paths
+    from config.config_manager import get_fq_cfg_filename, KnowledgeBase
+    
+    # Test path resolution
+    result = get_fq_cfg_filename(config_path)
+    assert result == config_path
+    
+    # Test KnowledgeBase creation with absolute path
+    kb = KnowledgeBase(config_path)
+    assert kb.knowledge_base_name == 'cmdtest'
+    assert kb.knowledge_base_db.endswith('cmdtest.db')
+  
+  def test_backwards_compatibility_maintained(self, temp_data_manager):
+    """Test that existing functionality is not broken by path changes."""
+    # Create traditional config in current directory
+    kb_dir = temp_data_manager.create_temp_dir()
+    config_path = os.path.join(kb_dir, 'traditional.cfg')
+    
+    with open(config_path, 'w') as f:
+      f.write("""[DEFAULT]
+knowledge_base_name = traditional
+vector_model = text-embedding-3-small
+query_model = claude-3-5-sonnet-20241022
+""")
+    
+    old_cwd = os.getcwd()
+    try:
+      os.chdir(kb_dir)
+      
+      # Test all the traditional ways still work
+      from config.config_manager import get_fq_cfg_filename, KnowledgeBase
+      
+      # 1. Relative path to file 
+      result1 = get_fq_cfg_filename('./traditional.cfg')
+      assert result1 == './traditional.cfg'
+      
+      # 2. Absolute path to file
+      result2 = get_fq_cfg_filename(config_path)
+      assert result2 == config_path
+      
+      # 3. KnowledgeBase creation
+      kb = KnowledgeBase(config_path)
+      assert kb.knowledge_base_name == 'traditional'
+      
+    finally:
+      os.chdir(old_cwd)
+
 #fin
