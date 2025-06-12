@@ -706,4 +706,230 @@ class TestProcessQuery:
           
           assert "does not yet exist" in result
 
+
+class TestQueryEnhancement:
+  """Test query enhancement functionality."""
+  
+  def test_normalize_query_basic(self):
+    """Test basic query normalization."""
+    from query.query_manager import normalize_query
+    
+    # Test whitespace normalization
+    query = "  what   is  db  config   "
+    normalized = normalize_query(query)
+    assert normalized == "what is database configuration"
+    
+    # Test abbreviation expansion
+    query = "api ui ml docs"
+    normalized = normalize_query(query)
+    assert "API" in normalized
+    assert "user interface" in normalized
+    assert "machine learning" in normalized
+    assert "documentation" in normalized
+  
+  def test_get_synonyms_for_word_basic(self):
+    """Test synonym generation for common words."""
+    from query.query_manager import get_synonyms_for_word
+    
+    # Test with common word
+    synonyms = get_synonyms_for_word("car", max_synonyms=3)
+    assert isinstance(synonyms, list)
+    assert len(synonyms) <= 3
+    
+    # Test with technical term that may not have synonyms
+    synonyms = get_synonyms_for_word("xyzabc123", max_synonyms=2)
+    assert synonyms == []
+  
+  def test_apply_spelling_correction(self):
+    """Test spelling correction functionality."""
+    from query.query_manager import apply_spelling_correction
+    from config.config_manager import KnowledgeBase
+    
+    # Create mock KB with spelling correction enabled
+    kb = Mock()
+    kb.query_enhancement_spelling = True
+    
+    # Test common technical misspellings
+    query = "databse cofigure querry performace"
+    corrected = apply_spelling_correction(query, kb)
+    
+    assert "database" in corrected
+    assert "configure" in corrected
+    assert "query" in corrected
+    assert "performance" in corrected
+    
+    # Test case preservation
+    query = "Databse QUERRY"
+    corrected = apply_spelling_correction(query, kb)
+    assert "Database" in corrected
+    assert "QUERY" in corrected
+  
+  def test_apply_spelling_correction_disabled(self):
+    """Test spelling correction when disabled."""
+    from query.query_manager import apply_spelling_correction
+    
+    # Mock KB with spelling correction disabled
+    kb = Mock()
+    kb.query_enhancement_spelling = False
+    
+    query = "databse cofigure querry"
+    corrected = apply_spelling_correction(query, kb)
+    
+    # Should return original query unchanged
+    assert corrected == query
+  
+  def test_expand_synonyms_basic(self):
+    """Test synonym expansion functionality."""
+    from query.query_manager import expand_synonyms
+    
+    # Mock KB with synonym expansion enabled
+    kb = Mock()
+    kb.query_enhancement_synonyms = True
+    kb.max_synonyms_per_word = 2
+    kb.synonym_relevance_threshold = 0.6
+    
+    # Test with expandable words
+    query = "computer algorithm"
+    expanded = expand_synonyms(query, kb)
+    
+    # Should contain original words
+    assert "computer" in expanded
+    assert "algorithm" in expanded
+    
+    # Should be longer than original (synonyms added)
+    assert len(expanded.split()) >= len(query.split())
+  
+  def test_expand_synonyms_skip_common_words(self):
+    """Test that common words are skipped in synonym expansion."""
+    from query.query_manager import expand_synonyms
+    
+    kb = Mock()
+    kb.query_enhancement_synonyms = True
+    kb.max_synonyms_per_word = 2
+    kb.synonym_relevance_threshold = 0.6
+    
+    # Test with common/stop words
+    query = "the and for"
+    expanded = expand_synonyms(query, kb)
+    
+    # Should be unchanged (all are common words)
+    assert expanded == query
+  
+  def test_expand_synonyms_disabled(self):
+    """Test synonym expansion when disabled."""
+    from query.query_manager import expand_synonyms
+    
+    kb = Mock()
+    kb.query_enhancement_synonyms = False
+    
+    query = "computer algorithm"
+    expanded = expand_synonyms(query, kb)
+    
+    # Should return original query unchanged
+    assert expanded == query
+  
+  def test_enhance_query_full_pipeline(self):
+    """Test complete query enhancement pipeline."""
+    from query.query_manager import enhance_query
+    
+    # Mock KB with all enhancements enabled
+    kb = Mock()
+    kb.enable_query_enhancement = True
+    kb.query_enhancement_synonyms = True
+    kb.query_enhancement_spelling = True
+    kb.max_synonyms_per_word = 2
+    kb.synonym_relevance_threshold = 0.6
+    
+    # Mock caching functions to avoid actual file I/O
+    with patch('query.query_manager.get_cached_enhanced_query', return_value=None):
+      with patch('query.query_manager.save_enhanced_query_to_cache'):
+        query = "  databse  performace  ml  "
+        enhanced = enhance_query(query, kb)
+        
+        # Should be normalized, corrected, and potentially expanded
+        assert "database" in enhanced.lower()
+        assert "performance" in enhanced.lower()
+        assert "machine learning" in enhanced.lower()
+        
+        # Should be normalized (no extra spaces)
+        assert "  " not in enhanced
+  
+  def test_enhance_query_disabled(self):
+    """Test query enhancement when disabled."""
+    from query.query_manager import enhance_query
+    
+    kb = Mock()
+    kb.enable_query_enhancement = False
+    
+    query = "  databse  performace  "
+    enhanced = enhance_query(query, kb)
+    
+    # Should return original query unchanged
+    assert enhanced == query
+  
+  def test_enhance_query_cached(self):
+    """Test query enhancement with cached result."""
+    from query.query_manager import enhance_query
+    
+    kb = Mock()
+    kb.enable_query_enhancement = True
+    
+    cached_result = "cached enhanced query"
+    
+    with patch('query.query_manager.get_cached_enhanced_query', return_value=cached_result):
+      query = "original query"
+      enhanced = enhance_query(query, kb)
+      
+      # Should return cached result
+      assert enhanced == cached_result
+  
+  def test_enhance_query_error_handling(self):
+    """Test query enhancement error handling."""
+    from query.query_manager import enhance_query
+    
+    kb = Mock()
+    kb.enable_query_enhancement = True
+    
+    # Mock an exception in the enhancement process
+    with patch('query.query_manager.get_cached_enhanced_query', return_value=None):
+      with patch('query.query_manager.normalize_query', side_effect=Exception("Test error")):
+        query = "test query"
+        enhanced = enhance_query(query, kb)
+        
+        # Should fallback to original query on error
+        assert enhanced == query
+  
+  def test_enhancement_caching_functions(self):
+    """Test query enhancement caching functionality."""
+    from query.query_manager import (
+      get_enhancement_cache_key,
+      get_cached_enhanced_query,
+      save_enhanced_query_to_cache
+    )
+    
+    # Test cache key generation
+    query = "test query"
+    key1 = get_enhancement_cache_key(query)
+    key2 = get_enhancement_cache_key(query)
+    
+    assert key1 == key2
+    assert "enhancement_" in key1
+    
+    # Test caching with temporary directory
+    with tempfile.TemporaryDirectory() as temp_dir:
+      with patch('query.query_manager.CACHE_DIR', temp_dir):
+        original = "original query"
+        enhanced = "enhanced query with synonyms"
+        
+        # Save to cache
+        save_enhanced_query_to_cache(original, enhanced)
+        
+        # Retrieve from cache
+        cached = get_cached_enhanced_query(original)
+        assert cached == enhanced
+        
+        # Test cache miss
+        missing = get_cached_enhanced_query("nonexistent query")
+        assert missing is None
+
 #fin

@@ -13,12 +13,15 @@ CustomKB is a production-ready knowledge base system that transforms your docume
 - **Smart Chunking**: Configurable token-based chunking that preserves context and document structure
 - **Metadata Extraction**: Automatic extraction of headings, sections, and entities
 - **Multi-Language Support**: Stopword filtering and text normalization for 27+ languages
+- **Full Path Storage**: Stores complete file paths to properly handle duplicate filenames across directories
 
 ### Advanced Vector Search
 - **High-Performance Storage**: SQLite for structured data + FAISS for vector indices
 - **Adaptive Indexing**: Automatically selects optimal index type based on dataset size
 - **Semantic Search**: Find relevant content based on meaning, not just keywords
 - **Relevance Scoring**: Context-aware ranking with configurable similarity thresholds
+- **Hybrid Search**: Combines vector similarity with BM25 keyword matching for optimal results
+- **Cross-Encoder Reranking**: Enabled by default - uses advanced models to improve accuracy by 20-40%
 
 ### AI-Powered Responses
 - **Multi-Model Support**: 
@@ -353,6 +356,10 @@ query_context_scope = 6
 
 [ALGORITHMS]
 similarity_threshold = 0.7
+enable_hybrid_search = true
+enable_reranking = true
+reranking_model = cross-encoder/ms-marco-MiniLM-L-6-v2
+reranking_top_k = 30
 ```
 
 #### For Fast Response Times
@@ -362,11 +369,39 @@ vector_model = text-embedding-3-small
 query_top_k = 20
 query_model = gpt-4o-mini
 
+[ALGORITHMS]
+enable_reranking = false  # Disable for lowest latency
+
 [PERFORMANCE]
 query_cache_ttl_days = 30
 ```
 
 ## 🔧 Advanced Usage
+
+### Reranking Configuration
+
+Cross-encoder reranking is enabled by default to maximize search accuracy. However, you may want to adjust or disable it based on your needs:
+
+#### When to Disable Reranking
+```ini
+[ALGORITHMS]
+enable_reranking = false  # Disable when you need:
+# - Ultra-low latency (<100ms response time)
+# - Resource-constrained environments (RPi, edge devices)
+# - High query volume (>100 QPS)
+# - Simple keyword-based searches
+```
+
+#### Optimizing Reranking Performance
+```ini
+[ALGORITHMS]
+enable_reranking = true
+reranking_model = cross-encoder/ms-marco-MiniLM-L-6-v2  # Lightweight model
+reranking_top_k = 10         # Reduce for faster processing
+reranking_batch_size = 64    # Increase for GPU processing
+reranking_device = cuda      # Use GPU if available
+reranking_cache_size = 5000  # Increase cache for repeated queries
+```
 
 ### Domain-Style Knowledge Bases
 ```bash

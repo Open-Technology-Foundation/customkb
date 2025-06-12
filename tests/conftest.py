@@ -82,13 +82,58 @@ def temp_config_file(temp_data_manager, sample_config_content, temp_kb_directory
 
 @pytest.fixture
 def temp_database(temp_kb_directory, sample_texts):
-  """Create a temporary SQLite database with sample data."""
+  """Create a temporary SQLite database with sample data (includes BM25 columns)."""
   db_path = os.path.join(temp_kb_directory, "test_kb.db")
   
   conn = sqlite3.connect(db_path)
   cursor = conn.cursor()
   
-  # Create table
+  # Create table with BM25 columns for backward compatibility
+  cursor.execute('''
+    CREATE TABLE docs (
+      id INTEGER PRIMARY KEY,
+      sid INTEGER,
+      sourcedoc VARCHAR(255),
+      originaltext TEXT,
+      embedtext TEXT,
+      embedded INTEGER DEFAULT 0,
+      language TEXT default "en",
+      metadata TEXT,
+      keyphrase_processed INTEGER default 0,
+      bm25_tokens TEXT,
+      doc_length INTEGER DEFAULT 0
+    )
+  ''')
+  
+  # Insert sample data
+  mock_gen = MockDataGenerator()
+  rows = mock_gen.create_database_rows(sample_texts[:5])  # Use first 5 texts
+  
+  for row in rows:
+    # Extend row to include BM25 columns (empty by default)
+    # Row format: (id, sid, sourcedoc, originaltext, embedtext, embedded, language, metadata)
+    # Need to add: keyphrase_processed, bm25_tokens, doc_length
+    extended_row = row + (0, "", 0)  # keyphrase_processed, bm25_tokens, doc_length
+    cursor.execute(
+      "INSERT INTO docs (id, sid, sourcedoc, originaltext, embedtext, embedded, language, metadata, keyphrase_processed, bm25_tokens, doc_length) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+      extended_row
+    )
+  
+  conn.commit()
+  conn.close()
+  
+  return db_path
+
+
+@pytest.fixture
+def temp_legacy_database(temp_kb_directory, sample_texts):
+  """Create a temporary SQLite database with legacy schema (no BM25 columns)."""
+  db_path = os.path.join(temp_kb_directory, "legacy_test_kb.db")
+  
+  conn = sqlite3.connect(db_path)
+  cursor = conn.cursor()
+  
+  # Create table with legacy schema
   cursor.execute('''
     CREATE TABLE docs (
       id INTEGER PRIMARY KEY,
@@ -269,6 +314,9 @@ def pytest_configure(config):
   )
   config.addinivalue_line(
     "markers", "requires_data: mark test as requiring external test data"
+  )
+  config.addinivalue_line(
+    "markers", "performance: mark test as a performance test"
   )
 
 

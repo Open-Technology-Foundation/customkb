@@ -240,7 +240,29 @@ class KnowledgeBase:
       'DEF_ENTITY_EXTRACTION_LIMIT': (int, 500),
       'DEF_DEFAULT_DIR_PERMISSIONS': (int, 0o770),
       'DEF_DEFAULT_CODE_LANGUAGE': (str, 'python'),
-      'DEF_ADDITIONAL_STOPWORD_LANGUAGES': (list, ['indonesian', 'french', 'german', 'swedish'])
+      'DEF_ADDITIONAL_STOPWORD_LANGUAGES': (list, ['indonesian', 'french', 'german', 'swedish']),
+      # BM25/Hybrid search configuration
+      'DEF_ENABLE_HYBRID_SEARCH': (bool, False),
+      'DEF_VECTOR_WEIGHT': (float, 0.7),
+      'DEF_BM25_K1': (float, 1.2),
+      'DEF_BM25_B': (float, 0.75),
+      'DEF_BM25_MIN_TOKEN_LENGTH': (int, 2),
+      'DEF_BM25_REBUILD_THRESHOLD': (int, 1000),
+      # Query enhancement configuration
+      'DEF_ENABLE_QUERY_ENHANCEMENT': (bool, True),
+      'DEF_QUERY_ENHANCEMENT_SYNONYMS': (bool, True),
+      'DEF_QUERY_ENHANCEMENT_SPELLING': (bool, True),
+      'DEF_MAX_SYNONYMS_PER_WORD': (int, 2),
+      'DEF_QUERY_ENHANCEMENT_CACHE_TTL_DAYS': (int, 30),
+      'DEF_SPELLING_CORRECTION_THRESHOLD': (float, 0.8),
+      'DEF_SYNONYM_RELEVANCE_THRESHOLD': (float, 0.6),
+      # Reranking configuration
+      'DEF_ENABLE_RERANKING': (bool, True),
+      'DEF_RERANKING_MODEL': (str, 'cross-encoder/ms-marco-MiniLM-L-6-v2'),
+      'DEF_RERANKING_TOP_K': (int, 20),
+      'DEF_RERANKING_BATCH_SIZE': (int, 32),
+      'DEF_RERANKING_DEVICE': (str, 'cpu'),
+      'DEF_RERANKING_CACHE_SIZE': (int, 1000)
     }
 
     # Set default values from environment or defaults
@@ -414,6 +436,50 @@ class KnowledgeBase:
       # Handle list parameter specially
       stopword_langs_str = algorithms_section.get('additional_stopword_languages', fallback=','.join(self.DEF_ADDITIONAL_STOPWORD_LANGUAGES))
       self.additional_stopword_languages = [lang.strip() for lang in stopword_langs_str.split(',') if lang.strip()]
+      
+      # BM25/Hybrid search configuration
+      self.enable_hybrid_search = get_env('ENABLE_HYBRID_SEARCH',
+        algorithms_section.getboolean('enable_hybrid_search', fallback=self.DEF_ENABLE_HYBRID_SEARCH), bool)
+      self.vector_weight = get_env('VECTOR_WEIGHT',
+        algorithms_section.getfloat('vector_weight', fallback=self.DEF_VECTOR_WEIGHT), float)
+      self.bm25_k1 = get_env('BM25_K1',
+        algorithms_section.getfloat('bm25_k1', fallback=self.DEF_BM25_K1), float)
+      self.bm25_b = get_env('BM25_B',
+        algorithms_section.getfloat('bm25_b', fallback=self.DEF_BM25_B), float)
+      self.bm25_min_token_length = get_env('BM25_MIN_TOKEN_LENGTH',
+        algorithms_section.getint('bm25_min_token_length', fallback=self.DEF_BM25_MIN_TOKEN_LENGTH), int)
+      self.bm25_rebuild_threshold = get_env('BM25_REBUILD_THRESHOLD',
+        algorithms_section.getint('bm25_rebuild_threshold', fallback=self.DEF_BM25_REBUILD_THRESHOLD), int)
+      
+      # Query enhancement configuration
+      self.enable_query_enhancement = get_env('ENABLE_QUERY_ENHANCEMENT',
+        algorithms_section.getboolean('enable_query_enhancement', fallback=self.DEF_ENABLE_QUERY_ENHANCEMENT), bool)
+      self.query_enhancement_synonyms = get_env('QUERY_ENHANCEMENT_SYNONYMS',
+        algorithms_section.getboolean('query_enhancement_synonyms', fallback=self.DEF_QUERY_ENHANCEMENT_SYNONYMS), bool)
+      self.query_enhancement_spelling = get_env('QUERY_ENHANCEMENT_SPELLING',
+        algorithms_section.getboolean('query_enhancement_spelling', fallback=self.DEF_QUERY_ENHANCEMENT_SPELLING), bool)
+      self.max_synonyms_per_word = get_env('MAX_SYNONYMS_PER_WORD',
+        algorithms_section.getint('max_synonyms_per_word', fallback=self.DEF_MAX_SYNONYMS_PER_WORD), int)
+      self.query_enhancement_cache_ttl_days = get_env('QUERY_ENHANCEMENT_CACHE_TTL_DAYS',
+        algorithms_section.getint('query_enhancement_cache_ttl_days', fallback=self.DEF_QUERY_ENHANCEMENT_CACHE_TTL_DAYS), int)
+      self.spelling_correction_threshold = get_env('SPELLING_CORRECTION_THRESHOLD',
+        algorithms_section.getfloat('spelling_correction_threshold', fallback=self.DEF_SPELLING_CORRECTION_THRESHOLD), float)
+      self.synonym_relevance_threshold = get_env('SYNONYM_RELEVANCE_THRESHOLD',
+        algorithms_section.getfloat('synonym_relevance_threshold', fallback=self.DEF_SYNONYM_RELEVANCE_THRESHOLD), float)
+      
+      # Reranking configuration
+      self.enable_reranking = get_env('ENABLE_RERANKING',
+        algorithms_section.getboolean('enable_reranking', fallback=self.DEF_ENABLE_RERANKING), bool)
+      self.reranking_model = get_env('RERANKING_MODEL',
+        algorithms_section.get('reranking_model', fallback=self.DEF_RERANKING_MODEL), str)
+      self.reranking_top_k = get_env('RERANKING_TOP_K',
+        algorithms_section.getint('reranking_top_k', fallback=self.DEF_RERANKING_TOP_K), int)
+      self.reranking_batch_size = get_env('RERANKING_BATCH_SIZE',
+        algorithms_section.getint('reranking_batch_size', fallback=self.DEF_RERANKING_BATCH_SIZE), int)
+      self.reranking_device = get_env('RERANKING_DEVICE',
+        algorithms_section.get('reranking_device', fallback=self.DEF_RERANKING_DEVICE), str)
+      self.reranking_cache_size = get_env('RERANKING_CACHE_SIZE',
+        algorithms_section.getint('reranking_cache_size', fallback=self.DEF_RERANKING_CACHE_SIZE), int)
     else:
       # Original configuration
       self.vector_model = kwargs.get('vector_model', self.DEF_VECTOR_MODEL)
@@ -475,6 +541,14 @@ class KnowledgeBase:
       self.default_dir_permissions = kwargs.get('default_dir_permissions', self.DEF_DEFAULT_DIR_PERMISSIONS)
       self.default_code_language = kwargs.get('default_code_language', self.DEF_DEFAULT_CODE_LANGUAGE)
       self.additional_stopword_languages = kwargs.get('additional_stopword_languages', self.DEF_ADDITIONAL_STOPWORD_LANGUAGES)
+      
+      # BM25/Hybrid search configuration
+      self.enable_hybrid_search = kwargs.get('enable_hybrid_search', self.DEF_ENABLE_HYBRID_SEARCH)
+      self.vector_weight = kwargs.get('vector_weight', self.DEF_VECTOR_WEIGHT)
+      self.bm25_k1 = kwargs.get('bm25_k1', self.DEF_BM25_K1)
+      self.bm25_b = kwargs.get('bm25_b', self.DEF_BM25_B)
+      self.bm25_min_token_length = kwargs.get('bm25_min_token_length', self.DEF_BM25_MIN_TOKEN_LENGTH)
+      self.bm25_rebuild_threshold = kwargs.get('bm25_rebuild_threshold', self.DEF_BM25_REBUILD_THRESHOLD)
 
   def save_config(self, output_to: Optional[str] = None) -> None:
     """

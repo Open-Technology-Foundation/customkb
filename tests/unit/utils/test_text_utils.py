@@ -16,7 +16,8 @@ from utils.text_utils import (
   get_files,
   split_filepath,
   find_file,
-  get_env
+  get_env,
+  tokenize_for_bm25
 )
 
 
@@ -447,5 +448,181 @@ class TestGetEnv:
       # Try to cast string to list (should fail)
       result = get_env('COMPLEX_VAR', [], list)
       assert result == []  # Should return default
+
+
+class TestBM25Tokenization:
+  """Test BM25 tokenization functionality."""
+  
+  def test_basic_tokenization(self):
+    """Test basic BM25 tokenization."""
+    text = "Machine learning algorithms are powerful tools"
+    tokens, length = tokenize_for_bm25(text)
+    
+    assert "machine" in tokens
+    assert "learning" in tokens
+    assert "algorithms" in tokens
+    assert "powerful" in tokens
+    assert "tools" in tokens
+    assert length == 5
+  
+  def test_stopword_removal(self):
+    """Test that essential stopwords are removed."""
+    text = "The machine learning and the artificial intelligence"
+    tokens, length = tokenize_for_bm25(text)
+    
+    # Essential stopwords should be removed
+    assert "the" not in tokens
+    assert "and" not in tokens
+    # Important terms should remain
+    assert "machine" in tokens
+    assert "learning" in tokens
+    assert "artificial" in tokens
+    assert "intelligence" in tokens
+  
+  def test_hyphen_preservation(self):
+    """Test that hyphens in compound words are preserved."""
+    text = "State-of-the-art machine-learning techniques"
+    tokens, length = tokenize_for_bm25(text)
+    
+    assert "state-of-the-art" in tokens
+    assert "machine-learning" in tokens
+  
+  def test_period_preservation(self):
+    """Test that periods in decimals and domains are preserved."""
+    text = "The accuracy is 95.5% on example.com dataset"
+    tokens, length = tokenize_for_bm25(text)
+    
+    assert "95.5" in tokens
+    assert "example.com" in tokens
+  
+  def test_number_preservation(self):
+    """Test that numbers are preserved."""
+    text = "GPT-4 has 175 billion parameters in 2024"
+    tokens, length = tokenize_for_bm25(text)
+    
+    assert "gpt-4" in tokens
+    assert "175" in tokens
+    assert "billion" in tokens
+    assert "2024" in tokens
+  
+  def test_single_character_removal(self):
+    """Test that single characters are removed (except digits)."""
+    text = "a b c 1 2 machine learning"
+    tokens, length = tokenize_for_bm25(text)
+    
+    # Single letters should be removed
+    assert "a" not in tokens
+    assert "b" not in tokens
+    assert "c" not in tokens
+    # Single digits should be kept
+    assert "1" in tokens
+    assert "2" in tokens
+    # Multi-character words should be kept
+    assert "machine" in tokens
+    assert "learning" in tokens
+  
+  def test_duplicate_removal(self):
+    """Test that duplicate tokens are removed while preserving order."""
+    text = "machine learning machine algorithms learning"
+    tokens, length = tokenize_for_bm25(text)
+    
+    token_list = tokens.split()
+    # Should only appear once each
+    assert token_list.count("machine") == 1
+    assert token_list.count("learning") == 1
+    assert token_list.count("algorithms") == 1
+    assert length == 3
+  
+  def test_empty_text(self):
+    """Test handling of empty text."""
+    tokens, length = tokenize_for_bm25("")
+    
+    assert tokens == ""
+    assert length == 0
+  
+  def test_whitespace_only(self):
+    """Test handling of whitespace-only text."""
+    tokens, length = tokenize_for_bm25("   \n\t   ")
+    
+    assert tokens == ""
+    assert length == 0
+  
+  def test_special_characters_removal(self):
+    """Test removal of special characters."""
+    text = "Machine learning! @#$%^&*() algorithms?"
+    tokens, length = tokenize_for_bm25(text)
+    
+    assert "machine" in tokens
+    assert "learning" in tokens
+    assert "algorithms" in tokens
+    # Special characters should not appear
+    for char in "!@#$%^&*()":
+      assert char not in tokens
+  
+  def test_different_languages(self):
+    """Test tokenization with different language settings."""
+    text = "Machine learning algorithms"
+    
+    # Test with English
+    tokens_en, length_en = tokenize_for_bm25(text, 'en')
+    
+    # Test with unsupported language (should fallback)
+    tokens_unsupported, length_unsupported = tokenize_for_bm25(text, 'xyz')
+    
+    # Results should be similar (basic tokenization)
+    assert "machine" in tokens_en
+    assert "machine" in tokens_unsupported
+    assert length_en > 0
+    assert length_unsupported > 0
+  
+  def test_case_conversion(self):
+    """Test that text is converted to lowercase."""
+    text = "MACHINE Learning AlGoRiThMs"
+    tokens, length = tokenize_for_bm25(text)
+    
+    assert "machine" in tokens
+    assert "learning" in tokens
+    assert "algorithms" in tokens
+    # No uppercase should remain
+    assert "MACHINE" not in tokens
+    assert "Learning" not in tokens
+    assert "AlGoRiThMs" not in tokens
+  
+  def test_domain_specific_terms(self):
+    """Test handling of domain-specific terms and acronyms."""
+    text = "API endpoints use REST-API for HTTP requests"
+    tokens, length = tokenize_for_bm25(text)
+    
+    assert "api" in tokens
+    assert "endpoints" in tokens
+    assert "rest-api" in tokens
+    assert "http" in tokens
+    assert "requests" in tokens
+  
+  def test_email_and_url_handling(self):
+    """Test handling of emails and URLs."""
+    text = "Contact user@example.com or visit https://example.com"
+    tokens, length = tokenize_for_bm25(text)
+    
+    assert "contact" in tokens
+    assert "user" in tokens  # @ gets removed
+    assert "example.com" in tokens
+    assert "visit" in tokens
+    assert "https" in tokens
+  
+  @patch('utils.text_utils.word_tokenize')
+  def test_tokenization_fallback(self, mock_tokenize):
+    """Test fallback tokenization when NLTK fails."""
+    # Mock NLTK tokenize to raise an error
+    mock_tokenize.side_effect = LookupError("Resource not found")
+    
+    text = "Machine learning algorithms"
+    tokens, length = tokenize_for_bm25(text)
+    
+    # Should fall back to basic split
+    assert "machine" in tokens
+    assert "learning" in tokens
+    assert "algorithms" in tokens
+    assert length == 3
 
 #fin

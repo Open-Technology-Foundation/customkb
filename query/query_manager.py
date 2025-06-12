@@ -6,6 +6,7 @@ Handles semantic searching and response generation.
 
 import os
 import sys
+import re
 import numpy as np
 import faiss
 import sqlite3
@@ -27,6 +28,9 @@ from database.db_manager import connect_to_database, close_database
 # Import AI clients with validation
 from openai import OpenAI, AsyncOpenAI
 from anthropic import Anthropic, AsyncAnthropic
+
+# Import reranking functionality
+from embedding.rerank_manager import rerank_search_results
 from utils.security_utils import validate_api_key, safe_log_error
 
 def load_and_validate_api_keys():
@@ -135,6 +139,326 @@ def save_query_embedding_to_cache(query_text: str, model: str, embedding: List[f
   except IOError as e:
     logger.warning(f"Failed to cache query embedding: {e}")
 
+def get_enhancement_cache_key(query_text: str) -> str:
+  """
+  Generate a cache key for query enhancement.
+  
+  Args:
+      query_text: The original query text.
+      
+  Returns:
+      A cache key string for enhancement.
+  """
+  text_hash = hashlib.md5(query_text.encode('utf-8')).hexdigest()
+  return f"enhancement_{text_hash}"
+
+def get_cached_enhanced_query(query_text: str, kb=None) -> Optional[str]:
+  """
+  Retrieve a cached enhanced query if it exists and is not expired.
+  
+  Args:
+      query_text: The original query text.
+      kb: KnowledgeBase instance for configuration (optional).
+      
+  Returns:
+      The cached enhanced query or None if not found or expired.
+  """
+  cache_key = get_enhancement_cache_key(query_text)
+  cache_file = os.path.join(CACHE_DIR, f"{cache_key}.txt")
+  
+  if os.path.exists(cache_file):
+    try:
+      # Check if cache is expired
+      file_time = os.path.getmtime(cache_file)
+      cache_ttl_days = getattr(kb, 'query_enhancement_cache_ttl_days', 30) if kb else 30
+      cache_ttl_seconds = cache_ttl_days * 24 * 3600
+      if time.time() - file_time > cache_ttl_seconds:
+        os.remove(cache_file)
+        return None
+        
+      with open(cache_file, 'r', encoding='utf-8') as f:
+        return f.read().strip()
+    except (IOError, UnicodeDecodeError):
+      return None
+  
+  return None
+
+def save_enhanced_query_to_cache(original_query: str, enhanced_query: str) -> None:
+  """
+  Save an enhanced query to the cache.
+  
+  Args:
+      original_query: The original query text.
+      enhanced_query: The enhanced query text.
+  """
+  cache_key = get_enhancement_cache_key(original_query)
+  cache_file = os.path.join(CACHE_DIR, f"{cache_key}.txt")
+  
+  try:
+    with open(cache_file, 'w', encoding='utf-8') as f:
+      f.write(enhanced_query)
+  except IOError as e:
+    logger.warning(f"Failed to cache enhanced query: {e}")
+
+def normalize_query(query: str) -> str:
+  """
+  Normalize query text for better processing.
+  
+  Args:
+      query: The input query text.
+      
+  Returns:
+      Normalized query text.
+  """
+  # Remove extra whitespace
+  query = re.sub(r'\s+', ' ', query.strip())
+  
+  # Handle common abbreviations and expansions
+  replacements = {
+    r'\bdb\b': 'database',
+    r'\bconfig\b': 'configuration',
+    r'\bapi\b': 'API',
+    r'\bui\b': 'user interface',
+    r'\bml\b': 'machine learning',
+    r'\bai\b': 'artificial intelligence',
+    r'\bdocs?\b': 'documentation',
+    r'\bimpl\b': 'implementation',
+    r'\bperf\b': 'performance'
+  }
+  
+  for pattern, replacement in replacements.items():
+    query = re.sub(pattern, replacement, query, flags=re.IGNORECASE)
+  
+  return query
+
+def get_synonyms_for_word(word: str, max_synonyms: int = 2, relevance_threshold: float = 0.6) -> List[str]:
+  """
+  Get relevant synonyms for a word using NLTK WordNet.
+  
+  Args:
+      word: The word to find synonyms for.
+      max_synonyms: Maximum number of synonyms to return.
+      relevance_threshold: Minimum relevance score for synonyms.
+      
+  Returns:
+      List of relevant synonyms.
+  """
+  try:
+    from nltk.corpus import wordnet
+    import nltk
+    
+    # Download wordnet if not available
+    try:
+      wordnet.synsets('test')
+    except LookupError:
+      nltk.download('wordnet', quiet=True)
+      nltk.download('omw-1.4', quiet=True)
+    
+    synonyms = set()
+    word_lower = word.lower()
+    
+    # Get synsets for the word
+    synsets = wordnet.synsets(word_lower)
+    
+    if not synsets:
+      return []
+    
+    # Get synonyms from the first few synsets (most common meanings)
+    for synset in synsets[:3]:  # Limit to first 3 synsets for relevance
+      for lemma in synset.lemmas():
+        synonym = lemma.name().replace('_', ' ')
+        if (synonym != word_lower and 
+            len(synonym) > 2 and 
+            synonym.isalpha() and
+            len(synonyms) < max_synonyms):
+          synonyms.add(synonym)
+    
+    return list(synonyms)[:max_synonyms]
+    
+  except Exception as e:
+    logger.debug(f"Error getting synonyms for '{word}': {e}")
+    return []
+
+def correct_spelling(word: str, vocabulary: Optional[Set[str]] = None) -> str:
+  """
+  Simple spelling correction using edit distance.
+  
+  Args:
+      word: The word to potentially correct.
+      vocabulary: Set of known correct words (optional).
+      
+  Returns:
+      Corrected word or original if no good correction found.
+  """
+  if not vocabulary or len(word) < 4:
+    return word
+  
+  def edit_distance(s1: str, s2: str) -> int:
+    """Calculate edit distance between two strings."""
+    if len(s1) > len(s2):
+      s1, s2 = s2, s1
+    
+    distances = list(range(len(s1) + 1))
+    for i2, c2 in enumerate(s2):
+      new_distances = [i2 + 1]
+      for i1, c1 in enumerate(s1):
+        if c1 == c2:
+          new_distances.append(distances[i1])
+        else:
+          new_distances.append(1 + min(distances[i1], distances[i1 + 1], new_distances[-1]))
+      distances = new_distances
+    
+    return distances[-1]
+  
+  word_lower = word.lower()
+  best_match = word
+  min_distance = len(word) // 3  # Allow up to 1/3 of word length in edits
+  
+  # Check words with similar length first
+  candidates = [v for v in vocabulary if abs(len(v) - len(word)) <= 2]
+  
+  for candidate in candidates:
+    if candidate.lower() == word_lower:
+      continue
+      
+    distance = edit_distance(word_lower, candidate.lower())
+    if distance < min_distance:
+      min_distance = distance
+      best_match = candidate
+  
+  return best_match
+
+def expand_synonyms(query: str, kb: Optional['KnowledgeBase'] = None) -> str:
+  """
+  Expand query with synonyms for better semantic matching.
+  
+  Args:
+      query: The input query text.
+      kb: KnowledgeBase instance for configuration.
+      
+  Returns:
+      Query expanded with relevant synonyms.
+  """
+  if not kb or not getattr(kb, 'query_enhancement_synonyms', True):
+    return query
+  
+  max_synonyms = getattr(kb, 'max_synonyms_per_word', 2)
+  relevance_threshold = getattr(kb, 'synonym_relevance_threshold', 0.6)
+  
+  words = query.split()
+  expanded_words = words.copy()  # Keep original words
+  
+  # Only expand content words (longer than 3 characters, not common words)
+  skip_words = {'the', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', 'from', 'this', 'that', 'these', 'those'}
+  
+  for word in words:
+    if len(word) > 3 and word.lower() not in skip_words:
+      synonyms = get_synonyms_for_word(word, max_synonyms, relevance_threshold)
+      expanded_words.extend(synonyms)
+  
+  # Remove duplicates while preserving order
+  seen = set()
+  unique_words = []
+  for word in expanded_words:
+    word_lower = word.lower()
+    if word_lower not in seen:
+      seen.add(word_lower)
+      unique_words.append(word)
+  
+  return ' '.join(unique_words)
+
+def apply_spelling_correction(query: str, kb: Optional['KnowledgeBase'] = None) -> str:
+  """
+  Apply spelling correction to query words.
+  
+  Args:
+      query: The input query text.
+      kb: KnowledgeBase instance for configuration and vocabulary.
+      
+  Returns:
+      Query with spelling corrections applied.
+  """
+  if not kb or not getattr(kb, 'query_enhancement_spelling', True):
+    return query
+  
+  # For now, implement basic corrections for common technical terms
+  # In a full implementation, this could use the KB's vocabulary
+  common_corrections = {
+    'databse': 'database',
+    'cofigure': 'configure',
+    'cofig': 'config',
+    'configuraton': 'configuration',
+    'conection': 'connection',
+    'querry': 'query',
+    'serach': 'search',
+    'performace': 'performance',
+    'optmization': 'optimization',
+    'algorythm': 'algorithm',
+    'machien': 'machine',
+    'learing': 'learning',
+    'retreive': 'retrieve',
+    'retreival': 'retrieval'
+  }
+  
+  words = query.split()
+  corrected_words = []
+  
+  for word in words:
+    word_lower = word.lower()
+    if word_lower in common_corrections:
+      # Preserve original case
+      if word.isupper():
+        corrected_words.append(common_corrections[word_lower].upper())
+      elif word.istitle():
+        corrected_words.append(common_corrections[word_lower].title())
+      else:
+        corrected_words.append(common_corrections[word_lower])
+    else:
+      corrected_words.append(word)
+  
+  return ' '.join(corrected_words)
+
+def enhance_query(query: str, kb: Optional['KnowledgeBase'] = None) -> str:
+  """
+  Main query enhancement pipeline that applies normalization, spelling correction, and synonym expansion.
+  
+  Args:
+      query: The original query text.
+      kb: KnowledgeBase instance for configuration.
+      
+  Returns:
+      Enhanced query text optimized for better retrieval.
+  """
+  if not kb or not getattr(kb, 'enable_query_enhancement', True):
+    return query
+  
+  # Check cache for previously enhanced query
+  cached_enhanced = get_cached_enhanced_query(query, kb)
+  if cached_enhanced:
+    logger.debug(f"Using cached enhanced query for: '{query}'")
+    return cached_enhanced
+  
+  try:
+    # Step 1: Normalize the query
+    enhanced = normalize_query(query)
+    
+    # Step 2: Apply spelling correction
+    enhanced = apply_spelling_correction(enhanced, kb)
+    
+    # Step 3: Expand with synonyms
+    enhanced = expand_synonyms(enhanced, kb)
+    
+    # Cache the enhanced query if it changed
+    if enhanced != query:
+      save_enhanced_query_to_cache(query, enhanced)
+      logger.debug(f"Query enhanced and cached: '{query}' -> '{enhanced}'")
+    
+    return enhanced
+    
+  except Exception as e:
+    logger.warning(f"Error enhancing query '{query}': {e}")
+    return query  # Fallback to original query on error
+
 def get_context_range(index_start: int, context_n: int) -> List[int]:
   """
   Calculate the start and end indices for context retrieval.
@@ -169,18 +493,28 @@ async def get_query_embedding(query_text: str, model: str, kb: Optional['Knowled
       Numpy array containing the embedding vector.
   """
   clean_query = clean_text(query_text)
-  cached_embedding = get_cached_query_embedding(clean_query, model, kb)
+  
+  # Apply query enhancement if enabled
+  enhanced_query = enhance_query(clean_query, kb)
+  
+  # Log enhancement if there was a change
+  if enhanced_query != clean_query and enhanced_query != query_text:
+    logger.info(f"Query enhanced: '{clean_query}' -> '{enhanced_query}'")
+  
+  # Use enhanced query for caching and embedding generation
+  query_for_embedding = enhanced_query
+  cached_embedding = get_cached_query_embedding(query_for_embedding, model, kb)
   
   if cached_embedding:
     logger.info("Using cached query embedding")
     embedding = cached_embedding
   else:
     response = await async_openai_client.embeddings.create(
-      input=clean_query, 
+      input=query_for_embedding, 
       model=model
     )
     embedding = response.data[0].embedding
-    save_query_embedding_to_cache(clean_query, model, embedding)
+    save_query_embedding_to_cache(query_for_embedding, model, embedding)
     
   return np.array(embedding, dtype=np.float32).reshape(1, -1)
 
@@ -229,6 +563,93 @@ def fetch_document_by_id(kb: KnowledgeBase, doc_id: int) -> Optional[Tuple[int, 
     logger.error(f"SQLite error: {e}")
     return None
 
+
+async def perform_hybrid_search(kb: KnowledgeBase, query_text: str, 
+                               query_vector: np.ndarray, index: faiss.Index) -> List[Tuple[int, float]]:
+  """
+  Perform hybrid vector + BM25 search or fallback to vector-only.
+  
+  Args:
+      kb: The KnowledgeBase instance.
+      query_text: The original query text.
+      query_vector: The query embedding vector.
+      index: The FAISS index.
+      
+  Returns:
+      List of (doc_id, distance) tuples sorted by relevance.
+  """
+  k = kb.query_top_k
+  
+  # Always perform vector search
+  distances, indices = index.search(query_vector, k * 2)  # Get extra for potential merging
+  
+  # Check if hybrid search is enabled
+  if not getattr(kb, 'enable_hybrid_search', False):
+    logger.debug("Hybrid search disabled, using vector-only results")
+    return [(int(indices[0][i]), float(distances[0][i])) for i in range(min(k, len(indices[0]))) if indices[0][i] >= 0]
+  
+  # Try to ensure BM25 index exists and perform hybrid search
+  try:
+    from embedding.bm25_manager import ensure_bm25_index, load_bm25_index, get_bm25_scores
+    
+    # Ensure BM25 index exists (build if needed)
+    if not ensure_bm25_index(kb):
+      logger.info("BM25 index not available, falling back to vector-only search")
+      return [(int(indices[0][i]), float(distances[0][i])) for i in range(min(k, len(indices[0]))) if indices[0][i] >= 0]
+    
+    # Load the BM25 index
+    bm25_data = load_bm25_index(kb)
+    if not bm25_data:
+      logger.info("BM25 index could not be loaded, falling back to vector-only search")
+      return [(int(indices[0][i]), float(distances[0][i])) for i in range(min(k, len(indices[0]))) if indices[0][i] >= 0]
+    
+    # Get BM25 scores
+    bm25_results = get_bm25_scores(kb, query_text, bm25_data)
+    
+    if not bm25_results:
+      logger.info("No BM25 results, falling back to vector-only search")
+      return [(int(indices[0][i]), float(distances[0][i])) for i in range(min(k, len(indices[0]))) if indices[0][i] >= 0]
+    
+    # Combine vector and BM25 scores
+    vector_weight = getattr(kb, 'vector_weight', 0.7)
+    bm25_weight = 1 - vector_weight
+    
+    combined_scores = {}
+    
+    # Add vector results (convert distance to similarity)
+    for i in range(len(indices[0])):
+      idx = int(indices[0][i])
+      if idx >= 0:  # Valid index
+        distance = float(distances[0][i])
+        similarity = 1 / (1 + distance)  # Convert distance to similarity
+        combined_scores[idx] = vector_weight * similarity
+    
+    # Add BM25 results (normalize and add to combined scores)
+    max_bm25 = max(score for _, score in bm25_results) if bm25_results else 1.0
+    if max_bm25 > 0:
+      for doc_id, score in bm25_results:
+        normalized_score = score / max_bm25
+        if doc_id in combined_scores:
+          combined_scores[doc_id] += bm25_weight * normalized_score
+        else:
+          combined_scores[doc_id] = bm25_weight * normalized_score
+    
+    # Sort by combined score and convert back to distance format
+    sorted_results = sorted(combined_scores.items(), key=lambda x: x[1], reverse=True)[:k]
+    
+    # Convert similarity back to distance for consistency with existing code
+    final_results = []
+    for doc_id, combined_similarity in sorted_results:
+      # Convert similarity back to distance (inverse of the conversion above)
+      distance = max(0, (1 / combined_similarity) - 1) if combined_similarity > 0 else float('inf')
+      final_results.append((doc_id, distance))
+    
+    logger.info(f"Hybrid search combined {len(indices[0])} vector results with {len(bm25_results)} BM25 results")
+    return final_results
+    
+  except Exception as e:
+    logger.error(f"Error in hybrid search, falling back to vector-only: {e}")
+    return [(int(indices[0][i]), float(distances[0][i])) for i in range(min(k, len(indices[0]))) if indices[0][i] >= 0]
 
 async def process_reference_batch(kb: KnowledgeBase, batch: List[Tuple[int, float]]) -> List[List[Any]]:
   """
@@ -369,9 +790,30 @@ async def process_query_async(args: argparse.Namespace, logger) -> str:
   # Generate query embedding asynchronously
   query_vector = await get_query_embedding(query_text, kb.vector_model, kb)
 
-  # Search for similar vectors
-  distances, indices = index.search(query_vector, kb.query_top_k)
-  logger.info(f"{distances[0]=}\n  {indices[0]=}\n")
+  # Perform hybrid search (vector + BM25) or fallback to vector-only
+  search_results = await perform_hybrid_search(kb, query_text, query_vector, index)
+  
+  # Apply reranking if enabled
+  if getattr(kb, 'enable_reranking', False):
+    try:
+      logger.info(f"Applying reranking to top {getattr(kb, 'reranking_top_k', 20)} results")
+      search_results = await rerank_search_results(kb, query_text, search_results)
+      logger.info("Reranking completed successfully")
+    except Exception as e:
+      logger.error(f"Reranking failed, continuing with original results: {e}")
+      # Continue with original search results if reranking fails
+  
+  if not search_results:
+    logger.warning("No search results returned")
+    close_database(kb)
+    return "No relevant documents found."
+  
+  # Extract indices and distances from search results
+  indices = [[result[0] for result in search_results]]
+  distances = [[result[1] for result in search_results]]
+  
+  logger.info(f"Search returned {len(search_results)} results")
+  logger.debug(f"{distances[0][:5]=}\n  {indices[0][:5]=}\n")
 
   # Check database connection
   if kb.sql_cursor.connection is None:
@@ -499,6 +941,16 @@ def build_reference_string(kb: KnowledgeBase, reference: List[List[Any]],
     rtext = xml.sax.saxutils.escape(rtext)
     similarity = item[4] if len(item) > 4 else 1.0
     
+    # Intelligent path truncation for display
+    display_src = src
+    if len(src) > 50 and '/' in src:
+      # Show last 2-3 directories: .../parent/dir/file.txt
+      parts = src.split('/')
+      if len(parts) > 3:
+        display_src = '.../' + '/'.join(parts[-3:])
+      else:
+        display_src = src
+    
     # Extract metadata if available
     metadata_str = item[5] if len(item) > 5 else None
     metadata_attrs = ""
@@ -543,8 +995,8 @@ def build_reference_string(kb: KnowledgeBase, reference: List[List[Any]],
       if end_context:
         reference_string += end_context
       
-      # Open new context with metadata
-      reference_string += f'<context src="{xml.sax.saxutils.escape(src)}:{sid}">\n'
+      # Open new context with metadata (use display_src for readability)
+      reference_string += f'<context src="{xml.sax.saxutils.escape(display_src)}:{sid}">\n'
       
       # Add metadata elements if available
       if metadata_attrs or similarity_attr:

@@ -478,6 +478,194 @@ class TestRealDataIntegration:
 
 
 @pytest.mark.integration
+class TestFullPathIntegration:
+  """Test full path storage integration across components."""
+  
+  def test_duplicate_filenames_workflow(self, temp_data_manager, sample_texts, mock_openai_client, mock_faiss_index):
+    """Test complete workflow with duplicate filenames in different directories."""
+    # Create test environment
+    kb_dir = temp_data_manager.create_temp_dir()
+    kb_name = "fullpath_test"
+    
+    # Create configuration file
+    config_file = os.path.join(kb_dir, f"{kb_name}.cfg")
+    with open(config_file, 'w') as f:
+      f.write("""[DEFAULT]
+vector_model = text-embedding-3-small
+vector_dimensions = 1536
+vector_chunks = 100
+db_min_tokens = 50
+db_max_tokens = 150
+query_model = gpt-4o
+query_max_tokens = 1000
+query_top_k = 10
+""")
+    
+    # Create duplicate filenames in different directories
+    dir1 = os.path.join(kb_dir, "module1")
+    dir2 = os.path.join(kb_dir, "module2")
+    os.makedirs(dir1)
+    os.makedirs(dir2)
+    
+    # Same filename, different content
+    config1 = os.path.join(dir1, "config.py")
+    config2 = os.path.join(dir2, "config.py")
+    
+    with open(config1, 'w') as f:
+      f.write("# Module 1 Configuration\nDATABASE_URL = 'postgresql://localhost/module1'\nDEBUG = True")
+    
+    with open(config2, 'w') as f:
+      f.write("# Module 2 Configuration\nDATABASE_URL = 'mysql://localhost/module2'\nDEBUG = False")
+    
+    # Process database
+    from database.db_manager import process_database
+    from embedding.embed_manager import process_embeddings
+    from query.query_manager import process_query
+    
+    mock_logger = Mock()
+    
+    # Process both files
+    db_args = Mock()
+    db_args.config_file = config_file
+    db_args.files = [config1, config2]
+    db_args.language = 'english'
+    db_args.force = False
+    db_args.verbose = True
+    db_args.debug = False
+    
+    with patch('builtins.input', return_value='y'):
+      result = process_database(db_args, mock_logger)
+    
+    assert "2 files added" in result
+    
+    # Create embeddings
+    embed_args = Mock()
+    embed_args.config_file = config_file
+    embed_args.reset_database = False
+    embed_args.verbose = True
+    embed_args.debug = False
+    
+    mock_openai_client.embeddings.create.return_value = Mock(
+      data=[Mock(embedding=[0.1 + i*0.01] * 1536) for i in range(2)]
+    )
+    
+    with patch('asyncio.run', return_value={1, 2}):
+      embed_result = process_embeddings(embed_args, mock_logger)
+    
+    assert "2 chunks embedded" in embed_result
+    
+    # Query for module1
+    query_args = Mock()
+    query_args.config_file = config_file
+    query_args.query_text = "postgresql module1"
+    query_args.context_only = True
+    query_args.query_file = ''
+    query_args.role = ''
+    query_args.model = ''
+    query_args.top_k = None
+    query_args.context_scope = None
+    query_args.temperature = ''
+    query_args.max_tokens = ''
+    query_args.verbose = True
+    query_args.debug = False
+    
+    with patch('query.query_manager.get_query_embeddings', return_value=Mock(data=[Mock(embedding=[0.11] * 1536)])):
+      result = process_query(query_args, mock_logger)
+    
+    # Should find module1 config
+    assert "module1" in result
+    assert "postgresql" in result.lower()
+    
+    # Query for module2
+    query_args.query_text = "mysql module2"
+    
+    with patch('query.query_manager.get_query_embeddings', return_value=Mock(data=[Mock(embedding=[0.19] * 1536)])):
+      result = process_query(query_args, mock_logger)
+    
+    # Should find module2 config
+    assert "module2" in result
+    assert "mysql" in result.lower()
+  
+  def test_path_display_in_query_results(self, temp_data_manager, mock_openai_client, mock_faiss_index):
+    """Test that paths are displayed correctly in query results."""
+    # Create deep directory structure
+    kb_dir = temp_data_manager.create_temp_dir()
+    kb_name = "path_display_test"
+    
+    config_file = os.path.join(kb_dir, f"{kb_name}.cfg")
+    with open(config_file, 'w') as f:
+      f.write("""[DEFAULT]
+vector_model = text-embedding-3-small
+vector_dimensions = 1536
+query_model = gpt-4o
+""")
+    
+    # Create deeply nested file
+    deep_dir = os.path.join(kb_dir, "src", "components", "ui", "widgets", "forms")
+    os.makedirs(deep_dir)
+    
+    deep_file = os.path.join(deep_dir, "validation.js")
+    with open(deep_file, 'w') as f:
+      f.write("// Form validation utilities\nfunction validateEmail(email) { return /^[^@]+@[^@]+\.[^@]+$/.test(email); }")
+    
+    # Process and query
+    from database.db_manager import process_database
+    from embedding.embed_manager import process_embeddings
+    from query.query_manager import process_query
+    
+    mock_logger = Mock()
+    
+    # Process file
+    db_args = Mock()
+    db_args.config_file = config_file
+    db_args.files = [deep_file]
+    db_args.language = 'english'
+    db_args.force = False
+    db_args.verbose = True
+    db_args.debug = False
+    
+    with patch('builtins.input', return_value='y'):
+      process_database(db_args, mock_logger)
+    
+    # Embed
+    embed_args = Mock()
+    embed_args.config_file = config_file
+    embed_args.reset_database = False
+    embed_args.verbose = True
+    embed_args.debug = False
+    
+    mock_openai_client.embeddings.create.return_value = Mock(
+      data=[Mock(embedding=[0.15] * 1536)]
+    )
+    
+    with patch('asyncio.run', return_value={1}):
+      process_embeddings(embed_args, mock_logger)
+    
+    # Query
+    query_args = Mock()
+    query_args.config_file = config_file
+    query_args.query_text = "email validation"
+    query_args.context_only = True
+    query_args.query_file = ''
+    query_args.role = ''
+    query_args.model = ''
+    query_args.top_k = None
+    query_args.context_scope = None
+    query_args.temperature = ''
+    query_args.max_tokens = ''
+    query_args.verbose = True
+    query_args.debug = False
+    
+    with patch('query.query_manager.get_query_embeddings', return_value=Mock(data=[Mock(embedding=[0.14] * 1536)])):
+      result = process_query(query_args, mock_logger)
+    
+    # Check for truncated path display
+    assert ".../widgets/forms/validation.js" in result or "validation.js" in result
+    # Should not show the full absolute path in display
+    assert not kb_dir in result  # Full path should be truncated
+
+
+@pytest.mark.integration
 class TestConfigurationIntegration:
   """Test configuration integration across components."""
   

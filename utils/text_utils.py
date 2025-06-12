@@ -187,6 +187,59 @@ def find_file(filename: str, search_path: str = './', followsymlinks: bool = Tru
 
   return None
 
+def tokenize_for_bm25(text: str, language: str = 'en') -> Tuple[str, int]:
+  """
+  Tokenize text specifically for BM25 indexing.
+  Uses different processing than vector embeddings to optimize for keyword matching.
+  
+  Args:
+      text: Input text to tokenize.
+      language: Language code for language-specific processing.
+      
+  Returns:
+      Tuple of (space-separated tokens string, document length).
+  """
+  # Import here to avoid circular imports
+  from nltk.corpus import stopwords
+  
+  # Convert to lowercase but preserve acronyms and important terms
+  text = text.lower()
+  
+  # Keep alphanumeric, hyphens (for compound words), periods (for decimals/domains)
+  # More conservative cleaning than vector processing
+  text = re.sub(r'[^\w\s\-\.]', ' ', text)
+  
+  # Tokenize using NLTK
+  try:
+    tokens = word_tokenize(text, language=language if language != 'en' else 'english')
+  except (LookupError, FileNotFoundError, OSError, AttributeError):
+    # Fallback to basic split when NLTK fails (test environments or missing data)
+    tokens = text.lower().split()
+  
+  # Filter tokens: remove single chars but keep numbers
+  tokens = [t for t in tokens if len(t) > 1 or t.isdigit()]
+  
+  # Light stopword removal (less aggressive than vector processing)
+  # Keep important terms that might be relevant for exact matching
+  if language in ['en', 'english']:
+    try:
+      # Only remove very common words, preserve domain-specific terms
+      essential_stops = {'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by'}
+      tokens = [t for t in tokens if t not in essential_stops]
+    except LookupError:
+      # If stopwords not available, continue without filtering
+      pass
+  
+  # Remove empty tokens and duplicates while preserving order
+  seen = set()
+  filtered_tokens = []
+  for token in tokens:
+    if token and token not in seen:
+      filtered_tokens.append(token)
+      seen.add(token)
+  
+  return ' '.join(filtered_tokens), len(filtered_tokens)
+
 def get_env(var_name: str, default: Any, cast_type: Any = str) -> Any:
   """
   Get environment variable with type casting and default value.

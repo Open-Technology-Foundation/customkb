@@ -352,34 +352,32 @@ def process_database(args: argparse.Namespace, logger) -> str:
     logger.info(f"Processing batch of {len(batch)} files ({i+1}-{min(i+batch_size, numfiles)} of {numfiles})")
     
     # If not forcing reprocessing, check which files already exist in the database
-    existing_basenames = set()
+    existing_paths = set()
     if not args.force and batch:
       try:
-        # Extract basenames for efficient lookup
-        basenames = [os.path.basename(f) for f in batch]
+        # Get canonical paths for efficient lookup
+        # Using full paths prevents collisions between files with same name
+        canonical_paths = [os.path.abspath(f) for f in batch]
         
-        # Create a map from basename back to original path for reporting
-        basename_to_path = {os.path.basename(f): f for f in batch}
-        
-        # Efficiently query which file basenames already exist
-        if basenames:
+        # Efficiently query which file paths already exist
+        if canonical_paths:
           from utils.security_utils import safe_sql_in_query
           # Convert to list of strings (safe for IN query)
-          safe_basenames = [str(name) for name in basenames]
+          safe_paths = [str(path) for path in canonical_paths]
           query_template = "SELECT DISTINCT sourcedoc FROM docs WHERE sourcedoc IN ({placeholders})"
-          kb.sql_cursor.execute(query_template.format(placeholders=','.join(['?'] * len(safe_basenames))), safe_basenames)
-          existing_basenames = set(row[0] for row in kb.sql_cursor.fetchall())
+          kb.sql_cursor.execute(query_template.format(placeholders=','.join(['?'] * len(safe_paths))), safe_paths)
+          existing_paths = set(row[0] for row in kb.sql_cursor.fetchall())
           if logger:
-            logger.debug(f"Found {len(existing_basenames)} existing files in database")
+            logger.debug(f"Found {len(existing_paths)} existing files in database")
       except sqlite3.Error as e:
         if logger:
           logger.warning(f"Error checking existing files: {e}, will process all files in batch")
     
     # Process each file in the batch
     for pfile in batch:
-      basename = os.path.basename(pfile)
+      canonical_path = os.path.abspath(pfile)
       # Skip if file exists and not forcing
-      if basename in existing_basenames and not args.force:
+      if canonical_path in existing_paths and not args.force:
         logger.info(f"Skipping {pfile} (already in database)")
         filecount += 1
         continue
@@ -394,6 +392,19 @@ def process_database(args: argparse.Namespace, logger) -> str:
       filecount += 1
       if (filecount % 5) == 0:
         logger.info(f"{filecount}/{numfiles} ~{time_to_finish(kb.start_time, filecount, numfiles)}")
+
+  # Build BM25 index if hybrid search is enabled and we processed files
+  if processed_count > 0 and getattr(kb, 'enable_hybrid_search', False):
+    try:
+      from embedding.bm25_manager import build_bm25_index
+      logger.info("Building BM25 index for hybrid search...")
+      bm25 = build_bm25_index(kb)
+      if bm25:
+        logger.info("BM25 index built successfully")
+      else:
+        logger.warning("BM25 index build failed")
+    except Exception as e:
+      logger.warning(f"Failed to build BM25 index: {e}")
 
   # Close database connection
   close_database(kb)
@@ -459,11 +470,58 @@ def connect_to_database(kb: KnowledgeBase) -> None:
       if logger:
         logger.debug("Database schema and indexes verified")
       
+      # Migrate database for BM25 support if needed
+      migrate_for_bm25(kb)
+      
     except sqlite3.Error as e:
       raise Exception(f"Error setting up database schema: {e}")
 
   except sqlite3.Error as e:
     raise Exception(f"Error connecting to the database: {e}")
+
+def migrate_for_bm25(kb: KnowledgeBase) -> bool:
+  """
+  Migrate existing database for BM25 support.
+  Safely adds BM25 columns if they don't exist.
+  
+  Args:
+      kb: The KnowledgeBase instance.
+      
+  Returns:
+      True if migration successful, False otherwise.
+  """
+  try:
+    cursor = kb.sql_cursor
+    cursor.execute("PRAGMA table_info(docs)")
+    columns = {row[1] for row in cursor.fetchall()}
+    
+    migrations = []
+    if 'bm25_tokens' not in columns:
+      migrations.append("ALTER TABLE docs ADD COLUMN bm25_tokens TEXT")
+    if 'doc_length' not in columns:
+      migrations.append("ALTER TABLE docs ADD COLUMN doc_length INTEGER DEFAULT 0")
+    
+    for migration in migrations:
+      cursor.execute(migration)
+      logger.info(f"Executed migration: {migration}")
+    
+    # Create index for BM25 processing if needed
+    cursor.execute("""
+      CREATE INDEX IF NOT EXISTS idx_keyphrase_processed 
+      ON docs(keyphrase_processed)
+    """)
+    
+    kb.sql_connection.commit()
+    
+    if migrations:
+      logger.info(f"BM25 migration completed: {len(migrations)} columns added")
+    else:
+      logger.debug("BM25 migration not needed: columns already exist")
+    
+    return True
+  except sqlite3.Error as e:
+    logger.error(f"BM25 migration failed: {e}")
+    return False
 
 def close_database(kb: KnowledgeBase) -> None:
   """
@@ -499,12 +557,12 @@ def process_text_file(kb: KnowledgeBase, sourcefile: str, splitter: Any,
   Returns:
       True if file was processed, False if skipped.
   """
-  # Get file basename only for database checks
-  dirname, basename, extension, _ = split_filepath(sourcefile)
-  basename = f"{basename}{extension}"
+  # Store full canonical absolute path instead of basename
+  # This allows proper handling of files with same name in different directories
+  sourcedoc_value = os.path.abspath(sourcefile)
   
-  # Check if file already exists in the database (only check basename since that's what's stored)
-  kb.sql_cursor.execute("SELECT COUNT(*) FROM docs WHERE sourcedoc = ?", [basename])
+  # Check if file already exists in the database using full path
+  kb.sql_cursor.execute("SELECT COUNT(*) FROM docs WHERE sourcedoc = ?", [sourcedoc_value])
   count = kb.sql_cursor.fetchone()[0]
   
   if count > 0 and not force:
@@ -577,6 +635,7 @@ def process_text_file(kb: KnowledgeBase, sourcefile: str, splitter: Any,
     return
 
   # Check if language needs to be updated based on directory name
+  dirname = os.path.dirname(sourcefile)
   _, langkey, _, _ = split_filepath(dirname)
   if langkey in language_codes:
     new_language = language_codes[langkey]
@@ -599,10 +658,10 @@ def process_text_file(kb: KnowledgeBase, sourcefile: str, splitter: Any,
             if logger:
               logger.warning(f"Failed to load stopwords for {lang}")
 
-  # Delete any existing entries with this basename
+  # Delete any existing entries with this file path
   kb.sql_cursor.execute(
     "DELETE FROM docs WHERE sourcedoc = ?",
-    [basename]
+    [sourcedoc_value]
   )
   kb.sql_connection.commit()
 
@@ -620,6 +679,23 @@ def process_text_file(kb: KnowledgeBase, sourcefile: str, splitter: Any,
     clean_chunk = enhanced_clean_text(chunk, Stop_Words, lemmatizer)
     if not clean_chunk:
       continue
+    
+    # BM25 tokenization (if hybrid search is enabled)
+    bm25_tokens = ""
+    doc_length = 0
+    keyphrase_processed = 0
+    
+    if getattr(kb, 'enable_hybrid_search', False):
+      from utils.text_utils import tokenize_for_bm25
+      try:
+        bm25_tokens, doc_length = tokenize_for_bm25(chunk, language)
+        keyphrase_processed = 1 if bm25_tokens else 0
+      except Exception as e:
+        if logger:
+          logger.warning(f"BM25 tokenization failed for chunk: {e}")
+        bm25_tokens = ""
+        doc_length = 0
+        keyphrase_processed = 0
       
     # Store metadata as JSON string in the database (safer than Python dict string)
     import json
@@ -630,10 +706,10 @@ def process_text_file(kb: KnowledgeBase, sourcefile: str, splitter: Any,
         logger.warning(f"Could not serialize metadata to JSON: {e}")
       metadata_str = "{}"
     
-    # Add chunk with metadata
+    # Add chunk with metadata and BM25 data
     kb.sql_cursor.execute(
-      "INSERT INTO docs (sid, sourcedoc, originaltext, embedtext, embedded, language, metadata) VALUES (?,?,?,?,?,?,?)",
-      (sid, basename, chunk, clean_chunk, 0, language, metadata_str))
+      "INSERT INTO docs (sid, sourcedoc, originaltext, embedtext, embedded, language, metadata, bm25_tokens, doc_length, keyphrase_processed) VALUES (?,?,?,?,?,?,?,?,?,?)",
+      (sid, sourcedoc_value, chunk, clean_chunk, 0, language, metadata_str, bm25_tokens, doc_length, keyphrase_processed))
     
     # Commit periodically (configurable frequency)
     commit_frequency = getattr(kb, 'commit_frequency', 1000)

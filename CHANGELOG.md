@@ -17,6 +17,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Enhanced module and function docstrings
   - Added security-focused inline comments
   - Improved type hints and examples
+- Full path storage in database:
+  - Files are now stored with complete canonical paths instead of just basenames
+  - Properly handles duplicate filenames in different directories
+  - Prevents file collisions and improves project organization support
+  - Query results show intelligently truncated paths (.../parent/dir/file.txt) for readability
 
 ### Fixed
 - Fixed missing KnowledgeBase import in customkb.py that caused edit command to fail

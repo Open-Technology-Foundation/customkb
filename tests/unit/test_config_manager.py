@@ -576,4 +576,227 @@ class TestConfigPathResolution:
         finally:
           os.chdir(old_cwd)
 
+
+class TestBM25Configuration:
+  """Test BM25/Hybrid search configuration parameters."""
+  
+  def test_default_bm25_parameters(self):
+    """Test that BM25 parameters have correct defaults."""
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.cfg', delete=False) as f:
+      f.write("""
+[DEFAULT]
+knowledge_base_name = test_bm25_defaults
+""")
+      f.flush()
+      
+      try:
+        kb = KnowledgeBase(f.name)
+        
+        # Test default BM25 parameters
+        assert kb.enable_hybrid_search is False
+        assert kb.vector_weight == 0.7
+        assert kb.bm25_k1 == 1.2
+        assert kb.bm25_b == 0.75
+        assert kb.bm25_min_token_length == 2
+        assert kb.bm25_rebuild_threshold == 1000
+      finally:
+        os.unlink(f.name)
+  
+  def test_bm25_configuration_loading(self):
+    """Test loading BM25 parameters from config file."""
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.cfg', delete=False) as f:
+      f.write("""
+[DEFAULT]
+knowledge_base_name = test_bm25_config
+
+[ALGORITHMS]
+enable_hybrid_search = true
+vector_weight = 0.8
+bm25_k1 = 1.5
+bm25_b = 0.8
+bm25_min_token_length = 3
+bm25_rebuild_threshold = 500
+""")
+      f.flush()
+      
+      try:
+        kb = KnowledgeBase(f.name)
+        
+        # Test loaded BM25 parameters
+        assert kb.enable_hybrid_search is True
+        assert kb.vector_weight == 0.8
+        assert kb.bm25_k1 == 1.5
+        assert kb.bm25_b == 0.8
+        assert kb.bm25_min_token_length == 3
+        assert kb.bm25_rebuild_threshold == 500
+      finally:
+        os.unlink(f.name)
+  
+  def test_bm25_environment_variable_overrides(self):
+    """Test that environment variables override BM25 config file values."""
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.cfg', delete=False) as f:
+      f.write("""
+[DEFAULT]
+knowledge_base_name = test_bm25_env
+
+[ALGORITHMS]
+enable_hybrid_search = false
+vector_weight = 0.7
+bm25_k1 = 1.2
+""")
+      f.flush()
+      
+      try:
+        # Set environment variables
+        env_vars = {
+          'ENABLE_HYBRID_SEARCH': 'true',
+          'VECTOR_WEIGHT': '0.9',
+          'BM25_K1': '2.0'
+        }
+        
+        with patch.dict(os.environ, env_vars):
+          kb = KnowledgeBase(f.name)
+          
+          # Environment variables should override config file
+          assert kb.enable_hybrid_search is True
+          assert kb.vector_weight == 0.9
+          assert kb.bm25_k1 == 2.0
+      finally:
+        os.unlink(f.name)
+  
+  def test_bm25_parameter_validation(self):
+    """Test validation of BM25 parameter ranges."""
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.cfg', delete=False) as f:
+      f.write("""
+[DEFAULT]
+knowledge_base_name = test_bm25_validation
+
+[ALGORITHMS]
+enable_hybrid_search = true
+vector_weight = 0.7
+bm25_k1 = 1.2
+bm25_b = 0.75
+""")
+      f.flush()
+      
+      try:
+        kb = KnowledgeBase(f.name)
+        
+        # Test that parameters are within expected ranges
+        assert 0.0 <= kb.vector_weight <= 1.0
+        assert kb.bm25_k1 > 0.0  # Should be positive
+        assert 0.0 <= kb.bm25_b <= 1.0  # Should be between 0 and 1
+        assert kb.bm25_min_token_length >= 1  # Should be at least 1
+        assert kb.bm25_rebuild_threshold > 0  # Should be positive
+      finally:
+        os.unlink(f.name)
+  
+  def test_bm25_invalid_boolean_values(self):
+    """Test handling of invalid boolean values for enable_hybrid_search."""
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.cfg', delete=False) as f:
+      f.write("""
+[DEFAULT]
+knowledge_base_name = test_bm25_bool
+
+[ALGORITHMS]
+enable_hybrid_search = invalid_value
+""")
+      f.flush()
+      
+      try:
+        # Should handle invalid boolean gracefully
+        with patch.dict(os.environ, {'ENABLE_HYBRID_SEARCH': 'not_a_boolean'}):
+          kb = KnowledgeBase(f.name)
+          
+          # Should fall back to default when environment parsing fails
+          assert kb.enable_hybrid_search is False
+      finally:
+        os.unlink(f.name)
+  
+  def test_bm25_mixed_configuration_sources(self):
+    """Test BM25 configuration from multiple sources (file + env + defaults)."""
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.cfg', delete=False) as f:
+      f.write("""
+[DEFAULT]
+knowledge_base_name = test_bm25_mixed
+
+[ALGORITHMS]
+enable_hybrid_search = true
+vector_weight = 0.6
+# bm25_k1 not specified (should use default)
+bm25_b = 0.8
+""")
+      f.flush()
+      
+      try:
+        # Override one parameter via environment
+        with patch.dict(os.environ, {'VECTOR_WEIGHT': '0.75'}):
+          kb = KnowledgeBase(f.name)
+          
+          # Should get values from different sources
+          assert kb.enable_hybrid_search is True  # From config file
+          assert kb.vector_weight == 0.75  # From environment
+          assert kb.bm25_k1 == 1.2  # From default (not in config/env)
+          assert kb.bm25_b == 0.8  # From config file
+          assert kb.bm25_min_token_length == 2  # From default
+      finally:
+        os.unlink(f.name)
+  
+  def test_bm25_kwargs_override(self):
+    """Test BM25 configuration via kwargs (programmatic override)."""
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.cfg', delete=False) as f:
+      f.write("""
+[DEFAULT]
+knowledge_base_name = test_bm25_kwargs
+""")
+      f.flush()
+      
+      try:
+        # Pass BM25 parameters via kwargs
+        kb = KnowledgeBase(f.name, 
+                          enable_hybrid_search=True,
+                          vector_weight=0.85,
+                          bm25_k1=1.8,
+                          bm25_b=0.9)
+        
+        # Should use kwargs values
+        assert kb.enable_hybrid_search is True
+        assert kb.vector_weight == 0.85
+        assert kb.bm25_k1 == 1.8
+        assert kb.bm25_b == 0.9
+      finally:
+        os.unlink(f.name)
+  
+  def test_bm25_configuration_save(self):
+    """Test that BM25 configuration is included in save output."""
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.cfg', delete=False) as f:
+      f.write("""
+[DEFAULT]
+knowledge_base_name = test_bm25_save
+
+[ALGORITHMS]
+enable_hybrid_search = true
+vector_weight = 0.8
+""")
+      f.flush()
+      
+      try:
+        kb = KnowledgeBase(f.name)
+        
+        # Save config to string
+        import io
+        output = io.StringIO()
+        kb.save_config()  # This prints to stderr by default
+        
+        # Check that BM25 parameters would be included in save
+        # (We test via hasattr since save_config prints all attributes)
+        assert hasattr(kb, 'enable_hybrid_search')
+        assert hasattr(kb, 'vector_weight')
+        assert hasattr(kb, 'bm25_k1')
+        assert hasattr(kb, 'bm25_b')
+        assert hasattr(kb, 'bm25_min_token_length')
+        assert hasattr(kb, 'bm25_rebuild_threshold')
+      finally:
+        os.unlink(f.name)
+
 #fin

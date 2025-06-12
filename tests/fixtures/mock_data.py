@@ -322,4 +322,82 @@ class TestDataManager:
     self.temp_dirs.clear()
     self.temp_files.clear()
 
+
+def create_mock_knowledge_base(config_file: str, temp_path: Path) -> 'KnowledgeBase':
+  """
+  Create a mock KnowledgeBase instance with test data.
+  
+  Args:
+      config_file: Path to configuration file
+      temp_path: Temporary directory path for database files
+      
+  Returns:
+      Configured KnowledgeBase instance
+  """
+  import sqlite3
+  from config.config_manager import KnowledgeBase
+  
+  # Create KnowledgeBase instance
+  kb = KnowledgeBase(config_file)
+  
+  # Override paths to use temp directory
+  kb.knowledge_base_db = str(temp_path / "test.db")
+  kb.knowledge_base_vector = str(temp_path / "test.faiss")
+  
+  # Create mock database
+  conn = sqlite3.connect(kb.knowledge_base_db)
+  cursor = conn.cursor()
+  
+  # Create tables
+  cursor.execute("""
+    CREATE TABLE IF NOT EXISTS docs (
+      id INTEGER PRIMARY KEY,
+      sid INTEGER,
+      sourcedoc TEXT,
+      originaltext TEXT,
+      embedtext TEXT,
+      embedded INTEGER DEFAULT 0,
+      language TEXT,
+      metadata TEXT,
+      bm25_tokens TEXT,
+      doc_length INTEGER DEFAULT 0,
+      keyphrase_processed INTEGER DEFAULT 0
+    )
+  """)
+  
+  # Insert mock data
+  mock_gen = MockDataGenerator()
+  texts = mock_gen.create_sample_texts()[:5]  # Use first 5 texts
+  rows = mock_gen.create_database_rows(texts)
+  
+  for row in rows:
+    cursor.execute("""
+      INSERT INTO docs (id, sid, sourcedoc, originaltext, embedtext, 
+                       embedded, language, metadata)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    """, row)
+  
+  conn.commit()
+  conn.close()
+  
+  # Create mock FAISS index
+  import numpy as np
+  import faiss
+  
+  dimension = kb.vector_dimensions
+  index = faiss.IndexFlatL2(dimension)
+  
+  # Add some random vectors
+  vectors = np.random.normal(0, 0.1, (len(texts), dimension)).astype('float32')
+  index.add(vectors)
+  
+  # Save index
+  faiss.write_index(index, kb.knowledge_base_vector)
+  
+  # Set up mock SQL connection for query
+  kb.sql_connection = sqlite3.connect(kb.knowledge_base_db)
+  kb.sql_cursor = kb.sql_connection.cursor()
+  
+  return kb
+
 #fin

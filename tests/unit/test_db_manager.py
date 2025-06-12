@@ -528,4 +528,192 @@ class TestProcessDatabase:
     
     mock_get_files.assert_called_with("*.txt")
 
+
+class TestFullPathStorage:
+  """Test full path storage functionality."""
+  
+  @patch('nltk.tokenize.word_tokenize')
+  @patch('nltk.tokenize.sent_tokenize')
+  @patch('nltk.corpus.stopwords.words')
+  def test_full_path_stored_in_sourcedoc(self, mock_stopwords, mock_sent_tokenize, mock_word_tokenize, temp_config_file, temp_kb_directory, sample_texts):
+    """Test that full canonical paths are stored in sourcedoc field."""
+    # Mock NLTK functions
+    mock_stopwords.return_value = ['the', 'a', 'an', 'and', 'or']
+    mock_sent_tokenize.return_value = [sample_texts[0]]
+    mock_word_tokenize.return_value = sample_texts[0].split()
+    
+    kb = KnowledgeBase(temp_config_file)
+    with patch('builtins.input', return_value='y'):
+      connect_to_database(kb)
+    
+    # Create test file
+    test_file = os.path.join(temp_kb_directory, "subdir", "test_file.txt")
+    os.makedirs(os.path.dirname(test_file), exist_ok=True)
+    with open(test_file, 'w') as f:
+      f.write(sample_texts[0])
+    
+    # Mock splitter
+    mock_splitter = Mock()
+    mock_splitter.split_text.return_value = [sample_texts[0]]
+    
+    stop_words = set()
+    
+    result = process_text_file(kb, test_file, mock_splitter, stop_words, 'english', 'text')
+    assert result is True
+    
+    # Verify full path was stored
+    expected_path = os.path.abspath(test_file)
+    kb.sql_cursor.execute("SELECT sourcedoc FROM docs WHERE sourcedoc = ?", [expected_path])
+    result = kb.sql_cursor.fetchone()
+    
+    assert result is not None
+    assert result[0] == expected_path
+    
+    close_database(kb)
+  
+  @patch('nltk.tokenize.word_tokenize')
+  @patch('nltk.tokenize.sent_tokenize')
+  @patch('nltk.corpus.stopwords.words')
+  def test_duplicate_filenames_different_directories(self, mock_stopwords, mock_sent_tokenize, mock_word_tokenize, temp_config_file, temp_kb_directory, sample_texts):
+    """Test that files with same name in different directories are handled correctly."""
+    # Mock NLTK functions
+    mock_stopwords.return_value = ['the', 'a', 'an', 'and', 'or']
+    mock_sent_tokenize.side_effect = lambda text, lang=None: [text]
+    mock_word_tokenize.side_effect = lambda text: text.split()
+    
+    kb = KnowledgeBase(temp_config_file)
+    with patch('builtins.input', return_value='y'):
+      connect_to_database(kb)
+    
+    # Create two files with same name in different directories
+    file1 = os.path.join(temp_kb_directory, "dir1", "config.py")
+    file2 = os.path.join(temp_kb_directory, "dir2", "config.py")
+    
+    os.makedirs(os.path.dirname(file1), exist_ok=True)
+    os.makedirs(os.path.dirname(file2), exist_ok=True)
+    
+    with open(file1, 'w') as f:
+      f.write("# Config 1\nSETTING = 1")
+    with open(file2, 'w') as f:
+      f.write("# Config 2\nSETTING = 2")
+    
+    # Mock splitter
+    mock_splitter = Mock()
+    mock_splitter.split_text.side_effect = [["# Config 1\nSETTING = 1"], ["# Config 2\nSETTING = 2"]]
+    
+    stop_words = set()
+    
+    # Process both files
+    result1 = process_text_file(kb, file1, mock_splitter, stop_words, 'english', 'code')
+    result2 = process_text_file(kb, file2, mock_splitter, stop_words, 'english', 'code')
+    
+    assert result1 is True
+    assert result2 is True
+    
+    # Verify both files were stored with their full paths
+    path1 = os.path.abspath(file1)
+    path2 = os.path.abspath(file2)
+    
+    kb.sql_cursor.execute("SELECT COUNT(*) FROM docs WHERE sourcedoc = ?", [path1])
+    count1 = kb.sql_cursor.fetchone()[0]
+    
+    kb.sql_cursor.execute("SELECT COUNT(*) FROM docs WHERE sourcedoc = ?", [path2])
+    count2 = kb.sql_cursor.fetchone()[0]
+    
+    assert count1 > 0
+    assert count2 > 0
+    
+    # Verify content is different
+    kb.sql_cursor.execute("SELECT originaltext FROM docs WHERE sourcedoc = ?", [path1])
+    content1 = kb.sql_cursor.fetchone()[0]
+    
+    kb.sql_cursor.execute("SELECT originaltext FROM docs WHERE sourcedoc = ?", [path2])
+    content2 = kb.sql_cursor.fetchone()[0]
+    
+    assert "Config 1" in content1
+    assert "Config 2" in content2
+    
+    close_database(kb)
+  
+  @patch('nltk.tokenize.word_tokenize')
+  @patch('nltk.tokenize.sent_tokenize')
+  @patch('nltk.corpus.stopwords.words')
+  def test_path_normalization(self, mock_stopwords, mock_sent_tokenize, mock_word_tokenize, temp_config_file, temp_kb_directory, sample_texts):
+    """Test that paths are normalized (resolved symlinks, etc)."""
+    # Mock NLTK functions
+    mock_stopwords.return_value = ['the', 'a', 'an', 'and', 'or']
+    mock_sent_tokenize.side_effect = lambda text, lang=None: [text]
+    mock_word_tokenize.side_effect = lambda text: text.split()
+    
+    kb = KnowledgeBase(temp_config_file)
+    with patch('builtins.input', return_value='y'):
+      connect_to_database(kb)
+    
+    # Create test file with relative path
+    test_file = os.path.join(temp_kb_directory, "test.txt")
+    with open(test_file, 'w') as f:
+      f.write(sample_texts[0])
+    
+    # Use relative path for processing
+    relative_path = os.path.relpath(test_file)
+    
+    # Mock splitter
+    mock_splitter = Mock()
+    mock_splitter.split_text.return_value = [sample_texts[0]]
+    
+    stop_words = set()
+    
+    result = process_text_file(kb, relative_path, mock_splitter, stop_words, 'english', 'text')
+    assert result is True
+    
+    # Verify absolute path was stored
+    expected_path = os.path.abspath(test_file)
+    kb.sql_cursor.execute("SELECT sourcedoc FROM docs WHERE sourcedoc = ?", [expected_path])
+    result = kb.sql_cursor.fetchone()
+    
+    assert result is not None
+    assert result[0] == expected_path
+    assert not result[0].startswith(".")  # Not relative
+    
+    close_database(kb)
+  
+  @patch('nltk.tokenize.word_tokenize')
+  @patch('nltk.tokenize.sent_tokenize')
+  @patch('nltk.corpus.stopwords.words')
+  def test_existing_file_check_with_full_paths(self, mock_stopwords, mock_sent_tokenize, mock_word_tokenize, temp_config_file, temp_kb_directory, sample_texts):
+    """Test that existing file detection works with full paths."""
+    # Mock NLTK functions
+    mock_stopwords.return_value = ['the', 'a', 'an', 'and', 'or']
+    mock_sent_tokenize.side_effect = lambda text, lang=None: [text]
+    mock_word_tokenize.side_effect = lambda text: text.split()
+    
+    kb = KnowledgeBase(temp_config_file)
+    with patch('builtins.input', return_value='y'):
+      connect_to_database(kb)
+    
+    # Create test file
+    test_file = os.path.join(temp_kb_directory, "existing.txt")
+    with open(test_file, 'w') as f:
+      f.write(sample_texts[0])
+    
+    # Mock splitter
+    mock_splitter = Mock()
+    mock_splitter.split_text.return_value = [sample_texts[0]]
+    
+    stop_words = set()
+    
+    # Process file first time
+    result1 = process_text_file(kb, test_file, mock_splitter, stop_words, 'english', 'text', force=False)
+    assert result1 is True
+    
+    # Try to process again without force
+    result2 = process_text_file(kb, test_file, mock_splitter, stop_words, 'english', 'text', force=False)
+    assert result2 is False  # Should skip
+    
+    # Process with force
+    result3 = process_text_file(kb, test_file, mock_splitter, stop_words, 'english', 'text', force=True)
+    assert result3 is True
+    
+    close_database(kb)
+
 #fin

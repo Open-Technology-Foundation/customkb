@@ -110,7 +110,11 @@ import textwrap
 import signal
 import time
 from pathlib import Path
+import warnings
 # Type hints are used inline, no need to import at module level
+
+# Suppress PyTorch CUDA initialization warnings
+warnings.filterwarnings("ignore", message="CUDA initialization: CUDA unknown error")
 
 # Ensure the project root is in the Python path
 project_root = Path(__file__).parent.absolute()
@@ -208,6 +212,64 @@ def edit_config(args: argparse.Namespace, logger) -> int:
     safe_log_error(f'Edit error: {e}')
     return 1
 
+def rebuild_bm25_index(args: argparse.Namespace, logger) -> str:
+  """
+  Build or rebuild BM25 index for hybrid search.
+  
+  Args:
+      args: Command-line arguments containing:
+          config_file: Path to knowledge base configuration
+          force: Force rebuild even if index exists
+      logger: Initialized logger instance
+          
+  Returns:
+      Status message string.
+  """
+  try:
+    from config.config_manager import get_fq_cfg_filename, KnowledgeBase
+    from database.db_manager import connect_to_database, close_database
+    from embedding.bm25_manager import build_bm25_index, load_bm25_index
+    
+    # Get configuration file
+    cfgfile = get_fq_cfg_filename(args.config_file)
+    if not cfgfile:
+      return "Error: Configuration file not found."
+
+    logger.info(f"Building BM25 index for: {cfgfile}")
+    
+    # Initialize knowledge base
+    kb = KnowledgeBase(cfgfile)
+    
+    # Check if hybrid search is enabled
+    if not kb.enable_hybrid_search:
+      return "Error: Hybrid search is disabled in configuration. Set enable_hybrid_search=true in [ALGORITHMS] section."
+    
+    # Connect to database
+    connect_to_database(kb)
+    
+    try:
+      # Check if index already exists
+      if not args.force:
+        existing_index = load_bm25_index(kb)
+        if existing_index:
+          close_database(kb)
+          return "BM25 index already exists. Use --force to rebuild."
+      
+      # Build the index
+      bm25_index = build_bm25_index(kb)
+      
+      if bm25_index:
+        return f"BM25 index built successfully for {kb.knowledge_base_name}"
+      else:
+        return "Failed to build BM25 index. Check logs for details."
+        
+    finally:
+      close_database(kb)
+      
+  except Exception as e:
+    logger.error(f"Error building BM25 index: {e}")
+    return f"Error: {e}"
+
 def main() -> None:
   """
   Entry point for the CustomKB application.
@@ -295,6 +357,14 @@ def main() -> None:
   edit_parser.add_argument('-v', '--verbose', dest='verbose', action='store_true', help='Enable verbose output (default)')
   edit_parser.add_argument('-d', '--debug', action='store_true', help='Enable debug output')
   edit_parser.set_defaults(verbose=True)
+
+  # BM25 REBUILD
+  bm25_parser = subparsers.add_parser(
+    'bm25',
+    description='Build or rebuild BM25 index for hybrid search',
+  )
+  bm25_parser.add_argument('config_file', help='Knowledge base configuration file')
+  bm25_parser.add_argument('--force', action='store_true', help='Force rebuild even if index exists')
 
   # HELP
   help_parser = subparsers.add_parser(
@@ -390,6 +460,10 @@ def main() -> None:
       else:
         logger.error("Failed to edit configuration file")
       sys.exit(result)
+    elif args.command == 'bm25':
+      result = rebuild_bm25_index(args, logger)
+      print(result)  # Keep print for user output
+      logger.debug(f"BM25 command completed")
     else:
       logger.error(f'Unknown command: {args.command}')
       sys.exit(1)

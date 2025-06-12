@@ -10,6 +10,9 @@ from typing import Dict, Any, Optional
 
 from utils.logging_utils import get_logger
 
+# Add this module-level variable for test compatibility
+models_file = os.path.join(os.path.dirname(__file__), "..", "Models.json")
+
 logger = get_logger(__name__)
 
 def get_canonical_model(model_name: str) -> Dict[str, Any]:
@@ -29,9 +32,7 @@ def get_canonical_model(model_name: str) -> Dict[str, Any]:
       FileNotFoundError: If the Models.json file is not found.
       KeyError: If the model is not found in any form in Models.json.
   """
-  script_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-  models_file = os.path.join(script_dir, 'Models.json')
-
+  # Use the module-level models_file variable (can be patched in tests)
   try:
     with open(models_file, 'r') as f:
       models = json.load(f)
