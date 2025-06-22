@@ -1,0 +1,87 @@
+# Test Configuration for Email Processor Test Suite
+# =================================================
+# Minimal configuration for testing purposes
+
+directories:
+  base_dir: "/tmp/test_email"
+  drafts_dir: ".Drafts/cur"
+  temp_dir: "/tmp"
+  timestamp_file: ".last_check"
+
+email:
+  unreplied_pattern: "*:2,S"
+  ticket_pattern: "\\[#:[a-zA-Z0-9]+\\]"
+  body_limit: 1000
+  analysis_limit: 500
+  hostname: "test-host"
+  file_permissions: "644"
+  process_delay: 0.1
+
+models:
+  openai:
+    spam_detection: "gpt-4o-mini"
+    max_tokens: 10
+    temperature: 0.1
+  anthropic:
+    spam_detection: "claude-3-5-haiku-20241022"
+    max_tokens: 10
+    temperature: 0.1
+  customkb:
+    knowledge_base: "test-kb"
+    role: "You are a test consultant."
+    timeout: 30
+
+timeouts:
+  customkb_query: 30
+  find_command: 10
+
+consultants:
+  company:
+    name: "Test Company Consultant"
+    email: "company@test.com"
+    title: "Company Formation Specialist"
+    phone: "+1234567890"
+  tax:
+    name: "Test Tax Consultant"
+    email: "tax@test.com"
+    title: "Tax Specialist"
+    phone: "+1234567891"
+  default:
+    name: "Test Default Consultant"
+    email: "default@test.com"
+    title: "General Consultant"
+    phone: "+1234567892"
+
+keywords:
+  company: ["company", "pma", "corporation", "incorporate"]
+  tax: ["tax", "taxation", "accounting", "bookkeeping"]
+
+countries:
+  us: "United States"
+  id: "Indonesia"
+  au: "Australia"
+
+prompts:
+  spam_detection: |
+    Test spam detection prompt.
+    Email content: {content_for_analysis}
+    Respond with LEGITIMATE or SPAM.
+  
+  customkb_query: |
+    Test CustomKB query prompt.
+    Sender context: {sender_context}
+    Original email: {original_email}
+  
+  email_signature: |
+    Best regards,
+    {consultant_name}
+    {consultant_title}
+    Phone: {consultant_phone}
+    Email: {consultant_email}
+
+maildir:
+  seen: "S"
+  replied: "R"
+  draft: "D"
+  flagged: "F"
+  trashed: "T"

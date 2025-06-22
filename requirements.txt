@@ -1,3 +1,4 @@
+psutil
 anthropic>=0.49.0
 beautifulsoup4==4.13.3
 colorlog==6.9.0
