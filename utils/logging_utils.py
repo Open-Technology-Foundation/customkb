@@ -345,9 +345,8 @@ def setup_logging(verbose: bool, debug: bool = False,
   elif verbose:
     log_level = logging.INFO
   else:
-    # Use config file setting
-    config_level = logging_config.get('log_level', 'INFO')
-    log_level = getattr(logging, config_level.upper(), logging.INFO)
+    # Quiet mode: only show warnings and errors
+    log_level = logging.WARNING
   
   root_logger.setLevel(log_level)
 

@@ -217,6 +217,7 @@ class KnowledgeBase:
       'DEF_CHECKPOINT_INTERVAL': (int, 10),
       'DEF_COMMIT_FREQUENCY': (int, 1000),
       'DEF_IO_THREAD_POOL_SIZE': (int, 4),
+      'DEF_CACHE_THREAD_POOL_SIZE': (int, 4),  # Dedicated thread pool for cache operations
       'DEF_FILE_PROCESSING_BATCH_SIZE': (int, 500),
       'DEF_SQL_BATCH_SIZE': (int, 500),
       'DEF_REFERENCE_BATCH_SIZE': (int, 5),
@@ -342,8 +343,12 @@ class KnowledgeBase:
         df.get('query_role', fallback=self.DEF_QUERY_ROLE))
       self.query_context_scope = get_env('QUERY_CONTEXT_SCOPE',
         df.getint('query_context_scope', fallback=self.DEF_QUERY_CONTEXT_SCOPE), int)
-      self.query_context_files = get_env('QUERY_CONTEXT_FILES',
-        df.get('query_context_files', fallback='').split(','))
+      # Handle QUERY_CONTEXT_FILES environment variable (comma-separated string)
+      query_context_env = get_env('QUERY_CONTEXT_FILES', None)
+      if query_context_env is not None:
+        self.query_context_files = [f.strip() for f in query_context_env.split(',') if f.strip()]
+      else:
+        self.query_context_files = [f.strip() for f in df.get('query_context_files', fallback='').split(',') if f.strip()]
 
       # Load new configuration sections
       api_section = config['API'] if 'API' in config else df
@@ -390,6 +395,8 @@ class KnowledgeBase:
         performance_section.getint('commit_frequency', fallback=self.DEF_COMMIT_FREQUENCY), int)
       self.io_thread_pool_size = get_env('IO_THREAD_POOL_SIZE',
         performance_section.getint('io_thread_pool_size', fallback=self.DEF_IO_THREAD_POOL_SIZE), int)
+      self.cache_thread_pool_size = get_env('CACHE_THREAD_POOL_SIZE',
+        performance_section.getint('cache_thread_pool_size', fallback=self.DEF_CACHE_THREAD_POOL_SIZE), int)
       self.file_processing_batch_size = get_env('FILE_PROCESSING_BATCH_SIZE',
         performance_section.getint('file_processing_batch_size', fallback=self.DEF_FILE_PROCESSING_BATCH_SIZE), int)
       self.sql_batch_size = get_env('SQL_BATCH_SIZE',

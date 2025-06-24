@@ -16,6 +16,8 @@ import argparse
 import asyncio
 import hashlib
 import json
+import threading
+import atexit
 from typing import List, Tuple, Optional, Dict, Any, Set
 from concurrent.futures import ThreadPoolExecutor
 
@@ -56,9 +58,214 @@ os.makedirs(CACHE_DIR, exist_ok=True)
 
 # Configuration constants - these are now loaded from KnowledgeBase config
 
-# In-memory embedding cache
-embedding_memory_cache = {}
-embedding_memory_cache_keys = []
+# Thread-safe cache manager
+class CacheThreadManager:
+  """Manages thread pool and cache operations for embedding storage."""
+  
+  def __init__(self, max_workers: int = 4):
+    self._executor = None
+    self._max_workers = max_workers
+    self._lock = threading.RLock()
+    self._memory_cache = {}
+    self._memory_cache_keys = []
+    self._memory_cache_size = 10000  # Default size
+    
+    # Performance monitoring
+    self._metrics = {
+      'cache_hits': 0,
+      'cache_misses': 0,
+      'cache_adds': 0,
+      'cache_evictions': 0,
+      'thread_pool_tasks': 0
+    }
+    
+  def _ensure_executor(self):
+    """Ensure thread pool executor is initialized."""
+    if self._executor is None:
+      self._executor = ThreadPoolExecutor(max_workers=self._max_workers)
+      atexit.register(self._cleanup)
+  
+  def _cleanup(self):
+    """Clean up thread pool executor."""
+    if self._executor is not None:
+      self._executor.shutdown(wait=True)
+      self._executor = None
+  
+  def submit_cache_task(self, func, *args, **kwargs):
+    """Submit a cache task to the thread pool."""
+    with self._lock:
+      self._ensure_executor()
+      self._metrics['thread_pool_tasks'] += 1
+      return self._executor.submit(func, *args, **kwargs)
+  
+  def get_from_memory_cache(self, cache_key: str) -> Optional[List[float]]:
+    """Thread-safe retrieval from memory cache."""
+    with self._lock:
+      if cache_key in self._memory_cache:
+        # Move to end for LRU
+        self._memory_cache_keys.remove(cache_key)
+        self._memory_cache_keys.append(cache_key)
+        self._metrics['cache_hits'] += 1
+        return self._memory_cache[cache_key]
+      else:
+        self._metrics['cache_misses'] += 1
+    return None
+  
+  def add_to_memory_cache(self, cache_key: str, embedding: List[float], kb=None):
+    """Thread-safe addition to memory cache with LRU eviction."""
+    with self._lock:
+      # Configure cache size from KB config if available
+      cache_size = getattr(kb, 'memory_cache_size', self._memory_cache_size) if kb else self._memory_cache_size
+      
+      # Remove oldest entries if cache is full
+      evictions = 0
+      while len(self._memory_cache_keys) >= cache_size:
+        oldest_key = self._memory_cache_keys.pop(0)
+        if oldest_key in self._memory_cache:
+          del self._memory_cache[oldest_key]
+          evictions += 1
+      
+      # Track metrics
+      self._metrics['cache_adds'] += 1
+      self._metrics['cache_evictions'] += evictions
+      
+      # Add to memory cache
+      self._memory_cache[cache_key] = embedding
+      self._memory_cache_keys.append(cache_key)
+  
+  def configure(self, max_workers: int = None, memory_cache_size: int = None):
+    """Configure the cache manager."""
+    with self._lock:
+      if max_workers is not None and max_workers != self._max_workers:
+        # Recreate executor with new size
+        if self._executor is not None:
+          self._executor.shutdown(wait=True)
+          self._executor = None
+        self._max_workers = max_workers
+      
+      if memory_cache_size is not None:
+        self._memory_cache_size = memory_cache_size
+  
+  def get_metrics(self) -> Dict[str, Any]:
+    """Get performance metrics for the cache manager."""
+    with self._lock:
+      metrics = self._metrics.copy()
+      # Calculate derived metrics
+      total_requests = metrics['cache_hits'] + metrics['cache_misses']
+      metrics['cache_hit_ratio'] = metrics['cache_hits'] / total_requests if total_requests > 0 else 0.0
+      metrics['cache_size'] = len(self._memory_cache)
+      metrics['max_cache_size'] = self._memory_cache_size
+      metrics['thread_pool_size'] = self._max_workers
+      return metrics
+  
+  def reset_metrics(self):
+    """Reset performance metrics (for testing or periodic monitoring)."""
+    with self._lock:
+      self._metrics = {
+        'cache_hits': 0,
+        'cache_misses': 0,
+        'cache_adds': 0,
+        'cache_evictions': 0,
+        'thread_pool_tasks': 0
+      }
+
+# Global cache manager instance
+cache_manager = CacheThreadManager()
+
+# Thread-safe backward compatibility proxies
+class ThreadSafeCacheProxy:
+  """Thread-safe proxy for backward compatibility with direct cache access."""
+  
+  def __init__(self, cache_manager: CacheThreadManager):
+    self._cache_manager = cache_manager
+  
+  def __contains__(self, key):
+    with self._cache_manager._lock:
+      return key in self._cache_manager._memory_cache
+  
+  def __getitem__(self, key):
+    with self._cache_manager._lock:
+      return self._cache_manager._memory_cache[key]
+  
+  def __setitem__(self, key, value):
+    # Deprecated - use cache_manager.add_to_memory_cache instead
+    import warnings
+    warnings.warn("Direct cache assignment is deprecated. Use cache_manager.add_to_memory_cache()", 
+                  DeprecationWarning, stacklevel=2)
+    self._cache_manager.add_to_memory_cache(key, value)
+  
+  def get(self, key, default=None):
+    result = self._cache_manager.get_from_memory_cache(key)
+    return result if result is not None else default
+  
+  def keys(self):
+    with self._cache_manager._lock:
+      return list(self._cache_manager._memory_cache.keys())
+  
+  def values(self):
+    with self._cache_manager._lock:
+      return list(self._cache_manager._memory_cache.values())
+  
+  def items(self):
+    with self._cache_manager._lock:
+      return list(self._cache_manager._memory_cache.items())
+  
+  def __len__(self):
+    with self._cache_manager._lock:
+      return len(self._cache_manager._memory_cache)
+
+class ThreadSafeCacheKeysProxy:
+  """Thread-safe proxy for backward compatibility with direct cache keys access."""
+  
+  def __init__(self, cache_manager: CacheThreadManager):
+    self._cache_manager = cache_manager
+  
+  def __len__(self):
+    with self._cache_manager._lock:
+      return len(self._cache_manager._memory_cache_keys)
+  
+  def __contains__(self, key):
+    with self._cache_manager._lock:
+      return key in self._cache_manager._memory_cache_keys
+  
+  def __iter__(self):
+    with self._cache_manager._lock:
+      return iter(self._cache_manager._memory_cache_keys.copy())
+  
+  def __getitem__(self, index):
+    with self._cache_manager._lock:
+      return self._cache_manager._memory_cache_keys[index]
+  
+  def append(self, key):
+    # Deprecated - use cache_manager.add_to_memory_cache instead
+    import warnings
+    warnings.warn("Direct cache keys manipulation is deprecated. Use cache_manager.add_to_memory_cache()", 
+                  DeprecationWarning, stacklevel=2)
+  
+  def remove(self, key):
+    # Deprecated - managed automatically by cache_manager
+    import warnings
+    warnings.warn("Direct cache keys manipulation is deprecated. Cache keys are managed automatically.", 
+                  DeprecationWarning, stacklevel=2)
+
+# Backward compatibility - these use thread-safe proxies
+embedding_memory_cache = ThreadSafeCacheProxy(cache_manager)
+embedding_memory_cache_keys = ThreadSafeCacheKeysProxy(cache_manager)
+
+def configure_cache_manager(kb: 'KnowledgeBase') -> None:
+  """
+  Configure the global cache manager from KnowledgeBase settings.
+  
+  Args:
+      kb: KnowledgeBase instance with configuration.
+  """
+  cache_thread_pool_size = getattr(kb, 'cache_thread_pool_size', 4)
+  memory_cache_size = getattr(kb, 'memory_cache_size', 10000)
+  
+  cache_manager.configure(
+    max_workers=cache_thread_pool_size,
+    memory_cache_size=memory_cache_size
+  )
 
 def get_cache_key(text: str, model: str) -> str:
   """
@@ -87,9 +294,10 @@ def get_cached_embedding(text: str, model: str) -> Optional[List[float]]:
   """
   cache_key = get_cache_key(text, model)
   
-  # First check in-memory cache (faster)
-  if cache_key in embedding_memory_cache:
-    return embedding_memory_cache[cache_key]
+  # First check in-memory cache (faster, thread-safe)
+  cached_embedding = cache_manager.get_from_memory_cache(cache_key)
+  if cached_embedding is not None:
+    return cached_embedding
   
   # Then check disk cache
   cache_file = os.path.join(CACHE_DIR, f"{cache_key}.json")
@@ -115,16 +323,7 @@ def add_to_memory_cache(cache_key: str, embedding: List[float], kb=None) -> None
       embedding: The embedding vector.
       kb: KnowledgeBase instance for configuration (optional).
   """
-  # If cache is full, remove oldest item
-  memory_cache_size = getattr(kb, 'memory_cache_size', 10000) if kb else 10000
-  if len(embedding_memory_cache_keys) >= memory_cache_size:
-    oldest_key = embedding_memory_cache_keys.pop(0)
-    if oldest_key in embedding_memory_cache:
-      del embedding_memory_cache[oldest_key]
-  
-  # Add to memory cache
-  embedding_memory_cache[cache_key] = embedding
-  embedding_memory_cache_keys.append(cache_key)
+  cache_manager.add_to_memory_cache(cache_key, embedding, kb)
 
 def save_embedding_to_cache(text: str, model: str, embedding: List[float], kb=None) -> None:
   """
@@ -134,13 +333,14 @@ def save_embedding_to_cache(text: str, model: str, embedding: List[float], kb=No
       text: The text that was embedded.
       model: The model used for embedding.
       embedding: The embedding vector.
+      kb: KnowledgeBase instance for configuration (optional).
   """
   cache_key = get_cache_key(text, model)
   
-  # Save to memory cache for immediate access
+  # Save to memory cache for immediate access (thread-safe)
   add_to_memory_cache(cache_key, embedding, kb)
   
-  # Save to disk asynchronously using a thread to avoid blocking
+  # Save to disk asynchronously using shared thread pool
   cache_file = os.path.join(CACHE_DIR, f"{cache_key}.json")
   
   def save_to_disk():
@@ -150,12 +350,8 @@ def save_embedding_to_cache(text: str, model: str, embedding: List[float], kb=No
     except IOError as e:
       logger.warning(f"Failed to cache embedding: {e}")
   
-  # Use thread pool for disk I/O to avoid blocking the main process
-  # Use configurable thread pool size from kb config if available
-  max_workers = getattr(kb, 'io_thread_pool_size', 4) if 'kb' in locals() else 4
-  executor = ThreadPoolExecutor(max_workers=max_workers)
-  executor.submit(save_to_disk)
-  executor.shutdown(wait=False)
+  # Use shared thread pool - no resource leak
+  cache_manager.submit_cache_task(save_to_disk)
 
 def get_optimal_faiss_index(dimensions: int, dataset_size: int, kb=None) -> faiss.Index:
   """
@@ -461,6 +657,9 @@ def process_embeddings(args: argparse.Namespace, logger) -> str:
   kb = KnowledgeBase(config_file)
   if args.verbose:
     kb.save_config()
+
+  # Configure cache manager with KB settings
+  configure_cache_manager(kb)
 
   from utils.logging_utils import log_model_operation, OperationLogger
   

@@ -210,6 +210,34 @@ self.my_parameter = get_env('MY_PARAMETER',
   section.getint('my_parameter', fallback=self.DEF_MY_PARAMETER), int)
 ```
 
+### Cache Thread Pool Configuration
+
+The system includes a dedicated thread pool for cache operations to prevent resource leaks:
+
+```python
+# In config/config_manager.py PERFORMANCE_CONFIG section:
+'DEF_CACHE_THREAD_POOL_SIZE': (int, 4),  # Dedicated thread pool for cache operations
+```
+
+Configuration usage:
+```ini
+[PERFORMANCE]
+cache_thread_pool_size = 4  # Thread pool size for embedding cache operations
+memory_cache_size = 10000   # Maximum number of embeddings in memory cache
+```
+
+**Thread Pool Management:**
+- Lazy initialization: ThreadPoolExecutor created only when needed
+- Proper lifecycle: Automatic cleanup on process exit using `atexit`
+- Resource safety: Single shared executor prevents resource leaks
+- Configuration: Thread pool size configurable per knowledge base
+
+**Cache Performance:**
+- Thread-safe LRU eviction with optimal performance
+- Atomic metrics tracking for monitoring
+- Configurable memory cache size
+- Automatic promotion from disk to memory cache
+
 ### Adding a New CLI Command
 
 1. Add parser in `customkb.py`:
@@ -296,25 +324,42 @@ for item in items:
   process_item(item)
 ```
 
-### Caching Patterns
+### Thread-Safe Caching Patterns
 ```python
-# Use the two-tier cache in embed_manager.py as reference
-memory_cache = {}  # Fast, limited size
-disk_cache = {}    # Slower, persistent
+# Use the CacheThreadManager for thread-safe operations
+from embedding.embed_manager import cache_manager
 
-def get_cached_value(key):
-  # Check memory first
-  if key in memory_cache:
-    return memory_cache[key]
-  
-  # Check disk
-  if key in disk_cache:
-    value = disk_cache[key]
-    memory_cache[key] = value  # Promote to memory
-    return value
-    
-  return None
+# Thread-safe cache operations
+cache_manager.add_to_memory_cache(key, embedding, kb)
+cached_value = cache_manager.get_from_memory_cache(key)
+
+# Performance monitoring
+metrics = cache_manager.get_metrics()
+print(f"Cache hit ratio: {metrics['cache_hit_ratio']:.2%}")
+print(f"Cache size: {metrics['cache_size']}/{metrics['max_cache_size']}")
+
+# Configuration
+cache_manager.configure(max_workers=8, memory_cache_size=20000)
 ```
+
+### Embedding Cache Architecture
+The embedding cache system uses a thread-safe two-tier approach:
+
+1. **Memory Cache**: Fast LRU cache with configurable size
+2. **Disk Cache**: Persistent JSON-based storage
+3. **Thread Pool**: Managed ThreadPoolExecutor for async disk writes
+
+**Thread Safety Guarantees:**
+- All cache operations use RLock protection
+- No race conditions in LRU eviction
+- Metrics tracking is atomic
+- ThreadPoolExecutor lifecycle is properly managed
+
+**Performance Features:**
+- Automatic cache hit/miss metrics
+- Configurable thread pool size
+- LRU eviction with optimal performance
+- Backward compatibility with deprecation warnings
 
 ## Debugging Tips
 
