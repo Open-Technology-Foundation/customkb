@@ -78,7 +78,7 @@ def enhanced_clean_text(text: str, stop_words: Optional[Set[str]] = None,
       doc = nlp(text)
       for i, ent in enumerate(doc.ents):
         if ent.label_ in ["PERSON", "ORG", "GPE", "LOC", "PRODUCT", "WORK_OF_ART"]:
-          placeholder = f"__ENTITY_{i}_{ent.label__}__"
+          placeholder = f"__ENTITY_{i}_{ent.label_}__"
           text = text.replace(ent.text, placeholder)
           entities.append((placeholder, ent.text))
     except Exception:
@@ -112,15 +112,15 @@ def enhanced_clean_text(text: str, stop_words: Optional[Set[str]] = None,
     text = ' '.join(w for w in word_tokenize(text) if w not in stop_words
                    and not all(c in '.,!?:;-' for c in w))
   
-  # Restore entities, URLs and emails
+  # Restore entities, URLs and emails (placeholders are now lowercase)
   for placeholder, original in entities:
-    text = text.replace(placeholder, original.lower())
+    text = text.replace(placeholder.lower(), original.lower())
   
   for i, url in enumerate(urls):
-    text = text.replace(f"__URL_{i}__", url)
+    text = text.replace(f"__url_{i}__", url)
   
   for i, email in enumerate(emails):
-    text = text.replace(f"__EMAIL_{i}__", email)
+    text = text.replace(f"__email_{i}__", email)
     
   return text.strip()
 
@@ -194,13 +194,14 @@ def tokenize_for_bm25(text: str, language: str = 'en') -> Tuple[str, int]:
   
   Args:
       text: Input text to tokenize.
-      language: Language code for language-specific processing.
+      language: ISO 639-1 language code (e.g., 'en', 'fr') or full name.
       
   Returns:
       Tuple of (space-separated tokens string, document length).
   """
   # Import here to avoid circular imports
   from nltk.corpus import stopwords
+  from database.db_manager import get_iso_code, get_full_language_name
   
   # Convert to lowercase but preserve acronyms and important terms
   text = text.lower()
@@ -209,9 +210,18 @@ def tokenize_for_bm25(text: str, language: str = 'en') -> Tuple[str, int]:
   # More conservative cleaning than vector processing
   text = re.sub(r'[^\w\s\-\.]', ' ', text)
   
+  # Convert language to appropriate format for NLTK
+  try:
+    iso_code = get_iso_code(language)
+    full_language = get_full_language_name(iso_code)
+  except ValueError:
+    # If language not recognized, default to English
+    iso_code = 'en'
+    full_language = 'english'
+  
   # Tokenize using NLTK
   try:
-    tokens = word_tokenize(text, language=language if language != 'en' else 'english')
+    tokens = word_tokenize(text, language=full_language)
   except (LookupError, FileNotFoundError, OSError, AttributeError):
     # Fallback to basic split when NLTK fails (test environments or missing data)
     tokens = text.lower().split()
@@ -221,7 +231,7 @@ def tokenize_for_bm25(text: str, language: str = 'en') -> Tuple[str, int]:
   
   # Light stopword removal (less aggressive than vector processing)
   # Keep important terms that might be relevant for exact matching
-  if language in ['en', 'english']:
+  if iso_code == 'en':
     try:
       # Only remove very common words, preserve domain-specific terms
       essential_stops = {'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by'}

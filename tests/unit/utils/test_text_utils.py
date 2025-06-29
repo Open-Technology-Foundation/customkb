@@ -88,15 +88,18 @@ class TestEnhancedCleanText:
     text = "Visit https://example.com for more info"
     result = enhanced_clean_text(text)
     
+    # URLs are preserved after cleaning
     assert "https://example.com" in result
     assert "visit" in result
     assert "more" in result
+    assert "info" in result
   
   def test_email_preservation(self):
     """Test preservation of email addresses."""
     text = "Contact us at test@example.com for support"
     result = enhanced_clean_text(text)
     
+    # Emails are preserved after cleaning
     assert "test@example.com" in result
     assert "contact" in result
     assert "support" in result
@@ -116,33 +119,49 @@ class TestEnhancedCleanText:
     text = "Apple Inc is a technology company"
     result = enhanced_clean_text(text)
     
-    assert "apple inc" in result.lower()
+    # Entities are lowercased and preserved
+    assert "apple inc" in result
     assert "technology" in result
+    assert "company" in result
   
-  def test_lemmatization(self):
+  @patch('utils.text_utils.word_tokenize')
+  def test_lemmatization(self, mock_tokenize):
     """Test lemmatization functionality."""
-    from nltk.stem import WordNetLemmatizer
-    lemmatizer = WordNetLemmatizer()
+    # Mock lemmatizer to avoid NLTK data issues
+    lemmatizer = Mock()
+    lemmatizer.lemmatize.side_effect = lambda w: {'cats': 'cat', 'running': 'run'}.get(w, w)
     
     text = "The cats are running quickly"
+    # Mock tokenization to avoid NLTK data issues
+    mock_tokenize.return_value = ["the", "cats", "are", "running", "quickly"]
+    
     result = enhanced_clean_text(text, lemmatizer=lemmatizer)
     
-    # Note: actual lemmatization results may vary based on NLTK setup
-    assert "cat" in result or "cats" in result
-    assert "run" in result or "running" in result
+    # Lemmatization should be applied
+    assert "cat" in result  # cats -> cat
+    assert "run" in result  # running -> run
+    assert "quickly" in result
   
-  def test_stopword_removal_with_lemmatization(self):
+  @patch('utils.text_utils.word_tokenize')
+  def test_stopword_removal_with_lemmatization(self, mock_tokenize):
     """Test stopword removal combined with lemmatization."""
-    from nltk.stem import WordNetLemmatizer
-    lemmatizer = WordNetLemmatizer()
+    # Mock lemmatizer to avoid NLTK data issues
+    lemmatizer = Mock()
+    lemmatizer.lemmatize.side_effect = lambda w: {'cats': 'cat', 'running': 'run'}.get(w, w)
     stop_words = {'the', 'are', 'is'}
     
     text = "The cats are running"
+    # Mock tokenization to avoid NLTK data issues
+    mock_tokenize.return_value = ["the", "cats", "are", "running"]
+    
     result = enhanced_clean_text(text, stop_words=stop_words, lemmatizer=lemmatizer)
     
+    # Stopwords should be removed
     assert "the" not in result.split()
     assert "are" not in result.split()
-    assert len(result.split()) <= 2  # Should have fewer words
+    # Lemmatized words should be present
+    assert "cat" in result  # cats -> cat
+    assert "run" in result  # running -> run
   
   def test_punctuation_handling(self):
     """Test handling of meaningful punctuation."""

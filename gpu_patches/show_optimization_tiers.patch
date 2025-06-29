@@ -1,0 +1,11 @@
+--- devcodebase/scripts/show_optimization_tiers.py	2025-06-28 08:19:00.835518794 +0700
++++ scripts/show_optimization_tiers.py	2025-06-28 15:20:53.537864758 +0700
+@@ -39,6 +39,8 @@
+         print(f"  File batch size: {opts['PERFORMANCE']['file_processing_batch_size']:>11}")
+         print(f"  Hybrid search: {opts['ALGORITHMS']['enable_hybrid_search']:>13}")
+         print(f"  Reranking device: {opts['ALGORITHMS']['reranking_device']:>10}")
++        print(f"  FAISS GPU batch: {opts['ALGORITHMS'].get('faiss_gpu_batch_size', 'N/A'):>11}")
++        print(f"  FAISS use float16: {opts['ALGORITHMS'].get('faiss_gpu_use_float16', 'N/A'):>9}")
+     
+     print("\n" + "=" * 80)
+     print("\nTo apply these settings to your knowledge base:")

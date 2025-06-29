@@ -1,0 +1,43 @@
+--- devcodebase/scripts/optimize_kb_performance.py	2025-06-28 13:26:44.041287282 +0700
++++ scripts/optimize_kb_performance.py	2025-06-28 15:22:09.865270252 +0700
+@@ -132,8 +132,11 @@
+                 'query_enhancement_cache_ttl_days': '60',
+                 'reranking_top_k': str(int(50 * batch_factor)),
+                 'reranking_batch_size': str(reranking_batch),
+-                'reranking_device': 'cuda' if memory_gb >= 32 else 'cpu',
++                'reranking_device': 'cuda:0' if memory_gb >= 32 else 'cpu',
+                 'reranking_cache_size': str(reranking_cache),
++                # GPU optimization for FAISS
++                'faiss_gpu_batch_size': str(int(2048 * batch_factor)) if memory_gb >= 32 else '1024',
++                'faiss_gpu_use_float16': 'true' if memory_gb >= 32 else 'false',
+             }
+         }
+     }
+@@ -180,10 +183,27 @@
+     logger = logging.getLogger(__name__)
+     logger.info(f"Processing: {config_path}")
+     
++    # Check FAISS index size
++    kb_dir = os.path.dirname(config_path)
++    kb_name = os.path.basename(kb_dir)
++    faiss_file = os.path.join(kb_dir, f"{kb_name}.faiss")
++    faiss_size_mb = 0
++    if os.path.exists(faiss_file):
++        faiss_size_mb = os.path.getsize(faiss_file) / (1024 * 1024)
++    
+     # Get optimized settings based on system memory
+     settings_info = get_optimized_settings(memory_gb)
+     performance_optimizations = settings_info['optimizations']
+     
++    # Adjust GPU settings based on FAISS index size
++    # GPU memory limit: ~15GB for FAISS index on 23GB GPU
++    if faiss_size_mb > 15000:  # 15GB limit
++        logger.info(f"FAISS index too large for GPU ({faiss_size_mb:.1f} MB), using CPU settings")
++        performance_optimizations['ALGORITHMS']['reranking_device'] = 'cuda:0'  # Still use GPU for reranking
++        performance_optimizations['ALGORITHMS']['faiss_gpu_batch_size'] = '2048'
++        performance_optimizations['ALGORITHMS']['faiss_gpu_use_float16'] = 'true'
++        # Note: The actual GPU loading will be handled by query_manager.py
++    
+     # Load existing configuration
+     config = configparser.ConfigParser()
+     config.read(config_path)

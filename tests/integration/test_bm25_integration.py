@@ -118,7 +118,7 @@ bm25_b = 0.75
     db_args = Mock()
     db_args.config_file = config_file
     db_args.files = [test_file]
-    db_args.language = 'english'
+    db_args.language = 'en'
     db_args.force = False
     db_args.verbose = True
     db_args.debug = False
@@ -171,7 +171,7 @@ query_model = gpt-4o
     db_args = Mock()
     db_args.config_file = config_file
     db_args.files = [test_file]
-    db_args.language = 'english'
+    db_args.language = 'en'
     db_args.force = False
     db_args.verbose = True
     db_args.debug = False
@@ -471,9 +471,10 @@ bm25_b = 0.75
     build_bm25_index(kb)
     kb.sql_connection.close()
   
+  @pytest.mark.asyncio
   @patch('query.query_manager.get_query_embedding')
   @patch('query.query_manager.faiss.read_index')
-  def test_hybrid_search_integration(self, mock_read_index, mock_get_embedding):
+  async def test_hybrid_search_integration(self, mock_read_index, mock_get_embedding):
     """Test hybrid search combining vector and BM25 results."""
     # Mock vector search components
     mock_index = Mock()
@@ -495,7 +496,7 @@ bm25_b = 0.75
     
     # Perform hybrid search
     query_vector = np.array([[0.1] * 1536])
-    results = perform_hybrid_search(kb, "machine learning algorithms", query_vector, mock_index)
+    results = await perform_hybrid_search(kb, "machine learning algorithms", query_vector, mock_index)
     
     # Should return combined results
     assert len(results) > 0
@@ -665,7 +666,7 @@ enable_hybrid_search = true
     db_args = Mock()
     db_args.config_file = config_file
     db_args.files = [test_file]
-    db_args.language = 'english'
+    db_args.language = 'en'
     db_args.force = False
     db_args.verbose = True
     db_args.debug = False
@@ -754,7 +755,7 @@ enable_hybrid_search = true
     accuracies = ['89.5', '92.3', '95.1', '97.8']
     datasets = ['ImageNet', 'COCO', 'GLUE', 'SQuAD']
     
-    num_docs = 1000  # Substantial but manageable test size
+    num_docs = 500  # Reduced for memory safety during testing
     for i in range(num_docs):
       template = random.choice(doc_templates)
       doc = template.format(
@@ -898,6 +899,298 @@ enable_hybrid_search = true
     for query in test_queries:
       scores = get_bm25_scores(kb, query, loaded_data)
       assert len(scores) > 0
+    
+    kb.sql_connection.close()
+
+
+@pytest.mark.integration
+class TestBM25ResultLimiting:
+  """Test BM25 result limiting functionality in integration scenarios."""
+  
+  def setup_method(self):
+    """Set up test environment for result limiting tests."""
+    self.temp_dir = tempfile.mkdtemp()
+    self.kb_dir = self.temp_dir
+    self.config_file = os.path.join(self.kb_dir, 'limit_test.cfg')
+    
+  def teardown_method(self):
+    """Clean up test environment."""
+    import shutil
+    shutil.rmtree(self.temp_dir, ignore_errors=True)
+  
+  def create_large_test_dataset(self, num_docs=1000):
+    """Create a large test dataset to test result limiting."""
+    # Reduced default from 5000 to 1000 to prevent memory exhaustion
+    db_path = os.path.join(self.kb_dir, 'limit_test.db')
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+    
+    cursor.execute('''
+      CREATE TABLE docs (
+        id INTEGER PRIMARY KEY,
+        sid INTEGER,
+        sourcedoc VARCHAR(255),
+        originaltext TEXT,
+        embedtext TEXT,
+        embedded INTEGER DEFAULT 0,
+        language TEXT DEFAULT "en",
+        metadata TEXT,
+        keyphrase_processed INTEGER DEFAULT 0,
+        bm25_tokens TEXT,
+        doc_length INTEGER DEFAULT 0
+      )
+    ''')
+    
+    # Create documents that will match a common query
+    # Half contain "machine learning", half contain other terms
+    for i in range(num_docs):
+      if i < num_docs // 2:
+        # Documents that will match "machine learning"
+        doc = f"Document {i}: Machine learning algorithms are essential for AI. This document discusses machine learning techniques."
+      else:
+        # Documents with other content
+        doc = f"Document {i}: Natural language processing and computer vision are important fields in artificial intelligence."
+      
+      tokens, length = tokenize_for_bm25(doc, 'en')
+      cursor.execute('''
+        INSERT INTO docs (id, sid, sourcedoc, originaltext, embedtext, embedded, 
+                         language, metadata, keyphrase_processed, bm25_tokens, doc_length)
+        VALUES (?, 0, ?, ?, ?, 1, 'en', '{}', 1, ?, ?)
+      ''', (i+1, f'doc{i+1}.txt', doc, doc.lower(), tokens, length))
+    
+    conn.commit()
+    conn.close()
+  
+  def test_bm25_result_limiting_with_config(self):
+    """Test BM25 result limiting using configuration parameter."""
+    # Create config with BM25 result limit
+    with open(self.config_file, 'w') as f:
+      f.write("""[DEFAULT]
+vector_model = text-embedding-3-small
+vector_dimensions = 1536
+
+[ALGORITHMS]
+enable_hybrid_search = true
+bm25_max_results = 100
+bm25_k1 = 1.2
+bm25_b = 0.75
+""")
+    
+    # Create large dataset
+    self.create_large_test_dataset(1000)
+    
+    # Load KB and build index
+    kb = KnowledgeBase(self.config_file)
+    kb.sql_connection = sqlite3.connect(kb.knowledge_base_db)
+    kb.sql_cursor = kb.sql_connection.cursor()
+    
+    # Debug: Check if documents are in the database
+    kb.sql_cursor.execute("SELECT COUNT(*) FROM docs WHERE keyphrase_processed = 1")
+    doc_count = kb.sql_cursor.fetchone()[0]
+    assert doc_count > 0, f"Expected documents with keyphrase_processed=1, found {doc_count}"
+    
+    # Build BM25 index
+    bm25_index = build_bm25_index(kb)
+    assert bm25_index is not None
+    
+    # Load index
+    bm25_data = load_bm25_index(kb)
+    assert bm25_data is not None
+    assert bm25_data['total_docs'] > 0, f"Expected documents in index, found {bm25_data.get('total_docs', 0)}"
+    
+    # Debug: Check a few document tokens
+    kb.sql_cursor.execute("SELECT bm25_tokens FROM docs LIMIT 5")
+    sample_tokens = kb.sql_cursor.fetchall()
+    print(f"Sample BM25 tokens: {sample_tokens[:2]}")
+    
+    # Perform search that would return many results
+    scores = get_bm25_scores(kb, "machine learning", bm25_data)
+    
+    # Should be limited to 100 results
+    assert len(scores) <= 100
+    assert len(scores) > 0  # Should have some results
+    
+    # All scores should be positive and sorted
+    for i, (doc_id, score) in enumerate(scores):
+      assert score > 0
+      if i > 0:
+        assert scores[i-1][1] >= score  # Descending order
+    
+    kb.sql_connection.close()
+  
+  def test_bm25_result_limiting_prevents_memory_issues(self):
+    """Test that result limiting prevents memory issues with large result sets."""
+    # Create config with small limit for memory safety
+    with open(self.config_file, 'w') as f:
+      f.write("""[DEFAULT]
+vector_model = text-embedding-3-small
+
+[ALGORITHMS]
+enable_hybrid_search = true
+bm25_max_results = 500
+""")
+    
+    # Create large dataset (reduced from 5000 to prevent memory exhaustion)
+    self.create_large_test_dataset(1000)
+    
+    # Load KB and build index
+    kb = KnowledgeBase(self.config_file)
+    kb.sql_connection = sqlite3.connect(kb.knowledge_base_db)
+    kb.sql_cursor = kb.sql_connection.cursor()
+    
+    # Build BM25 index
+    bm25_index = build_bm25_index(kb)
+    assert bm25_index is not None
+    
+    # Load index
+    bm25_data = load_bm25_index(kb)
+    assert bm25_data is not None
+    assert bm25_data['total_docs'] == 1000
+    
+    # Perform search that would return ~500 results without limiting
+    import time
+    start_time = time.time()
+    scores = get_bm25_scores(kb, "machine learning", bm25_data)
+    search_time = time.time() - start_time
+    
+    # Should be limited to 500 results
+    assert len(scores) == 500
+    assert search_time < 2.0  # Should be fast even with large dataset
+    
+    # Memory test: perform multiple searches
+    for _ in range(10):
+      scores = get_bm25_scores(kb, "machine learning algorithms", bm25_data)
+      assert len(scores) <= 500
+    
+    kb.sql_connection.close()
+  
+  def test_bm25_unlimited_results_option(self):
+    """Test that setting bm25_max_results=0 allows unlimited results."""
+    # Create config with unlimited results
+    with open(self.config_file, 'w') as f:
+      f.write("""[DEFAULT]
+vector_model = text-embedding-3-small
+
+[ALGORITHMS]
+enable_hybrid_search = true
+bm25_max_results = 0
+""")
+    
+    # Create moderate dataset
+    self.create_large_test_dataset(200)
+    
+    # Load KB and build index
+    kb = KnowledgeBase(self.config_file)
+    kb.sql_connection = sqlite3.connect(kb.knowledge_base_db)
+    kb.sql_cursor = kb.sql_connection.cursor()
+    
+    # Build and load BM25 index
+    build_bm25_index(kb)
+    bm25_data = load_bm25_index(kb)
+    
+    # Perform search
+    scores = get_bm25_scores(kb, "machine learning", bm25_data)
+    
+    # Should return all matching results (about 100 out of 200)
+    assert len(scores) > 50  # At least half should match
+    assert len(scores) <= 200  # Can't exceed total docs
+    
+    kb.sql_connection.close()
+  
+  @patch('embedding.bm25_manager.get_logger')
+  def test_bm25_result_limiting_logging(self, mock_logger):
+    """Test that result limiting is properly logged."""
+    # Create config with result limit
+    with open(self.config_file, 'w') as f:
+      f.write("""[DEFAULT]
+vector_model = text-embedding-3-small
+
+[ALGORITHMS]
+enable_hybrid_search = true
+bm25_max_results = 50
+""")
+    
+    # Create dataset (safe size)
+    self.create_large_test_dataset(300)
+    
+    # Load KB and build index
+    kb = KnowledgeBase(self.config_file)
+    kb.sql_connection = sqlite3.connect(kb.knowledge_base_db)
+    kb.sql_cursor = kb.sql_connection.cursor()
+    
+    # Build and load BM25 index
+    build_bm25_index(kb)
+    bm25_data = load_bm25_index(kb)
+    
+    # Perform search that triggers limiting
+    scores = get_bm25_scores(kb, "machine learning", bm25_data)
+    
+    # Check logging was called
+    assert mock_logger.return_value.info.called
+    log_messages = [call[0][0] for call in mock_logger.return_value.info.call_args_list]
+    
+    # Should have logged about limiting
+    limiting_logged = any("BM25 results limited" in msg for msg in log_messages)
+    assert limiting_logged
+    
+    # Should show original and limited counts
+    for msg in log_messages:
+      if "BM25 results limited" in msg:
+        assert "from" in msg and "to" in msg
+        # Should mention the limit (50)
+        assert "50" in msg
+    
+    kb.sql_connection.close()
+  
+  @pytest.mark.asyncio
+  @patch('query.query_manager.get_query_embedding')
+  @patch('query.query_manager.faiss.read_index')
+  async def test_hybrid_search_with_bm25_limiting(self, mock_read_index, mock_get_embedding):
+    """Test that hybrid search works correctly with BM25 result limiting."""
+    # Create config with result limit
+    with open(self.config_file, 'w') as f:
+      f.write("""[DEFAULT]
+vector_model = text-embedding-3-small
+vector_dimensions = 1536
+query_top_k = 50
+
+[ALGORITHMS]
+enable_hybrid_search = true
+vector_weight = 0.5
+bm25_max_results = 100
+""")
+    
+    # Create dataset (safe size)
+    self.create_large_test_dataset(500)
+    
+    # Mock vector search
+    mock_index = Mock()
+    mock_index.search.return_value = (
+      np.array([[0.1] * 50]),  # 50 distances
+      np.array([list(range(50))])  # 50 indices
+    )
+    mock_read_index.return_value = mock_index
+    mock_get_embedding.return_value = np.array([[0.1] * 1536])
+    
+    # Load KB
+    kb = KnowledgeBase(self.config_file)
+    kb.sql_connection = sqlite3.connect(kb.knowledge_base_db)
+    kb.sql_cursor = kb.sql_connection.cursor()
+    
+    # Build and load BM25 index
+    build_bm25_index(kb)
+    
+    # Perform hybrid search
+    query_vector = np.array([[0.1] * 1536])
+    results = await perform_hybrid_search(kb, "machine learning", query_vector, mock_index)
+    
+    # Should have results from both vector and BM25
+    assert len(results) > 0
+    assert len(results) <= 150  # Max possible: 50 vector + 100 BM25
+    
+    # Results should be properly scored and sorted
+    scores = [score for _, score in results]
+    assert scores == sorted(scores, reverse=True)
     
     kb.sql_connection.close()
 

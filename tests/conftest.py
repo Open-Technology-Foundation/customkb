@@ -26,7 +26,7 @@ def mock_env_vars():
     'OPENAI_API_KEY': 'sk-test' + 'x' * 40,  # Valid format but fake key
     'ANTHROPIC_API_KEY': 'sk-ant-test' + 'x' * 90,  # Valid format but fake key
     'VECTORDBS': tempfile.mkdtemp(prefix='test_vectordbs_'),
-    'NLTK_DATA': os.path.join(tempfile.gettempdir(), 'nltk_data')
+    'NLTK_DATA': '/usr/share/nltk_data'  # Use actual NLTK data path
   }):
     yield
 
@@ -292,7 +292,7 @@ def isolated_imports():
 
 
 @pytest.fixture(autouse=True)
-def setup_test_environment(mock_env_vars, mock_nltk_data):
+def setup_test_environment(mock_env_vars):
   """Automatically set up test environment for all tests."""
   pass
 

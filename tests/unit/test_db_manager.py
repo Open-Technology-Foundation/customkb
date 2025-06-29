@@ -22,6 +22,10 @@ from database.db_manager import (
 )
 from config.config_manager import KnowledgeBase
 
+# Initialize logger for tests
+from utils.logging_utils import get_logger
+logger = get_logger(__name__)
+
 
 class TestDetectFileType:
   """Test file type detection functionality."""
@@ -60,8 +64,8 @@ class TestInitTextSplitter:
     splitter = init_text_splitter(kb, 'markdown')
     
     # Should return MarkdownTextSplitter
-    assert hasattr(splitter, 'chunk_size')
-    assert splitter.chunk_size == kb.db_max_tokens
+    assert hasattr(splitter, '_chunk_size')
+    assert splitter._chunk_size == kb.db_max_tokens
   
   def test_code_splitter(self, temp_config_file):
     """Test code text splitter initialization."""
@@ -69,8 +73,8 @@ class TestInitTextSplitter:
     splitter = init_text_splitter(kb, 'code')
     
     # Should return RecursiveCharacterTextSplitter for code
-    assert hasattr(splitter, 'chunk_size')
-    assert splitter.chunk_size == kb.db_max_tokens
+    assert hasattr(splitter, '_chunk_size')
+    assert splitter._chunk_size == kb.db_max_tokens
   
   def test_html_splitter(self, temp_config_file):
     """Test HTML text splitter initialization."""
@@ -86,8 +90,8 @@ class TestInitTextSplitter:
     splitter = init_text_splitter(kb, 'text')
     
     # Should return RecursiveCharacterTextSplitter
-    assert hasattr(splitter, 'chunk_size')
-    assert splitter.chunk_size == kb.db_max_tokens
+    assert hasattr(splitter, '_chunk_size')
+    assert splitter._chunk_size == kb.db_max_tokens
   
   def test_chunk_overlap_calculation(self, temp_config_file):
     """Test that chunk overlap is calculated correctly."""
@@ -95,7 +99,7 @@ class TestInitTextSplitter:
     splitter = init_text_splitter(kb, 'text')
     
     expected_overlap = min(100, kb.db_min_tokens // 2)
-    assert splitter.chunk_overlap == expected_overlap
+    assert splitter._chunk_overlap == expected_overlap
 
 
 class TestExtractMetadata:
@@ -104,7 +108,10 @@ class TestExtractMetadata:
   def test_basic_metadata(self):
     """Test extraction of basic metadata."""
     text = "This is a sample text for testing metadata extraction."
-    metadata = extract_metadata(text, "/path/to/test.txt")
+    mock_kb = Mock()
+    mock_kb.heading_search_limit = 200
+    mock_kb.entity_extraction_limit = 500
+    metadata = extract_metadata(text, "/path/to/test.txt", mock_kb)
     
     assert metadata["source"] == "/path/to/test.txt"
     assert metadata["char_length"] == len(text)
@@ -114,7 +121,9 @@ class TestExtractMetadata:
   def test_heading_extraction(self):
     """Test extraction of headings from text."""
     markdown_text = "# Main Heading\nThis is some content under the heading."
-    metadata = extract_metadata(markdown_text, "test.md")
+    mock_kb = Mock()
+    mock_kb.heading_search_limit = 200
+    metadata = extract_metadata(markdown_text, "test.md", mock_kb)
     
     assert metadata.get("heading") == "Main Heading"
     assert metadata.get("section_type") == "heading"
@@ -122,29 +131,39 @@ class TestExtractMetadata:
   def test_code_block_detection(self):
     """Test detection of code blocks."""
     code_text = "Here's some code:\n```python\nprint('hello')\n```"
-    metadata = extract_metadata(code_text, "test.md")
+    mock_kb = Mock()
+    mock_kb.heading_search_limit = 200
+    mock_kb.entity_extraction_limit = 500
+    metadata = extract_metadata(code_text, "test.md", mock_kb)
     
     assert metadata.get("section_type") == "code_block"
   
   def test_list_detection(self):
     """Test detection of different list types."""
     bullet_text = "Items:\n- First item\n- Second item"
-    metadata = extract_metadata(bullet_text, "test.md")
+    mock_kb = Mock()
+    mock_kb.heading_search_limit = 200
+    mock_kb.entity_extraction_limit = 500
+    metadata = extract_metadata(bullet_text, "test.md", mock_kb)
     assert metadata.get("section_type") == "bullet_list"
     
     numbered_text = "Steps:\n1. First step\n2. Second step"
-    metadata = extract_metadata(numbered_text, "test.md")
+    metadata = extract_metadata(numbered_text, "test.md", mock_kb)
     assert metadata.get("section_type") == "numbered_list"
   
   def test_document_section_detection(self):
     """Test detection of document sections."""
     intro_text = "Introduction\nThis document provides an overview of the system."
-    metadata = extract_metadata(intro_text, "test.md")
+    mock_kb = Mock()
+    mock_kb.heading_search_limit = 200
+    mock_kb.entity_extraction_limit = 500
+    metadata = extract_metadata(intro_text, "test.md", mock_kb)
     
     assert metadata.get("document_section") == "introduction"
   
+  @patch('database.db_manager.logger')
   @patch('database.db_manager.nlp')
-  def test_entity_extraction_with_spacy(self, mock_nlp):
+  def test_entity_extraction_with_spacy(self, mock_nlp, mock_logger):
     """Test named entity extraction when spaCy is available."""
     # Mock spaCy NLP pipeline
     mock_entity = Mock()
@@ -156,7 +175,10 @@ class TestExtractMetadata:
     mock_nlp.return_value = mock_doc
     
     text = "OpenAI is a company working on AI."
-    metadata = extract_metadata(text, "test.txt")
+    mock_kb = Mock()
+    mock_kb.heading_search_limit = 200
+    mock_kb.entity_extraction_limit = 500
+    metadata = extract_metadata(text, "test.txt", mock_kb)
     
     assert "entities" in metadata
     assert "ORG" in metadata["entities"]
@@ -166,21 +188,30 @@ class TestExtractMetadata:
   def test_no_entity_extraction_without_spacy(self):
     """Test that entity extraction is skipped when spaCy is not available."""
     text = "OpenAI is a company working on AI."
-    metadata = extract_metadata(text, "test.txt")
+    mock_kb = Mock()
+    mock_kb.heading_search_limit = 200
+    mock_kb.entity_extraction_limit = 500
+    metadata = extract_metadata(text, "test.txt", mock_kb)
     
     assert "entities" not in metadata
   
   def test_table_detection(self):
     """Test detection of HTML tables."""
     table_text = "<table><tr><td>Cell 1</td><td>Cell 2</td></tr></table>"
-    metadata = extract_metadata(table_text, "test.html")
+    mock_kb = Mock()
+    mock_kb.heading_search_limit = 200
+    mock_kb.entity_extraction_limit = 500
+    metadata = extract_metadata(table_text, "test.html", mock_kb)
     
     assert metadata.get("section_type") == "table"
   
   def test_metadata_with_no_extension(self):
     """Test metadata extraction for files without extensions."""
     text = "Sample text content"
-    metadata = extract_metadata(text, "/path/to/filename")
+    mock_kb = Mock()
+    mock_kb.heading_search_limit = 200
+    mock_kb.entity_extraction_limit = 500
+    metadata = extract_metadata(text, "/path/to/filename", mock_kb)
     
     assert "file_type" not in metadata
 
@@ -289,8 +320,9 @@ class TestProcessTextFile:
     
     assert result is True
     
-    # Verify data was inserted
-    kb.sql_cursor.execute("SELECT COUNT(*) FROM docs WHERE sourcedoc = 'test.txt'")
+    # Verify data was inserted (sourcedoc now stores full absolute path)
+    expected_path = os.path.abspath(test_file)
+    kb.sql_cursor.execute("SELECT COUNT(*) FROM docs WHERE sourcedoc = ?", [expected_path])
     count = kb.sql_cursor.fetchone()[0]
     assert count == 1
     
@@ -323,10 +355,11 @@ class TestProcessTextFile:
     with open(test_file, 'w') as f:
       f.write(sample_texts[0])
     
-    # Insert existing record
+    # Insert existing record with full path
+    expected_path = os.path.abspath(test_file)
     kb.sql_cursor.execute(
       "INSERT INTO docs (sid, sourcedoc, originaltext, embedtext) VALUES (?, ?, ?, ?)",
-      (0, "force_test.txt", "old content", "old content")
+      (0, expected_path, "old content", "old content")
     )
     kb.sql_connection.commit()
     
@@ -341,7 +374,7 @@ class TestProcessTextFile:
     assert result is True
     
     # Verify old record was replaced
-    kb.sql_cursor.execute("SELECT originaltext FROM docs WHERE sourcedoc = 'force_test.txt'")
+    kb.sql_cursor.execute("SELECT originaltext FROM docs WHERE sourcedoc = ?", [expected_path])
     content = kb.sql_cursor.fetchone()[0]
     assert content == sample_texts[0]
     
@@ -358,7 +391,7 @@ class TestProcessTextFile:
     mock_splitter = Mock()
     stop_words = set()
     
-    with patch('database.db_manager.validate_file_path') as mock_validate:
+    with patch('utils.security_utils.validate_file_path') as mock_validate:
       mock_validate.side_effect = ValueError("Invalid path")
       
       result = process_text_file(kb, "../../../etc/passwd", mock_splitter, stop_words, 'english', 'text')
@@ -414,7 +447,8 @@ class TestProcessTextFile:
     assert result is True
     
     # Verify metadata was stored
-    kb.sql_cursor.execute("SELECT metadata FROM docs WHERE sourcedoc = 'metadata_test.md'")
+    expected_path = os.path.abspath(test_file)
+    kb.sql_cursor.execute("SELECT metadata FROM docs WHERE sourcedoc = ?", [expected_path])
     metadata_str = kb.sql_cursor.fetchone()[0]
     metadata = json.loads(metadata_str)
     
@@ -442,7 +476,7 @@ class TestProcessDatabase:
     args = Mock()
     args.config_file = temp_config_file
     args.files = test_files
-    args.language = 'english'
+    args.language = 'en'
     args.force = False
     args.verbose = True
     args.debug = False
@@ -460,7 +494,7 @@ class TestProcessDatabase:
     args = Mock()
     args.config_file = temp_config_file
     args.files = []
-    args.language = 'english'
+    args.language = 'en'
     args.force = False
     args.verbose = True
     args.debug = False
@@ -476,7 +510,7 @@ class TestProcessDatabase:
     args = Mock()
     args.config_file = "nonexistent.cfg"
     args.files = ["test.txt"]
-    args.language = 'english'
+    args.language = 'en'
     
     mock_logger = Mock()
     
@@ -497,7 +531,7 @@ class TestProcessDatabase:
     args = Mock()
     args.config_file = temp_config_file
     args.files = [test_file]
-    args.language = 'english'
+    args.language = 'en'
     args.force = True
     args.verbose = True
     args.debug = False
@@ -506,7 +540,7 @@ class TestProcessDatabase:
     
     result = process_database(args, mock_logger)
     
-    assert "files processed" in result
+    assert "files added to database" in result or "files processed" in result
   
   @patch('database.db_manager.get_files')
   def test_glob_pattern_expansion(self, mock_get_files, temp_config_file):
@@ -516,7 +550,7 @@ class TestProcessDatabase:
     args = Mock()
     args.config_file = temp_config_file
     args.files = ["*.txt"]
-    args.language = 'english'
+    args.language = 'en'
     args.force = False
     args.verbose = True
     args.debug = False

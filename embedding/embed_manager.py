@@ -515,6 +515,60 @@ async def process_embedding_batch_async(kb: KnowledgeBase, chunks: List[str]) ->
       
   return [emb for emb in result if emb is not None]
 
+async def get_embeddings_for_batch(kb: KnowledgeBase, chunks: List[str]) -> List[List[float]]:
+  """
+  Get embeddings for a batch of text chunks without updating the index.
+  Used for training the FAISS index.
+  
+  Args:
+      kb: The KnowledgeBase instance.
+      chunks: List of text chunks.
+      
+  Returns:
+      List of embeddings as lists of floats.
+  """
+  try:
+    embeddings_list = []
+    cache_hits = 0
+    
+    # Check cache first
+    for text in chunks:
+      cached_embedding = get_cached_embedding(text, kb.vector_model)
+      if cached_embedding:
+        embeddings_list.append(cached_embedding)
+        cache_hits += 1
+      else:
+        # Add placeholder for uncached
+        embeddings_list.append(None)
+    
+    # Get indices of uncached texts
+    uncached_indices = [i for i, emb in enumerate(embeddings_list) if emb is None]
+    uncached_texts = [chunks[i] for i in uncached_indices]
+    
+    if uncached_texts:
+      # Get embeddings from API
+      response = openai_client.embeddings.create(
+        input=uncached_texts,
+        model=kb.vector_model
+      )
+      
+      # Fill in the embeddings and cache them
+      for idx, (text_idx, embedding_data) in enumerate(zip(uncached_indices, response.data)):
+        embedding = embedding_data.embedding
+        embeddings_list[text_idx] = embedding
+        # Cache the embedding
+        save_embedding_to_cache(uncached_texts[idx], kb.vector_model, embedding, kb)
+    
+    if cache_hits > 0:
+      logger.debug(f"Cache hits: {cache_hits}/{len(chunks)}")
+    
+    # Filter out any None values (shouldn't happen but be safe)
+    return [emb for emb in embeddings_list if emb is not None]
+    
+  except Exception as e:
+    logger.error(f"Error getting embeddings for batch: {e}")
+    return []
+
 async def process_batch_and_update(kb: KnowledgeBase, index: faiss.IndexIDMap, 
                                  chunks: List[str], ids: List[int]) -> Set[int]:
   """
@@ -760,6 +814,33 @@ def process_embeddings(args: argparse.Namespace, logger) -> str:
   if current_chunks:
     all_chunks.append(current_chunks)
     all_ids.append(current_ids)
+  
+  # Train the index if it requires training (IVF indexes need training)
+  if hasattr(index.index, 'is_trained') and not index.index.is_trained:
+    logger.info("Training FAISS index on sample data...")
+    # Collect sample texts for training
+    train_sample_size = min(getattr(kb, 'faiss_train_sample_size', 10000), len(unique_rows))
+    train_texts = [text for _, text in unique_rows[:train_sample_size]]
+    
+    # Get embeddings for training samples
+    logger.info(f"Getting embeddings for {len(train_texts)} training samples...")
+    train_embeddings = []
+    
+    # Process training samples in batches
+    for i in range(0, len(train_texts), optimal_batch_size):
+      batch = train_texts[i:i + optimal_batch_size]
+      batch_embeddings = asyncio.run(get_embeddings_for_batch(kb, batch))
+      if batch_embeddings:
+        train_embeddings.extend(batch_embeddings)
+    
+    if train_embeddings:
+      # Convert to numpy array
+      train_embeddings_np = np.array(train_embeddings, dtype=np.float32)
+      logger.info(f"Training index with {len(train_embeddings_np)} samples...")
+      index.index.train(train_embeddings_np)
+      logger.info("Index training completed")
+    else:
+      logger.error("Failed to get training embeddings - index may not work properly")
   
   # Process all batches using asyncio with checkpointing
   all_processed_ids = asyncio.run(process_all_batches_with_checkpoints(kb, index, all_chunks, all_ids))

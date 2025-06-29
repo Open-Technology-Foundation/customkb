@@ -266,6 +266,121 @@ class TestBM25Manager:
     expected = [(1, 0.5), (4, 0.3)]  # Only positive scores
     assert result == expected
 
+  @patch('embedding.bm25_manager.tokenize_for_bm25')
+  def test_get_bm25_scores_with_limit(self, mock_tokenize):
+    """Test BM25 score calculation with result limit."""
+    # Setup
+    mock_tokenize.return_value = ('test query', 2)
+    mock_bm25 = Mock()
+    # Return many scores to test limiting
+    scores = [0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1, 0.05]
+    mock_bm25.get_scores.return_value = scores
+    
+    bm25_data = {
+      'bm25': mock_bm25,
+      'doc_ids': list(range(1, 11)),  # 10 documents
+      'total_docs': 10
+    }
+    
+    # Test with explicit limit
+    result = get_bm25_scores(self.mock_kb, 'test query', bm25_data, max_results=3)
+    expected = [(1, 0.9), (2, 0.8), (3, 0.7)]  # Top 3 results
+    assert result == expected
+    assert len(result) == 3
+
+  @patch('embedding.bm25_manager.tokenize_for_bm25')
+  def test_get_bm25_scores_with_kb_limit(self, mock_tokenize):
+    """Test BM25 score calculation using KB configuration limit."""
+    # Setup KB with bm25_max_results
+    self.mock_kb.bm25_max_results = 5
+    
+    mock_tokenize.return_value = ('test query', 2)
+    mock_bm25 = Mock()
+    scores = [0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1, 0.05]
+    mock_bm25.get_scores.return_value = scores
+    
+    bm25_data = {
+      'bm25': mock_bm25,
+      'doc_ids': list(range(1, 11)),
+      'total_docs': 10
+    }
+    
+    # Test without explicit limit (should use KB limit)
+    result = get_bm25_scores(self.mock_kb, 'test query', bm25_data)
+    expected = [(1, 0.9), (2, 0.8), (3, 0.7), (4, 0.6), (5, 0.5)]  # Top 5 results
+    assert result == expected
+    assert len(result) == 5
+
+  @patch('embedding.bm25_manager.tokenize_for_bm25')
+  def test_get_bm25_scores_no_limit(self, mock_tokenize):
+    """Test BM25 score calculation with limit=0 (unlimited)."""
+    # Setup KB with bm25_max_results=0 (unlimited)
+    self.mock_kb.bm25_max_results = 0
+    
+    mock_tokenize.return_value = ('test query', 2)
+    mock_bm25 = Mock()
+    scores = [0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1, 0.05]
+    mock_bm25.get_scores.return_value = scores
+    
+    bm25_data = {
+      'bm25': mock_bm25,
+      'doc_ids': list(range(1, 11)),
+      'total_docs': 10
+    }
+    
+    # Test with unlimited results
+    result = get_bm25_scores(self.mock_kb, 'test query', bm25_data)
+    # All results with positive scores should be returned
+    assert len(result) == 10
+    assert result[0] == (1, 0.9)
+    assert result[-1] == (10, 0.05)
+
+  @patch('embedding.bm25_manager.tokenize_for_bm25')
+  def test_get_bm25_scores_limit_larger_than_results(self, mock_tokenize):
+    """Test BM25 score calculation when limit exceeds available results."""
+    # Setup
+    mock_tokenize.return_value = ('test query', 2)
+    mock_bm25 = Mock()
+    scores = [0.9, 0.8, 0.7]  # Only 3 scores
+    mock_bm25.get_scores.return_value = scores
+    
+    bm25_data = {
+      'bm25': mock_bm25,
+      'doc_ids': [1, 2, 3],
+      'total_docs': 3
+    }
+    
+    # Test with limit larger than available results
+    result = get_bm25_scores(self.mock_kb, 'test query', bm25_data, max_results=10)
+    expected = [(1, 0.9), (2, 0.8), (3, 0.7)]  # All 3 results
+    assert result == expected
+    assert len(result) == 3
+
+  @patch('embedding.bm25_manager.tokenize_for_bm25')
+  @patch('embedding.bm25_manager.logger')
+  def test_get_bm25_scores_with_logging(self, mock_logger, mock_tokenize):
+    """Test that BM25 limiting is properly logged."""
+    # Setup
+    mock_tokenize.return_value = ('test query', 2)
+    mock_bm25 = Mock()
+    scores = [0.9] * 1000  # 1000 scores
+    mock_bm25.get_scores.return_value = scores
+    
+    bm25_data = {
+      'bm25': mock_bm25,
+      'doc_ids': list(range(1, 1001)),
+      'total_docs': 1000
+    }
+    
+    # Test with limit that triggers logging
+    result = get_bm25_scores(self.mock_kb, 'test query', bm25_data, max_results=100)
+    
+    # Check that logging was called
+    mock_logger.info.assert_called()
+    log_call = mock_logger.info.call_args[0][0]
+    assert 'BM25 results limited from 1000 to 100' in log_call
+    assert len(result) == 100
+
   def test_ensure_bm25_index_disabled(self):
     """Test ensure_bm25_index when hybrid search is disabled."""
     self.mock_kb.enable_hybrid_search = False

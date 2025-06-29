@@ -73,6 +73,25 @@ def get_fq_cfg_filename(cfgfile: str) -> Optional[str]:
     logger.error("Configuration file name cannot be empty")
     return None
   
+  # First check if this might be a domain-style name (e.g., 'example.com')
+  # before validating extensions
+  if '.' in cfgfile and not cfgfile.endswith('.cfg') and not cfgfile.startswith('/') and not cfgfile.startswith('./'):
+    # This might be a domain-style name, try with .cfg extension
+    candidate_cfg = f"{cfgfile}.cfg"
+    
+    # First check current directory
+    if os.path.exists(candidate_cfg):
+      try:
+        return validate_file_path(candidate_cfg, ['.cfg'], allow_absolute=True, allow_relative_traversal=True)
+      except ValueError:
+        pass
+    
+    # Then check VECTORDBS
+    domain_path = find_file(candidate_cfg, VECTORDBS)
+    if domain_path and validate_safe_path(domain_path, VECTORDBS):
+      return domain_path
+  
+  # Now do regular validation
   try:
     # Security validation: prevent path traversal and dangerous characters
     # Allow absolute paths and relative traversal for KB config files (trusted user input)
@@ -80,15 +99,6 @@ def get_fq_cfg_filename(cfgfile: str) -> Optional[str]:
   except ValueError as e:
     logger.error(f"Invalid configuration file path: {e}")
     return None
-  # Handle domain-style names (e.g., 'example.com' → 'example.com.cfg')
-  if '.' in validated_cfgfile and not validated_cfgfile.endswith('.cfg'):
-    candidate_cfg = f"{validated_cfgfile}.cfg"
-    if os.path.exists(candidate_cfg):
-      return candidate_cfg
-    
-    domain_path = find_file(candidate_cfg, VECTORDBS)
-    if domain_path and validate_safe_path(domain_path, VECTORDBS):
-      return domain_path
   
   # Handle regular paths
   _dir, _file, _ext, _fqfn = split_filepath(validated_cfgfile, adddir=False, realpath=False)
@@ -241,6 +251,9 @@ class KnowledgeBase:
       'DEF_ENTITY_EXTRACTION_LIMIT': (int, 500),
       'DEF_DEFAULT_DIR_PERMISSIONS': (int, 0o770),
       'DEF_DEFAULT_CODE_LANGUAGE': (str, 'python'),
+      'DEF_LANGUAGE_DETECTION_ENABLED': (bool, False),
+      'DEF_LANGUAGE_DETECTION_CONFIDENCE': (float, 0.95),
+      'DEF_LANGUAGE_DETECTION_SAMPLE_SIZE': (int, 3072),
       'DEF_ADDITIONAL_STOPWORD_LANGUAGES': (list, ['indonesian', 'french', 'german', 'swedish']),
       # BM25/Hybrid search configuration
       'DEF_ENABLE_HYBRID_SEARCH': (bool, False),
@@ -249,6 +262,7 @@ class KnowledgeBase:
       'DEF_BM25_B': (float, 0.75),
       'DEF_BM25_MIN_TOKEN_LENGTH': (int, 2),
       'DEF_BM25_REBUILD_THRESHOLD': (int, 1000),
+      'DEF_BM25_MAX_RESULTS': (int, 1000),  # Maximum BM25 results to process (0 = unlimited)
       # Query enhancement configuration
       'DEF_ENABLE_QUERY_ENHANCEMENT': (bool, True),
       'DEF_QUERY_ENHANCEMENT_SYNONYMS': (bool, True),
@@ -317,7 +331,16 @@ class KnowledgeBase:
     """
     if kb_base.endswith('.cfg'):
       config = configparser.ConfigParser()
-      config.read(kb_base)
+      try:
+        config.read(kb_base)
+      except (configparser.Error, KeyError) as e:
+        logger.warning(f"Error reading config file '{kb_base}': {e}. Using defaults.")
+        # Create empty config with just DEFAULT section
+        config['DEFAULT'] = {}
+      
+      # Get DEFAULT section, create if missing
+      if 'DEFAULT' not in config:
+        config['DEFAULT'] = {}
       df = config['DEFAULT']
       
       # Load original config parameters
@@ -440,6 +463,14 @@ class KnowledgeBase:
       self.default_code_language = get_env('DEFAULT_CODE_LANGUAGE',
         algorithms_section.get('default_code_language', fallback=self.DEF_DEFAULT_CODE_LANGUAGE))
       
+      # Language detection parameters
+      self.language_detection_enabled = get_env('LANGUAGE_DETECTION_ENABLED',
+        algorithms_section.getboolean('language_detection_enabled', fallback=self.DEF_LANGUAGE_DETECTION_ENABLED), bool)
+      self.language_detection_confidence = get_env('LANGUAGE_DETECTION_CONFIDENCE',
+        algorithms_section.getfloat('language_detection_confidence', fallback=self.DEF_LANGUAGE_DETECTION_CONFIDENCE), float)
+      self.language_detection_sample_size = get_env('LANGUAGE_DETECTION_SAMPLE_SIZE',
+        algorithms_section.getint('language_detection_sample_size', fallback=self.DEF_LANGUAGE_DETECTION_SAMPLE_SIZE), int)
+      
       # Handle list parameter specially
       stopword_langs_str = algorithms_section.get('additional_stopword_languages', fallback=','.join(self.DEF_ADDITIONAL_STOPWORD_LANGUAGES))
       self.additional_stopword_languages = [lang.strip() for lang in stopword_langs_str.split(',') if lang.strip()]
@@ -457,6 +488,8 @@ class KnowledgeBase:
         algorithms_section.getint('bm25_min_token_length', fallback=self.DEF_BM25_MIN_TOKEN_LENGTH), int)
       self.bm25_rebuild_threshold = get_env('BM25_REBUILD_THRESHOLD',
         algorithms_section.getint('bm25_rebuild_threshold', fallback=self.DEF_BM25_REBUILD_THRESHOLD), int)
+      self.bm25_max_results = get_env('BM25_MAX_RESULTS',
+        algorithms_section.getint('bm25_max_results', fallback=self.DEF_BM25_MAX_RESULTS), int)
       
       # Query enhancement configuration
       self.enable_query_enhancement = get_env('ENABLE_QUERY_ENHANCEMENT',
@@ -487,6 +520,12 @@ class KnowledgeBase:
         algorithms_section.get('reranking_device', fallback=self.DEF_RERANKING_DEVICE), str)
       self.reranking_cache_size = get_env('RERANKING_CACHE_SIZE',
         algorithms_section.getint('reranking_cache_size', fallback=self.DEF_RERANKING_CACHE_SIZE), int)
+      
+      # Apply kwargs overrides after loading from config file
+      # This ensures priority: env vars > kwargs > config file > defaults
+      for key, value in kwargs.items():
+        if hasattr(self, key):
+          setattr(self, key, value)
     else:
       # Original configuration
       self.vector_model = kwargs.get('vector_model', self.DEF_VECTOR_MODEL)
@@ -547,6 +586,9 @@ class KnowledgeBase:
       self.entity_extraction_limit = kwargs.get('entity_extraction_limit', self.DEF_ENTITY_EXTRACTION_LIMIT)
       self.default_dir_permissions = kwargs.get('default_dir_permissions', self.DEF_DEFAULT_DIR_PERMISSIONS)
       self.default_code_language = kwargs.get('default_code_language', self.DEF_DEFAULT_CODE_LANGUAGE)
+      self.language_detection_enabled = kwargs.get('language_detection_enabled', self.DEF_LANGUAGE_DETECTION_ENABLED)
+      self.language_detection_confidence = kwargs.get('language_detection_confidence', self.DEF_LANGUAGE_DETECTION_CONFIDENCE)
+      self.language_detection_sample_size = kwargs.get('language_detection_sample_size', self.DEF_LANGUAGE_DETECTION_SAMPLE_SIZE)
       self.additional_stopword_languages = kwargs.get('additional_stopword_languages', self.DEF_ADDITIONAL_STOPWORD_LANGUAGES)
       
       # BM25/Hybrid search configuration

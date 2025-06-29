@@ -80,13 +80,8 @@ except:
   # Fall back if spacy model isn't installed
   nlp = None
 
-# Language codes mapping
+# Language codes mapping - Limited to languages with NLTK support that we use
 language_codes = {
-  'ar': 'arabic',
-  'az': 'azerbaijani',
-  'eu': 'basque',
-  'bn': 'bengali',
-  'ca': 'catalan',
   'zh': 'chinese',
   'da': 'danish',
   'nl': 'dutch',
@@ -94,24 +89,54 @@ language_codes = {
   'fi': 'finnish',
   'fr': 'french',
   'de': 'german',
-  'el': 'greek',
-  'he': 'hebrew',
-  'hi': 'hinglish',
-  'hu': 'hungarian',
   'id': 'indonesian',
   'it': 'italian',
-  'kk': 'kazakh',
-  'ne': 'nepali',
-  'no': 'norwegian',
   'pt': 'portuguese',
-  'ro': 'romanian',
-  'ru': 'russian',
-  'sl': 'slovene',
   'es': 'spanish',
-  'sv': 'swedish',
-  'tg': 'tajik',
-  'tr': 'turkish'
+  'sv': 'swedish'
 }
+
+# Reverse mapping: full name to ISO code
+language_names_to_codes = {v: k for k, v in language_codes.items()}
+
+def get_iso_code(language: str) -> str:
+  """
+  Convert language to ISO code.
+  
+  Args:
+      language: Either ISO code (e.g., 'en') or full name (e.g., 'english').
+      
+  Returns:
+      ISO code.
+      
+  Raises:
+      ValueError: If language is not recognized.
+  """
+  # If already an ISO code, return it
+  if language in language_codes:
+    return language
+  # If it's a full name, convert to ISO code
+  if language in language_names_to_codes:
+    return language_names_to_codes[language]
+  # Not recognized
+  raise ValueError(f"Unrecognized language: '{language}'. Use ISO 639-1 code (e.g., 'en') or full name (e.g., 'english').")
+
+def get_full_language_name(iso_code: str) -> str:
+  """
+  Convert ISO code to full language name for NLTK.
+  
+  Args:
+      iso_code: ISO 639-1 language code (e.g., 'en').
+      
+  Returns:
+      Full language name (e.g., 'english').
+      
+  Raises:
+      ValueError: If ISO code is not recognized.
+  """
+  if iso_code in language_codes:
+    return language_codes[iso_code]
+  raise ValueError(f"Unrecognized ISO code: '{iso_code}'")
 
 logger = get_logger(__name__)
 
@@ -291,9 +316,18 @@ def process_database(args: argparse.Namespace, logger) -> str:
   Returns:
       A status message indicating the number of files processed and skipped.
   """
-  # Set language for stopwords
-  language = args.language
-  logger.info(f"{language=}")
+  # Convert language to ISO code for storage
+  try:
+    iso_language = get_iso_code(args.language)
+  except ValueError as e:
+    return f"Error: {e}"
+  
+  logger.info(f"Input language: {args.language}, ISO code: {iso_language}")
+  
+  # Check if language detection is enabled
+  detect_language = getattr(args, 'detect_language', False)
+  if detect_language:
+    logger.info("Language detection enabled for individual files")
 
   # Get configuration file
   config_file = get_fq_cfg_filename(args.config_file)
@@ -319,18 +353,37 @@ def process_database(args: argparse.Namespace, logger) -> str:
 
   # Initialize stopwords with multiple languages
   Stop_Words = set()
-  # Always include the specified primary language
-  Stop_Words.update(stopwords.words(language))
+  # Convert ISO code to full name for NLTK stopwords
+  try:
+    full_language_name = get_full_language_name(iso_language)
+    Stop_Words.update(stopwords.words(full_language_name))
+  except LookupError:
+    error_msg = (f"NLTK stopwords not available for language '{full_language_name}' (ISO: {iso_language}). "
+                 f"Please install NLTK stopwords data:\n"
+                 f"  python -m nltk.downloader stopwords\n"
+                 f"Then verify '{full_language_name}' is included in the stopwords corpus.")
+    logger.error(error_msg)
+    return f"Error: {error_msg}"
   
   # Add additional language stopwords (configurable)
   additional_languages = getattr(kb, 'additional_stopword_languages', ['indonesian', 'french', 'german', 'swedish'])
   for lang in additional_languages:
-    if lang != language:  # Skip if same as primary language
-      try:
-        Stop_Words.update(stopwords.words(lang))
-      except:
-        if logger:
-          logger.warning(f"Failed to load stopwords for {lang}")
+    # Convert to full name if it's an ISO code
+    try:
+      if lang in language_codes:
+        full_lang = language_codes[lang]
+      else:
+        full_lang = lang  # Assume it's already a full name
+      
+      if full_lang != full_language_name:  # Skip if same as primary language
+        try:
+          Stop_Words.update(stopwords.words(full_lang))
+        except LookupError:
+          if logger:
+            logger.warning(f"Failed to load stopwords for {full_lang}")
+    except Exception as e:
+      if logger:
+        logger.warning(f"Error processing language {lang}: {e}")
 
   # Pre-scan to get actual total file count
   all_files = []
@@ -386,7 +439,7 @@ def process_database(args: argparse.Namespace, logger) -> str:
       splitter = init_text_splitter(kb, file_type)
       
       # Track if file was actually processed or skipped
-      if process_text_file(kb, pfile, splitter, Stop_Words, language, file_type, args.force):
+      if process_text_file(kb, pfile, splitter, Stop_Words, iso_language, file_type, args.force, detect_language):
         processed_count += 1
       
       filecount += 1
@@ -465,6 +518,11 @@ def connect_to_database(kb: KnowledgeBase) -> None:
         CREATE INDEX IF NOT EXISTS idx_sourcedoc_sid ON docs(sourcedoc, sid);
       ''')
       
+      # Composite index for embedding queries (embedded=0 AND embedtext != '')
+      kb.sql_cursor.execute('''
+        CREATE INDEX IF NOT EXISTS idx_embedded_embedtext ON docs(embedded, embedtext);
+      ''')
+      
       # Commit the index creation
       kb.sql_connection.commit()
       if logger:
@@ -541,7 +599,7 @@ def close_database(kb: KnowledgeBase) -> None:
 
 def process_text_file(kb: KnowledgeBase, sourcefile: str, splitter: Any,
                      Stop_Words: set, language: str, file_type: str = 'text', 
-                     force: bool = False) -> bool:
+                     force: bool = False, detect_language: bool = False) -> bool:
   """
   Process a text file, split it into chunks, and store in the database.
 
@@ -553,10 +611,14 @@ def process_text_file(kb: KnowledgeBase, sourcefile: str, splitter: Any,
       language: Current language code.
       file_type: Type of file being processed.
       force: Whether to force reprocessing of files already in the database.
+      detect_language: Whether to auto-detect language for this file.
       
   Returns:
       True if file was processed, False if skipped.
   """
+  # Store the original language for comparison
+  original_language = language
+  
   # Store full canonical absolute path instead of basename
   # This allows proper handling of files with same name in different directories
   sourcedoc_value = os.path.abspath(sourcefile)
@@ -634,29 +696,72 @@ def process_text_file(kb: KnowledgeBase, sourcefile: str, splitter: Any,
     logger.error(f"Failed to split chunks for {sourcefile}: {e}")
     return
 
-  # Check if language needs to be updated based on directory name
+  # Detect language if enabled
+  if detect_language:
+    from utils.language_detector import detect_file_language, should_skip_detection
+    
+    # Check if we should skip detection for this file type
+    skip_lang = should_skip_detection(sourcefile)
+    if skip_lang:
+      language = skip_lang
+      logger.info(f"Using language '{language}' based on file type for {sourcefile}")
+    else:
+      # Get configuration parameters
+      sample_size = getattr(kb, 'language_detection_sample_size', 3072)
+      min_confidence = getattr(kb, 'language_detection_confidence', 0.95)
+      
+      # Detect language
+      detected_lang, confidence = detect_file_language(
+        sourcefile, 
+        sample_size=sample_size,
+        min_confidence=min_confidence,
+        fallback_language=language
+      )
+      
+      if detected_lang != language:
+        language = detected_lang
+        logger.info(f"Detected language '{language}' (confidence: {confidence:.2f}) for {os.path.basename(sourcefile)}")
+  
+  # Check if language needs to be updated based on directory name (overrides detection)
   dirname = os.path.dirname(sourcefile)
   _, langkey, _, _ = split_filepath(dirname)
   if langkey in language_codes:
-    new_language = language_codes[langkey]
-    if new_language != language:
-      language = new_language
-      logger.info(f"stopwords {language=}")
+    # langkey is already an ISO code
+    if langkey != language:
+      language = langkey  # Update to new ISO code
+      logger.info(f"Overriding with language from directory: {language=}")
       
-      # Re-initialize stopwords with multiple languages
-      Stop_Words = set()
-      # Always include the new primary language
-      Stop_Words.update(stopwords.words(language))
-      
-      # Add additional language stopwords (use same config as before)
-      additional_languages = getattr(kb, 'additional_stopword_languages', ['indonesian', 'french', 'german', 'swedish'])
-      for lang in additional_languages:
-        if lang != language:  # Skip if same as primary language
+  
+  # If language changed, re-initialize stopwords
+  if language != original_language:
+    Stop_Words = set()
+    # Convert ISO code to full name for NLTK
+    try:
+      full_lang_name = get_full_language_name(language)
+      Stop_Words.update(stopwords.words(full_lang_name))
+    except LookupError:
+      logger.warning(f"NLTK stopwords not available for language '{full_lang_name}' (ISO: {language})")
+      # Continue without stopwords for this language
+    
+    # Add additional language stopwords (use same config as before)
+    additional_languages = getattr(kb, 'additional_stopword_languages', ['indonesian', 'french', 'german', 'swedish'])
+    for lang in additional_languages:
+      # Convert to full name if it's an ISO code
+      try:
+        if lang in language_codes:
+          full_lang = language_codes[lang]
+        else:
+          full_lang = lang  # Assume it's already a full name
+        
+        if full_lang != full_lang_name:  # Skip if same as primary language
           try:
-            Stop_Words.update(stopwords.words(lang))
-          except:
+            Stop_Words.update(stopwords.words(full_lang))
+          except LookupError:
             if logger:
-              logger.warning(f"Failed to load stopwords for {lang}")
+              logger.warning(f"Failed to load stopwords for {full_lang}")
+      except Exception as e:
+        if logger:
+          logger.warning(f"Error processing language {lang}: {e}")
 
   # Delete any existing entries with this file path
   kb.sql_cursor.execute(

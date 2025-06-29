@@ -210,6 +210,18 @@ self.my_parameter = get_env('MY_PARAMETER',
   section.getint('my_parameter', fallback=self.DEF_MY_PARAMETER), int)
 ```
 
+### BM25 Result Limiting
+
+To prevent memory exhaustion from large BM25 result sets:
+
+```ini
+[ALGORITHMS]
+# Maximum BM25 results to process (0 = unlimited)
+bm25_max_results = 1000
+```
+
+This parameter limits the number of BM25 search results to prevent crashes when processing large knowledge bases. The limiting is applied efficiently using heap-based selection to maintain the highest-scoring results.
+
 ### Cache Thread Pool Configuration
 
 The system includes a dedicated thread pool for cache operations to prevent resource leaks:
@@ -423,7 +435,7 @@ QUERY_MODEL         # Override query model
 - `[API]`: Rate limiting and concurrency
 - `[LIMITS]`: Resource constraints
 - `[PERFORMANCE]`: Optimization parameters
-- `[ALGORITHMS]`: Processing thresholds
+- `[ALGORITHMS]`: Processing thresholds and BM25 settings
 
 ### Model Categories
 - `llm`: Language models for responses

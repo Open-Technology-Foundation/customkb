@@ -786,6 +786,38 @@ async def process_query_async(args: argparse.Namespace, logger) -> str:
 
   # Load FAISS index
   index = faiss.read_index(kb.knowledge_base_vector)
+  
+  # Move index to GPU if available and index size permits
+  ngpus = faiss.get_num_gpus()
+  use_gpu = False
+  
+  if ngpus > 0:
+    # Check index size
+    index_size_mb = os.path.getsize(kb.knowledge_base_vector) / (1024 * 1024)
+    logger.info(f"FAISS index size: {index_size_mb:.1f} MB")
+    
+    # Only use GPU for indexes that fit comfortably (leave 4GB buffer for temp memory)
+    gpu_memory_limit_mb = 19 * 1024  # 19GB limit for 23GB GPU
+    
+    if index_size_mb < gpu_memory_limit_mb:
+      try:
+        logger.info(f"GPU detected, moving FAISS index to GPU (found {ngpus} GPU(s))")
+        res = faiss.StandardGpuResources()
+        # Configure GPU resources
+        co = faiss.GpuClonerOptions()
+        co.useFloat16 = getattr(kb, 'faiss_gpu_use_float16', True)
+        # Move index to GPU
+        index = faiss.index_cpu_to_gpu(res, 0, index, co)
+        logger.info("FAISS index loaded on GPU")
+        use_gpu = True
+      except RuntimeError as e:
+        logger.warning(f"Failed to load index on GPU, falling back to CPU: {e}")
+        # Index remains on CPU
+    else:
+      logger.info(f"Index too large for GPU ({index_size_mb:.1f} MB > {gpu_memory_limit_mb} MB limit), using CPU")
+  
+  if not use_gpu:
+    logger.info("Using CPU for FAISS search")
 
   # Generate query embedding asynchronously
   query_vector = await get_query_embedding(query_text, kb.vector_model, kb)

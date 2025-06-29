@@ -817,7 +817,7 @@ class TestBM25TokenizationPerformance:
     """Test performance of bulk tokenization operations."""
     # Generate bulk content for testing
     bulk_content = []
-    for i in range(5000):
+    for i in range(1000):  # Reduced from 5000 to prevent memory issues
       content = f"Document {i} about machine learning, deep learning, and artificial intelligence applications."
       bulk_content.append(content)
     

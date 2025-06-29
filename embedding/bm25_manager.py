@@ -162,14 +162,15 @@ def rebuild_bm25_if_needed(kb: 'KnowledgeBase') -> bool:
     logger.error(f"Error checking BM25 rebuild status: {e}")
     return False
 
-def get_bm25_scores(kb: 'KnowledgeBase', query_text: str, bm25_data: Dict[str, Any]) -> List[Tuple[int, float]]:
+def get_bm25_scores(kb: 'KnowledgeBase', query_text: str, bm25_data: Dict[str, Any], max_results: int = None) -> List[Tuple[int, float]]:
   """
-  Get BM25 scores for a query.
+  Get BM25 scores for a query with result limiting.
   
   Args:
       kb: The KnowledgeBase instance.
       query_text: The query text.
       bm25_data: Loaded BM25 index data.
+      max_results: Maximum results to return (overrides KB config).
       
   Returns:
       List of (doc_id, score) tuples sorted by score descending.
@@ -190,9 +191,33 @@ def get_bm25_scores(kb: 'KnowledgeBase', query_text: str, bm25_data: Dict[str, A
     
     scores = bm25.get_scores(query_tokens)
     
-    # Combine doc_ids with scores and sort by score descending
-    doc_scores = [(doc_id, float(score)) for doc_id, score in zip(doc_ids, scores) if score > 0]
-    doc_scores.sort(key=lambda x: x[1], reverse=True)
+    # Get max results limit from parameter or config
+    limit = max_results if max_results is not None else getattr(kb, 'bm25_max_results', 1000)
+    
+    # Apply limit efficiently for large result sets
+    if limit > 0:  # 0 means unlimited
+      # Use heapq for efficient top-k selection
+      import heapq
+      
+      # Find indices of positive scores
+      positive_scores = [(i, float(score)) for i, score in enumerate(scores) if score > 0]
+      
+      if len(positive_scores) > limit:
+        # Get top k results efficiently
+        top_indices = heapq.nlargest(limit, positive_scores, key=lambda x: x[1])
+        doc_scores = [(doc_ids[i], score) for i, score in top_indices]
+        doc_scores.sort(key=lambda x: x[1], reverse=True)
+        
+        logger.info(f"BM25 results limited from {len(positive_scores)} to {limit} "
+                   f"(index size: {len(doc_ids)}, query: '{query_text[:30]}...')")
+      else:
+        # All positive scores fit within limit
+        doc_scores = [(doc_ids[i], score) for i, score in positive_scores]
+        doc_scores.sort(key=lambda x: x[1], reverse=True)
+    else:
+      # No limit - return all positive scores
+      doc_scores = [(doc_id, float(score)) for doc_id, score in zip(doc_ids, scores) if score > 0]
+      doc_scores.sort(key=lambda x: x[1], reverse=True)
     
     logger.debug(f"BM25 search returned {len(doc_scores)} results for query: {query_text[:50]}...")
     return doc_scores
