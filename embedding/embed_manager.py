@@ -69,6 +69,8 @@ class CacheThreadManager:
     self._memory_cache = {}
     self._memory_cache_keys = []
     self._memory_cache_size = 10000  # Default size
+    self._max_memory_mb = 500  # Default 500MB limit for cache
+    self._embedding_size_bytes = {}  # Track size of each embedding
     
     # Performance monitoring
     self._metrics = {
@@ -76,7 +78,8 @@ class CacheThreadManager:
       'cache_misses': 0,
       'cache_adds': 0,
       'cache_evictions': 0,
-      'thread_pool_tasks': 0
+      'thread_pool_tasks': 0,
+      'memory_usage_mb': 0.0
     }
     
   def _ensure_executor(self):
@@ -112,28 +115,47 @@ class CacheThreadManager:
     return None
   
   def add_to_memory_cache(self, cache_key: str, embedding: List[float], kb=None):
-    """Thread-safe addition to memory cache with LRU eviction."""
+    """Thread-safe addition to memory cache with LRU eviction based on memory usage."""
     with self._lock:
       # Configure cache size from KB config if available
       cache_size = getattr(kb, 'memory_cache_size', self._memory_cache_size) if kb else self._memory_cache_size
+      memory_limit_mb = getattr(kb, 'cache_memory_limit_mb', self._max_memory_mb) if kb else self._max_memory_mb
       
-      # Remove oldest entries if cache is full
+      # Calculate embedding size (4 bytes per float)
+      embedding_size = len(embedding) * 4
+      self._embedding_size_bytes[cache_key] = embedding_size
+      
+      # Calculate current memory usage
+      current_memory_bytes = sum(self._embedding_size_bytes.get(k, 0) 
+                                for k in self._memory_cache.keys())
+      current_memory_mb = current_memory_bytes / (1024 * 1024)
+      
+      # Evict based on memory limit first, then count limit
       evictions = 0
-      while len(self._memory_cache_keys) >= cache_size:
+      while (current_memory_mb + (embedding_size / 1024 / 1024) > memory_limit_mb or 
+             len(self._memory_cache_keys) >= cache_size):
+        if not self._memory_cache_keys:
+          break
         oldest_key = self._memory_cache_keys.pop(0)
         if oldest_key in self._memory_cache:
           del self._memory_cache[oldest_key]
+          if oldest_key in self._embedding_size_bytes:
+            current_memory_bytes -= self._embedding_size_bytes[oldest_key]
+            del self._embedding_size_bytes[oldest_key]
+          current_memory_mb = current_memory_bytes / (1024 * 1024)
           evictions += 1
       
       # Track metrics
       self._metrics['cache_adds'] += 1
       self._metrics['cache_evictions'] += evictions
+      self._metrics['memory_usage_mb'] = current_memory_mb + (embedding_size / 1024 / 1024)
       
       # Add to memory cache
       self._memory_cache[cache_key] = embedding
       self._memory_cache_keys.append(cache_key)
   
-  def configure(self, max_workers: int = None, memory_cache_size: int = None):
+  def configure(self, max_workers: int = None, memory_cache_size: int = None, 
+                memory_limit_mb: int = None):
     """Configure the cache manager."""
     with self._lock:
       if max_workers is not None and max_workers != self._max_workers:
@@ -145,6 +167,9 @@ class CacheThreadManager:
       
       if memory_cache_size is not None:
         self._memory_cache_size = memory_cache_size
+      
+      if memory_limit_mb is not None:
+        self._max_memory_mb = memory_limit_mb
   
   def get_metrics(self) -> Dict[str, Any]:
     """Get performance metrics for the cache manager."""
@@ -261,10 +286,12 @@ def configure_cache_manager(kb: 'KnowledgeBase') -> None:
   """
   cache_thread_pool_size = getattr(kb, 'cache_thread_pool_size', 4)
   memory_cache_size = getattr(kb, 'memory_cache_size', 10000)
+  cache_memory_limit_mb = getattr(kb, 'cache_memory_limit_mb', 500)
   
   cache_manager.configure(
     max_workers=cache_thread_pool_size,
-    memory_cache_size=memory_cache_size
+    memory_cache_size=memory_cache_size,
+    memory_limit_mb=cache_memory_limit_mb
   )
 
 def get_cache_key(text: str, model: str) -> str:
@@ -748,7 +775,22 @@ def process_embeddings(args: argparse.Namespace, logger) -> str:
   # Initialize or load FAISS index
   if os.path.exists(kb.knowledge_base_vector):
     logger.info(f'Opening existing {kb.knowledge_base_vector} embeddings.')
-    index = faiss.read_index(kb.knowledge_base_vector)
+    
+    # Check if we should use memory mapping for large indexes
+    use_mmap = getattr(kb, 'use_memory_mapped_faiss', False)
+    file_size_mb = os.path.getsize(kb.knowledge_base_vector) / (1024 * 1024)
+    
+    # Auto-enable memory mapping for files over 1GB
+    if not use_mmap and file_size_mb > 1024:
+      logger.warning(f"Large index file ({file_size_mb:.1f}MB). Consider enabling memory-mapped FAISS.")
+    
+    if use_mmap:
+      logger.info(f"Using memory-mapped FAISS for {file_size_mb:.1f}MB index")
+      # Create IO flags for memory mapping
+      io_flags = faiss.IO_FLAG_MMAP | faiss.IO_FLAG_READ_ONLY
+      index = faiss.read_index(kb.knowledge_base_vector, io_flags)
+    else:
+      index = faiss.read_index(kb.knowledge_base_vector)
   else:
     logger.info(f'Creating new {kb.knowledge_base_vector} embeddings file.')
     # Get embedding dimensions from a sample or from cache

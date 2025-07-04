@@ -185,6 +185,83 @@ customkb edit <config>
 ```
 Opens the configuration file in your default editor.
 
+#### `optimize` - Performance Optimization
+```bash
+customkb optimize [config] [options]
+```
+Automatically optimizes knowledge base performance based on system resources.
+
+**Options:**
+- `--dry-run`: Preview changes without applying them
+- `--analyze`: Show KB size analysis and recommendations
+- `--show-tiers`: Display optimization settings for all memory tiers
+- `--memory-gb N`: Override system memory detection
+
+**Features:**
+- Detects system memory and applies tier-based optimizations
+- Creates missing SQLite indexes for faster queries
+- Backs up configuration files before changes
+- Handles directory name conflicts intelligently
+
+**Examples:**
+```bash
+# Show all optimization tiers
+customkb optimize --show-tiers
+
+# Analyze all KBs
+customkb optimize --analyze
+
+# Preview changes for a specific KB
+customkb optimize myproject --dry-run
+
+# Apply optimizations
+customkb optimize myproject
+
+# Optimize all KBs in VECTORDBS
+customkb optimize
+```
+
+#### `verify-indexes` - Check Database Health
+```bash
+customkb verify-indexes <config>
+```
+Verifies that all performance-critical indexes exist in the database.
+
+**Expected Indexes:**
+- `idx_embedded`: Filters embedded vs non-embedded documents
+- `idx_embedded_embedtext`: Speeds up embedded text queries
+- `idx_keyphrase_processed`: Enables fast keyphrase searches
+- `idx_sourcedoc`: Filters by source document
+- `idx_sourcedoc_sid`: Compound queries on source and section
+
+**Example:**
+```bash
+customkb verify-indexes myproject
+# Output shows which indexes are present/missing
+```
+
+#### `bm25` - Build Hybrid Search Index
+```bash
+customkb bm25 <config> [options]
+```
+Builds or rebuilds the BM25 index for keyword-based hybrid search.
+
+**Options:**
+- `--force`: Force rebuild even if index exists
+
+**Requirements:**
+- Set `enable_hybrid_search=true` in `[ALGORITHMS]` section
+- For older databases, run `upgrade_bm25_tokens.py` first
+
+**Example:**
+```bash
+# Build BM25 index
+customkb bm25 myproject
+
+# Force rebuild
+customkb bm25 myproject --force
+```
+
 #### `help` - Show Usage
 ```bash
 customkb help
@@ -462,6 +539,84 @@ print(context)
 customkb query myproject.cfg "Python code examples" --context-only | \
   grep -A 5 -B 5 "```python"
 ```
+
+## 🚀 Performance Optimization
+
+CustomKB automatically optimizes performance based on available system resources. The `optimize` command applies tier-based settings:
+
+### Memory Tiers
+
+#### Low Memory Systems (<16GB)
+- **Use Case**: Development machines, small VMs
+- **Settings**: Conservative to prevent memory exhaustion
+- **Features**: Basic search functionality, limited caching
+- **Example Settings**:
+  ```ini
+  memory_cache_size = 50000
+  embedding_batch_size = 375
+  reference_batch_size = 15
+  enable_hybrid_search = false
+  ```
+
+#### Medium Memory Systems (16-64GB)
+- **Use Case**: Standard production servers
+- **Settings**: Balanced performance and resource usage
+- **Features**: Good query performance, moderate caching
+- **Example Settings**:
+  ```ini
+  memory_cache_size = 100000
+  embedding_batch_size = 562
+  reference_batch_size = 22
+  enable_hybrid_search = false
+  ```
+
+#### High Memory Systems (64-128GB)
+- **Use Case**: Dedicated KB servers, high-traffic applications
+- **Settings**: High performance with extensive caching
+- **Features**: Hybrid search enabled, large batch processing
+- **Example Settings**:
+  ```ini
+  memory_cache_size = 150000
+  embedding_batch_size = 750
+  reference_batch_size = 30
+  enable_hybrid_search = true
+  ```
+
+#### Very High Memory Systems (>128GB)
+- **Use Case**: Enterprise deployments, ML workstations
+- **Settings**: Maximum performance, all features enabled
+- **Features**: Full GPU acceleration, maximum concurrency
+- **Example Settings**:
+  ```ini
+  memory_cache_size = 200000
+  embedding_batch_size = 1125
+  reference_batch_size = 45
+  enable_hybrid_search = true
+  ```
+
+### Optimization Best Practices
+
+1. **Run optimization after installation**:
+   ```bash
+   customkb optimize --analyze  # See current state
+   customkb optimize           # Apply to all KBs
+   ```
+
+2. **Verify database health**:
+   ```bash
+   customkb verify-indexes myproject
+   ```
+
+3. **Monitor performance**:
+   - Check logs for processing times
+   - Use `--analyze` to track KB growth
+   - Adjust settings based on usage patterns
+
+4. **Container deployments**:
+   ```bash
+   # Override detection for container limits
+   customkb optimize --memory-gb 8
+   ```
 
 ## 🛠️ Troubleshooting
 

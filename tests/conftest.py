@@ -8,6 +8,8 @@ import os
 import sqlite3
 import shutil
 import sys
+import gc
+import psutil
 from pathlib import Path
 from unittest.mock import Mock, patch, AsyncMock
 from typing import Dict, Any, List
@@ -17,6 +19,52 @@ project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 from tests.fixtures.mock_data import MockDataGenerator, TestDataManager
+from utils.resource_manager import ResourceGuard, cleanup_caches
+
+
+@pytest.fixture(scope="session", autouse=True)
+def session_resource_guard():
+  """
+  Session-level resource guard to monitor memory usage across all tests.
+  """
+  # Set conservative memory limit for tests (2GB)
+  guard = ResourceGuard(memory_limit_gb=2.0)
+  
+  # Register cleanup handlers
+  guard.register_cleanup("caches", cleanup_caches)
+  guard.register_cleanup("gc", lambda: gc.collect())
+  
+  # Log initial state
+  initial_memory = psutil.Process().memory_info().rss / 1024 / 1024
+  print(f"\nTest session starting. Initial memory: {initial_memory:.1f}MB")
+  
+  yield guard
+  
+  # Final cleanup
+  guard.force_cleanup()
+  gc.collect()
+  
+  final_memory = psutil.Process().memory_info().rss / 1024 / 1024
+  print(f"\nTest session ending. Final memory: {final_memory:.1f}MB "
+        f"(delta: {final_memory - initial_memory:+.1f}MB)")
+
+
+@pytest.fixture(autouse=True)
+def test_cleanup():
+  """
+  Automatic cleanup after each test to prevent memory accumulation.
+  """
+  yield
+  
+  # Force garbage collection after each test
+  gc.collect()
+  
+  # Clear any matplotlib figures
+  try:
+    import matplotlib.pyplot as plt
+    plt.close('all')
+  except:
+    pass
 
 
 @pytest.fixture(scope="session")
@@ -33,10 +81,15 @@ def mock_env_vars():
 
 @pytest.fixture
 def temp_data_manager():
-  """Provide a test data manager for temporary files."""
+  """Provide a test data manager for temporary files with enhanced cleanup."""
   manager = TestDataManager()
-  yield manager
-  manager.cleanup()
+  try:
+    yield manager
+  finally:
+    # Ensure cleanup happens even if test fails
+    manager.cleanup()
+    # Extra cleanup for any missed temp files
+    gc.collect()
 
 
 @pytest.fixture
@@ -85,11 +138,13 @@ def temp_database(temp_kb_directory, sample_texts):
   """Create a temporary SQLite database with sample data (includes BM25 columns)."""
   db_path = os.path.join(temp_kb_directory, "test_kb.db")
   
-  conn = sqlite3.connect(db_path)
-  cursor = conn.cursor()
-  
-  # Create table with BM25 columns for backward compatibility
-  cursor.execute('''
+  conn = None
+  try:
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+    
+    # Create table with BM25 columns for backward compatibility
+    cursor.execute('''
     CREATE TABLE docs (
       id INTEGER PRIMARY KEY,
       sid INTEGER,
@@ -103,24 +158,26 @@ def temp_database(temp_kb_directory, sample_texts):
       bm25_tokens TEXT,
       doc_length INTEGER DEFAULT 0
     )
-  ''')
-  
-  # Insert sample data
-  mock_gen = MockDataGenerator()
-  rows = mock_gen.create_database_rows(sample_texts[:5])  # Use first 5 texts
-  
-  for row in rows:
-    # Extend row to include BM25 columns (empty by default)
-    # Row format: (id, sid, sourcedoc, originaltext, embedtext, embedded, language, metadata)
-    # Need to add: keyphrase_processed, bm25_tokens, doc_length
-    extended_row = row + (0, "", 0)  # keyphrase_processed, bm25_tokens, doc_length
-    cursor.execute(
-      "INSERT INTO docs (id, sid, sourcedoc, originaltext, embedtext, embedded, language, metadata, keyphrase_processed, bm25_tokens, doc_length) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
-      extended_row
-    )
-  
-  conn.commit()
-  conn.close()
+    ''')
+    
+    # Insert sample data
+    mock_gen = MockDataGenerator()
+    rows = mock_gen.create_database_rows(sample_texts[:5])  # Use first 5 texts
+    
+    for row in rows:
+      # Extend row to include BM25 columns (empty by default)
+      # Row format: (id, sid, sourcedoc, originaltext, embedtext, embedded, language, metadata)
+      # Need to add: keyphrase_processed, bm25_tokens, doc_length
+      extended_row = row + (0, "", 0)  # keyphrase_processed, bm25_tokens, doc_length
+      cursor.execute(
+        "INSERT INTO docs (id, sid, sourcedoc, originaltext, embedtext, embedded, language, metadata, keyphrase_processed, bm25_tokens, doc_length) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+        extended_row
+      )
+    
+    conn.commit()
+  finally:
+    if conn:
+      conn.close()
   
   return db_path
 
@@ -130,36 +187,40 @@ def temp_legacy_database(temp_kb_directory, sample_texts):
   """Create a temporary SQLite database with legacy schema (no BM25 columns)."""
   db_path = os.path.join(temp_kb_directory, "legacy_test_kb.db")
   
-  conn = sqlite3.connect(db_path)
-  cursor = conn.cursor()
+  conn = None
+  try:
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
   
-  # Create table with legacy schema
-  cursor.execute('''
-    CREATE TABLE docs (
-      id INTEGER PRIMARY KEY,
-      sid INTEGER,
-      sourcedoc VARCHAR(255),
-      originaltext TEXT,
-      embedtext TEXT,
-      embedded INTEGER DEFAULT 0,
-      language TEXT default "en",
-      metadata TEXT,
-      keyphrase_processed INTEGER default 0
-    )
-  ''')
-  
-  # Insert sample data
-  mock_gen = MockDataGenerator()
-  rows = mock_gen.create_database_rows(sample_texts[:5])  # Use first 5 texts
-  
-  for row in rows:
-    cursor.execute(
-      "INSERT INTO docs (id, sid, sourcedoc, originaltext, embedtext, embedded, language, metadata) VALUES (?,?,?,?,?,?,?,?)",
-      row
-    )
-  
-  conn.commit()
-  conn.close()
+    # Create table with legacy schema
+    cursor.execute('''
+      CREATE TABLE docs (
+        id INTEGER PRIMARY KEY,
+        sid INTEGER,
+        sourcedoc VARCHAR(255),
+        originaltext TEXT,
+        embedtext TEXT,
+        embedded INTEGER DEFAULT 0,
+        language TEXT default "en",
+        metadata TEXT,
+        keyphrase_processed INTEGER default 0
+      )
+    ''')
+    
+    # Insert sample data
+    mock_gen = MockDataGenerator()
+    rows = mock_gen.create_database_rows(sample_texts[:5])  # Use first 5 texts
+    
+    for row in rows:
+      cursor.execute(
+        "INSERT INTO docs (id, sid, sourcedoc, originaltext, embedtext, embedded, language, metadata) VALUES (?,?,?,?,?,?,?,?)",
+        row
+      )
+    
+    conn.commit()
+  finally:
+    if conn:
+      conn.close()
   
   return db_path
 

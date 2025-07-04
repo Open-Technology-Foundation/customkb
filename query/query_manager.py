@@ -785,7 +785,16 @@ async def process_query_async(args: argparse.Namespace, logger) -> str:
     return f"Error: Vector Database {kb.knowledge_base_vector} does not yet exist!"
 
   # Load FAISS index
-  index = faiss.read_index(kb.knowledge_base_vector)
+  # Check if we should use memory mapping for large indexes
+  use_mmap = getattr(kb, 'use_memory_mapped_faiss', False)
+  file_size_mb = os.path.getsize(kb.knowledge_base_vector) / (1024 * 1024)
+  
+  if use_mmap or file_size_mb > 1024:  # Auto-enable for files over 1GB
+    logger.debug(f"Using memory-mapped FAISS for {file_size_mb:.1f}MB index")
+    io_flags = faiss.IO_FLAG_MMAP | faiss.IO_FLAG_READ_ONLY
+    index = faiss.read_index(kb.knowledge_base_vector, io_flags)
+  else:
+    index = faiss.read_index(kb.knowledge_base_vector)
   
   # Move index to GPU if available and index size permits
   ngpus = faiss.get_num_gpus()

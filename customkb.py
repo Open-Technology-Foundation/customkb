@@ -83,7 +83,48 @@ customkb <command> <config_file> [options]
    ```
    - Opens the configuration file in system editor
 
-5. **help**: Display usage information
+5. **optimize**: Optimize knowledge base performance
+   ```
+   customkb optimize [config_file] [options]
+   ```
+   - **Config**: Optional KB config file or directory (default: all KBs in VECTORDBS)
+   - **Options**:
+     - `--dry-run`: Show what would be changed without modifying files
+     - `--analyze`: Analyze KB sizes and show optimization recommendations
+     - `--show-tiers`: Display optimization settings for all memory tiers
+     - `--memory-gb`: Override system memory detection (in GB)
+   - **Features**:
+     - Automatically detects system memory and applies tier-based optimizations
+     - Creates missing database indexes for improved query performance
+     - Backs up configuration files before making changes
+     - Adjusts settings for batch sizes, cache sizes, thread pools, and more
+
+6. **verify-indexes**: Verify database indexes
+   ```
+   customkb verify-indexes <config_file>
+   ```
+   - **Config**: Knowledge base configuration file
+   - **Features**:
+     - Checks for all expected SQLite indexes in the database
+     - Reports missing indexes that could impact performance
+     - Handles both old (`docs`) and new (`chunks`) table schemas
+     - Suggests running `optimize` to create missing indexes
+
+7. **bm25**: Build or rebuild BM25 index for hybrid search
+   ```
+   customkb bm25 <config_file> [options]
+   ```
+   - **Config**: Knowledge base configuration file
+   - **Options**:
+     - `--force`: Force rebuild even if index already exists
+   - **Requirements**:
+     - `enable_hybrid_search=true` must be set in configuration
+     - Database must have BM25 tokens (use `upgrade_bm25_tokens.py` for older DBs)
+   - **Features**:
+     - Enables keyword-based search alongside semantic search
+     - Creates `.bm25` index file alongside the FAISS index
+
+8. **help**: Display usage information
    ```
    customkb help
    ```
@@ -129,6 +170,8 @@ from embedding.embed_manager import process_embeddings
 from query.query_manager import process_query
 from models.model_manager import get_canonical_model
 from utils.text_utils import get_env
+from utils.optimization_manager import process_optimize
+from database.index_manager import process_verify_indexes
 
 # Initialize module logger
 logger = None
@@ -367,6 +410,32 @@ def main() -> None:
   bm25_parser.add_argument('config_file', help='Knowledge base configuration file')
   bm25_parser.add_argument('--force', action='store_true', help='Force rebuild even if index exists')
 
+  # OPTIMIZE
+  optimize_parser = subparsers.add_parser(
+    'optimize',
+    description='Optimize CustomKB performance for production use',
+  )
+  optimize_parser.add_argument('config_file', nargs='?', help='Specific KB config file or directory to optimize (default: all KBs in VECTORDBS)')
+  optimize_parser.add_argument('--dry-run', action='store_true', help='Show what would be changed without modifying files')
+  optimize_parser.add_argument('--analyze', action='store_true', help='Analyze KB sizes and show optimization recommendations')
+  optimize_parser.add_argument('--show-tiers', action='store_true', help='Show optimization settings for all memory tiers')
+  optimize_parser.add_argument('--memory-gb', type=float, help='Override system memory detection (in GB)')
+  optimize_parser.add_argument('-q', '--quiet', dest='verbose', action='store_false', help='Disable verbose output')
+  optimize_parser.add_argument('-v', '--verbose', dest='verbose', action='store_true', help='Enable verbose output (default)')
+  optimize_parser.add_argument('-d', '--debug', action='store_true', help='Enable debug output')
+  optimize_parser.set_defaults(verbose=True)
+
+  # VERIFY-INDEXES
+  verify_parser = subparsers.add_parser(
+    'verify-indexes',
+    description='Verify that all expected indexes exist in the knowledge base database',
+  )
+  verify_parser.add_argument('config_file', help='Knowledge base configuration file')
+  verify_parser.add_argument('-q', '--quiet', dest='verbose', action='store_false', help='Disable verbose output')
+  verify_parser.add_argument('-v', '--verbose', dest='verbose', action='store_true', help='Enable verbose output (default)')
+  verify_parser.add_argument('-d', '--debug', action='store_true', help='Enable debug output')
+  verify_parser.set_defaults(verbose=True)
+
   # HELP
   help_parser = subparsers.add_parser(
     'help',
@@ -396,10 +465,47 @@ def main() -> None:
       version_info = f"CustomKB {get_version(args.build)}"
       print(version_info)
     sys.exit(0)
+  
+  # Handle optimize command when no config_file is provided
+  if args.command == 'optimize' and not args.config_file:
+    # Setup basic console logging for optimize command
+    import logging
+    logging.basicConfig(
+      level=logging.DEBUG if args.debug else (logging.INFO if args.verbose else logging.WARNING),
+      format='%(asctime)s - %(levelname)s - %(message)s',
+      datefmt='%Y-%m-%d %H:%M:%S'
+    )
+    logger = logging.getLogger(__name__)
+    
+    logger.debug(f"Optimize command with no config_file")
+    logger.debug(f"Args: {args}")
+    
+    # Set target from config_file for the optimization manager
+    args.target = args.config_file
+    result = process_optimize(args, logger)
+    print(result)
+    sys.exit(0)
 
   # For all other commands, setup KB-specific logging with fail-fast behavior
   verbose = getattr(args, 'verbose', True)
   debug = getattr(args, 'debug', False)
+  
+  # For optimize command with a config file, handle it specially
+  if args.command == 'optimize' and args.config_file:
+    # Setup basic console logging for optimize command
+    import logging
+    logging.basicConfig(
+      level=logging.DEBUG if debug else (logging.INFO if verbose else logging.WARNING),
+      format='%(asctime)s - %(levelname)s - %(message)s',
+      datefmt='%Y-%m-%d %H:%M:%S'
+    )
+    logger = logging.getLogger(__name__)
+    
+    # Set target from config_file for the optimization manager
+    args.target = args.config_file
+    result = process_optimize(args, logger)
+    print(result)
+    sys.exit(0)
   
   # Extract KB info from config file for logging setup
   from config.config_manager import get_fq_cfg_filename
@@ -465,6 +571,10 @@ def main() -> None:
       result = rebuild_bm25_index(args, logger)
       print(result)  # Keep print for user output
       logger.debug(f"BM25 command completed")
+    elif args.command == 'verify-indexes':
+      result = process_verify_indexes(args, logger)
+      print(result)  # Keep print for user output
+      logger.debug(f"Verify-indexes command completed")
     else:
       logger.error(f'Unknown command: {args.command}')
       sys.exit(1)

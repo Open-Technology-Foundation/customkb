@@ -1,1 +1,0 @@
-../push-to-okusi3.sh

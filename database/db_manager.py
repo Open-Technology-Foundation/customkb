@@ -28,6 +28,7 @@ import sqlite3
 import argparse
 import re
 from typing import List, Optional, Dict, Any, Tuple, Set
+from contextlib import contextmanager
 
 from utils.logging_utils import setup_logging, get_logger, elapsed_time, time_to_finish
 from utils.text_utils import get_files, split_filepath, clean_text, enhanced_clean_text, nlp
@@ -596,6 +597,68 @@ def close_database(kb: KnowledgeBase) -> None:
       kb.sql_connection = None
     except Exception as e:
       logger.error(f"Error closing database connection: {e}")
+
+
+@contextmanager
+def database_connection(kb: KnowledgeBase):
+  """
+  Context manager for safe database connections.
+  
+  Ensures database connections are properly closed even if errors occur.
+  
+  Args:
+      kb: The KnowledgeBase instance.
+      
+  Yields:
+      The KnowledgeBase instance with active database connection.
+      
+  Example:
+      >>> with database_connection(kb) as kb:
+      ...     kb.sql_cursor.execute("SELECT COUNT(*) FROM docs")
+      ...     count = kb.sql_cursor.fetchone()[0]
+  """
+  # Save existing connection state
+  had_connection = hasattr(kb, 'sql_connection') and kb.sql_connection is not None
+  
+  try:
+    if not had_connection:
+      connect_to_database(kb)
+    yield kb
+  finally:
+    # Only close if we opened it
+    if not had_connection and hasattr(kb, 'sql_connection') and kb.sql_connection:
+      close_database(kb)
+
+
+@contextmanager
+def sqlite_connection(db_path: str):
+  """
+  Context manager for direct SQLite connections.
+  
+  Provides a safe way to work with SQLite databases ensuring proper cleanup.
+  
+  Args:
+      db_path: Path to the SQLite database file.
+      
+  Yields:
+      Tuple of (connection, cursor).
+      
+  Example:
+      >>> with sqlite_connection('mydb.db') as (conn, cursor):
+      ...     cursor.execute("SELECT COUNT(*) FROM mytable")
+      ...     count = cursor.fetchone()[0]
+  """
+  conn = None
+  cursor = None
+  try:
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+    yield conn, cursor
+  finally:
+    if cursor:
+      cursor.close()
+    if conn:
+      conn.close()
 
 def process_text_file(kb: KnowledgeBase, sourcefile: str, splitter: Any,
                      Stop_Words: set, language: str, file_type: str = 'text', 

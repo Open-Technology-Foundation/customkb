@@ -35,6 +35,101 @@ Always activate the virtual environment first:
 source .venv/bin/activate
 ```
 
+### Performance Optimization
+
+CustomKB includes powerful optimization and maintenance commands to ensure peak performance:
+
+#### Optimize Command
+
+The `optimize` command automatically tunes configurations based on system resources and creates missing database indexes:
+
+```bash
+# Show all optimization tiers and their settings
+customkb optimize --show-tiers
+
+# Analyze all KBs and show size/performance recommendations
+customkb optimize --analyze
+
+# Preview optimizations for a specific KB (dry-run mode)
+customkb optimize myproject --dry-run
+
+# Apply optimizations to a specific KB
+customkb optimize myproject
+
+# Optimize all KBs in VECTORDBS
+customkb optimize
+
+# Override system memory detection (useful for containers)
+customkb optimize --memory-gb 64
+```
+
+**Features:**
+- Automatically detects system memory and applies tier-based settings
+- Creates missing SQLite indexes for improved query performance
+- Backs up configuration files before making changes
+- Handles both old (`docs`) and new (`chunks`) database schemas
+- Resolves KB names even when local directories have the same name
+
+**Optimization Tiers:**
+- **Low Memory (<16GB)**: Conservative settings to avoid memory pressure
+  - Reduced batch sizes and cache limits
+  - Minimal thread pools
+  - Hybrid search disabled
+- **Medium Memory (16-64GB)**: Balanced performance for most workloads
+  - Moderate batch sizes and caching
+  - Reasonable concurrency settings
+- **High Memory (64-128GB)**: High performance for production use
+  - Large batch sizes and extensive caching
+  - Hybrid search enabled
+  - Increased thread pools
+- **Very High Memory (>128GB)**: Maximum performance for large deployments
+  - Maximum batch sizes and cache limits
+  - Full concurrency utilization
+  - All features enabled
+
+#### Verify Indexes Command
+
+Check database index health and identify missing indexes:
+
+```bash
+# Verify indexes for a specific KB
+customkb verify-indexes myproject
+
+# Check from any directory (resolves KB name automatically)
+cd /anywhere && customkb verify-indexes ollama
+```
+
+**Expected Indexes:**
+- `idx_embedded`: Filters embedded vs non-embedded documents
+- `idx_embedded_embedtext`: Speeds up embedded text queries
+- `idx_keyphrase_processed`: Enables fast keyphrase searches
+- `idx_sourcedoc`: Filters by source document
+- `idx_sourcedoc_sid`: Compound queries on source and section
+
+Missing indexes will be reported with suggestions to run `optimize`.
+
+#### BM25 Hybrid Search
+
+Enable keyword-based search alongside semantic search:
+
+```bash
+# Build BM25 index (requires enable_hybrid_search=true in config)
+customkb bm25 myproject
+
+# Force rebuild existing index
+customkb bm25 myproject --force
+```
+
+**Requirements:**
+1. Set `enable_hybrid_search=true` in `[ALGORITHMS]` section
+2. For older databases, run `upgrade_bm25_tokens.py` first
+3. Sufficient disk space for `.bm25` index file
+
+**Benefits:**
+- Combines keyword matching with semantic understanding
+- Better results for exact term matches
+- Improved performance on technical documentation
+
 ### Important Notes
 - **Virtual Environment**: Always use `.venv/` - it contains all dependencies
 - **Backups**: `.gudang/` contains backups - DO NOT process or modify
@@ -186,6 +281,60 @@ This approach:
 - **Allows** absolute paths and relative traversal for KB configs (trusted user input)
 - **Maintains** strict validation for other security checks (dangerous characters, etc.)
 - **Preserves** VECTORDBS search functionality for backward compatibility
+
+## Common Optimization Scenarios
+
+### Optimizing a Large Knowledge Base
+
+For knowledge bases over 1GB:
+
+```bash
+# First analyze the current state
+customkb optimize mylargeproject --analyze
+
+# Preview optimizations
+customkb optimize mylargeproject --dry-run
+
+# Apply optimizations and create indexes
+customkb optimize mylargeproject
+
+# Verify all indexes were created
+customkb verify-indexes mylargeproject
+```
+
+### Migrating from Old Database Schema
+
+For databases created with older CustomKB versions:
+
+```bash
+# Check current indexes
+customkb verify-indexes oldproject
+
+# Upgrade database schema for BM25 support
+python upgrade_bm25_tokens.py oldproject
+
+# Enable hybrid search in config
+customkb edit oldproject
+# Set: enable_hybrid_search = true
+
+# Build BM25 index
+customkb bm25 oldproject
+
+# Optimize for current system
+customkb optimize oldproject
+```
+
+### Container/VM Deployment
+
+When running in containers with memory limits:
+
+```bash
+# Override detected memory for container limits
+customkb optimize --memory-gb 8  # For 8GB container
+
+# Show what settings would be applied
+customkb optimize --show-tiers | grep "Low Memory" -A15
+```
 
 ## Common Development Tasks
 

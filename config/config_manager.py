@@ -216,6 +216,7 @@ class KnowledgeBase:
       'DEF_MAX_FILE_SIZE_MB': (int, 100),
       'DEF_MAX_QUERY_FILE_SIZE_MB': (int, 1),
       'DEF_MEMORY_CACHE_SIZE': (int, 10000),
+      'DEF_CACHE_MEMORY_LIMIT_MB': (int, 500),  # Maximum memory for embedding cache
       'DEF_API_KEY_MIN_LENGTH': (int, 20),
       'DEF_MAX_QUERY_LENGTH': (int, 10000),
       'DEF_MAX_CONFIG_VALUE_LENGTH': (int, 1000),
@@ -232,7 +233,8 @@ class KnowledgeBase:
       'DEF_SQL_BATCH_SIZE': (int, 500),
       'DEF_REFERENCE_BATCH_SIZE': (int, 5),
       'DEF_QUERY_CACHE_TTL_DAYS': (int, 7),
-      'DEF_DEFAULT_EDITOR': (str, 'joe')
+      'DEF_DEFAULT_EDITOR': (str, 'joe'),
+      'DEF_USE_MEMORY_MAPPED_FAISS': (bool, False),  # Memory-mapped FAISS for large indexes
     }
 
     self.ALGORITHMS_CONFIG = {
@@ -302,6 +304,13 @@ class KnowledgeBase:
           raise
 
     self.start_time = int(time.time())
+    
+    # First resolve the config file path if needed
+    if not kb_base.endswith('.cfg'):
+      resolved_cfg = get_fq_cfg_filename(kb_base)
+      if resolved_cfg:
+        kb_base = resolved_cfg
+    
     self.load_config(kb_base, **kwargs)
 
     # Set up database and vector file paths
@@ -400,6 +409,8 @@ class KnowledgeBase:
         limits_section.getint('max_query_file_size_mb', fallback=self.DEF_MAX_QUERY_FILE_SIZE_MB), int)
       self.memory_cache_size = get_env('MEMORY_CACHE_SIZE',
         limits_section.getint('memory_cache_size', fallback=self.DEF_MEMORY_CACHE_SIZE), int)
+      self.cache_memory_limit_mb = get_env('CACHE_MEMORY_LIMIT_MB',
+        limits_section.getint('cache_memory_limit_mb', fallback=self.DEF_CACHE_MEMORY_LIMIT_MB), int)
       self.api_key_min_length = get_env('API_KEY_MIN_LENGTH',
         limits_section.getint('api_key_min_length', fallback=self.DEF_API_KEY_MIN_LENGTH), int)
       self.max_query_length = get_env('MAX_QUERY_LENGTH',
@@ -430,6 +441,8 @@ class KnowledgeBase:
         performance_section.getint('query_cache_ttl_days', fallback=self.DEF_QUERY_CACHE_TTL_DAYS), int)
       self.default_editor = get_env('DEFAULT_EDITOR',
         performance_section.get('default_editor', fallback=self.DEF_DEFAULT_EDITOR))
+      self.use_memory_mapped_faiss = get_env('USE_MEMORY_MAPPED_FAISS',
+        performance_section.getboolean('use_memory_mapped_faiss', fallback=self.DEF_USE_MEMORY_MAPPED_FAISS), bool)
 
       # Algorithms configuration
       self.high_dimension_threshold = get_env('HIGH_DIMENSION_THRESHOLD',
@@ -554,6 +567,7 @@ class KnowledgeBase:
       self.max_file_size_mb = kwargs.get('max_file_size_mb', self.DEF_MAX_FILE_SIZE_MB)
       self.max_query_file_size_mb = kwargs.get('max_query_file_size_mb', self.DEF_MAX_QUERY_FILE_SIZE_MB)
       self.memory_cache_size = kwargs.get('memory_cache_size', self.DEF_MEMORY_CACHE_SIZE)
+      self.cache_memory_limit_mb = kwargs.get('cache_memory_limit_mb', self.DEF_CACHE_MEMORY_LIMIT_MB)
       self.api_key_min_length = kwargs.get('api_key_min_length', self.DEF_API_KEY_MIN_LENGTH)
       self.max_query_length = kwargs.get('max_query_length', self.DEF_MAX_QUERY_LENGTH)
       self.max_config_value_length = kwargs.get('max_config_value_length', self.DEF_MAX_CONFIG_VALUE_LENGTH)
@@ -569,6 +583,7 @@ class KnowledgeBase:
       self.reference_batch_size = kwargs.get('reference_batch_size', self.DEF_REFERENCE_BATCH_SIZE)
       self.query_cache_ttl_days = kwargs.get('query_cache_ttl_days', self.DEF_QUERY_CACHE_TTL_DAYS)
       self.default_editor = kwargs.get('default_editor', self.DEF_DEFAULT_EDITOR)
+      self.use_memory_mapped_faiss = kwargs.get('use_memory_mapped_faiss', self.DEF_USE_MEMORY_MAPPED_FAISS)
 
       # Algorithms parameters
       self.high_dimension_threshold = kwargs.get('high_dimension_threshold', self.DEF_HIGH_DIMENSION_THRESHOLD)
