@@ -99,6 +99,14 @@ python run_tests.py --unit
 python run_tests.py --integration
 python run_tests.py --performance
 
+# Safe mode (with memory limits and monitoring)
+python run_tests.py --safe
+python run_tests.py safe  # Shortcut
+
+# Safe mode with options
+python run_tests.py --safe --unit --memory-limit 1024  # 1GB limit
+python run_tests.py --safe --timeout 60                # 60s timeout
+
 # Fast tests only
 python run_tests.py --fast
 

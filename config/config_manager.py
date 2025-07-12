@@ -199,7 +199,9 @@ class KnowledgeBase:
       'DEF_QUERY_TOP_K': (int, 50),
       'DEF_QUERY_CONTEXT_SCOPE': (int, 4),
       'DEF_QUERY_TEMPERATURE': (float, 0.0),
-      'DEF_QUERY_MAX_TOKENS': (int, 4000)
+      'DEF_QUERY_MAX_TOKENS': (int, 4000),
+      'DEF_REFERENCE_FORMAT': (str, 'xml'),
+      'DEF_QUERY_PROMPT_TEMPLATE': (str, 'default')
     }
 
     # New configuration sections for performance tuning
@@ -279,7 +281,12 @@ class KnowledgeBase:
       'DEF_RERANKING_TOP_K': (int, 20),
       'DEF_RERANKING_BATCH_SIZE': (int, 32),
       'DEF_RERANKING_DEVICE': (str, 'cpu'),
-      'DEF_RERANKING_CACHE_SIZE': (int, 1000)
+      'DEF_RERANKING_CACHE_SIZE': (int, 1000),
+      # GPU configuration for FAISS
+      'DEF_FAISS_GPU_BATCH_SIZE': (int, 1024),
+      'DEF_FAISS_GPU_USE_FLOAT16': (bool, True),
+      'DEF_FAISS_GPU_MEMORY_BUFFER_GB': (float, 4.0),
+      'DEF_FAISS_GPU_MEMORY_LIMIT_MB': (int, 0)  # 0 = auto-detect
     }
 
     # Set default values from environment or defaults
@@ -375,6 +382,10 @@ class KnowledgeBase:
         df.get('query_role', fallback=self.DEF_QUERY_ROLE))
       self.query_context_scope = get_env('QUERY_CONTEXT_SCOPE',
         df.getint('query_context_scope', fallback=self.DEF_QUERY_CONTEXT_SCOPE), int)
+      self.reference_format = get_env('REFERENCE_FORMAT',
+        df.get('reference_format', fallback=self.DEF_REFERENCE_FORMAT))
+      self.query_prompt_template = get_env('QUERY_PROMPT_TEMPLATE',
+        df.get('query_prompt_template', fallback=self.DEF_QUERY_PROMPT_TEMPLATE))
       # Handle QUERY_CONTEXT_FILES environment variable (comma-separated string)
       query_context_env = get_env('QUERY_CONTEXT_FILES', None)
       if query_context_env is not None:
@@ -534,6 +545,16 @@ class KnowledgeBase:
       self.reranking_cache_size = get_env('RERANKING_CACHE_SIZE',
         algorithms_section.getint('reranking_cache_size', fallback=self.DEF_RERANKING_CACHE_SIZE), int)
       
+      # GPU configuration for FAISS
+      self.faiss_gpu_batch_size = get_env('FAISS_GPU_BATCH_SIZE',
+        algorithms_section.getint('faiss_gpu_batch_size', fallback=self.DEF_FAISS_GPU_BATCH_SIZE), int)
+      self.faiss_gpu_use_float16 = get_env('FAISS_GPU_USE_FLOAT16',
+        algorithms_section.getboolean('faiss_gpu_use_float16', fallback=self.DEF_FAISS_GPU_USE_FLOAT16), bool)
+      self.faiss_gpu_memory_buffer_gb = get_env('FAISS_GPU_MEMORY_BUFFER_GB',
+        algorithms_section.getfloat('faiss_gpu_memory_buffer_gb', fallback=self.DEF_FAISS_GPU_MEMORY_BUFFER_GB), float)
+      self.faiss_gpu_memory_limit_mb = get_env('FAISS_GPU_MEMORY_LIMIT_MB',
+        algorithms_section.getint('faiss_gpu_memory_limit_mb', fallback=self.DEF_FAISS_GPU_MEMORY_LIMIT_MB), int)
+      
       # Apply kwargs overrides after loading from config file
       # This ensures priority: env vars > kwargs > config file > defaults
       for key, value in kwargs.items():
@@ -553,6 +574,8 @@ class KnowledgeBase:
       self.query_role = kwargs.get('query_role', self.DEF_QUERY_ROLE)
       self.query_context_scope = kwargs.get('query_context_scope', self.DEF_QUERY_CONTEXT_SCOPE)
       self.query_context_files = kwargs.get('query_context_files', [])
+      self.reference_format = kwargs.get('reference_format', self.DEF_REFERENCE_FORMAT)
+      self.query_prompt_template = kwargs.get('query_prompt_template', self.DEF_QUERY_PROMPT_TEMPLATE)
 
       # New configuration parameters (for kwargs support)
       # API parameters

@@ -32,9 +32,9 @@ This directory contains utility scripts for managing and optimizing CustomKB ins
   - Reduces BM25 index size by filtering to relevant documents
 
 ### Testing
-- **safe_test_runner.sh** - Runs tests with memory limits to prevent system hangs
-  - Usage: `./scripts/safe_test_runner.sh [unit|integration|performance|all]`
-  - Sets memory limits: 2GB (unit), 4GB (integration), 6GB (performance)
+- **Note:** Safe testing functionality has been integrated into `run_tests.py --safe`
+  - Use `python run_tests.py --safe` for memory-limited test execution
+  - See `/tests/README.md` for full testing documentation
 
 ## Quick Start
 
@@ -50,7 +50,7 @@ This directory contains utility scripts for managing and optimizing CustomKB ins
 
 3. **Run tests safely:**
    ```bash
-   ./scripts/safe_test_runner.sh unit
+   python run_tests.py --safe --unit
    ```
 
 4. **Monitor GPU usage:**

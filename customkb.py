@@ -356,6 +356,8 @@ def main() -> None:
   query_parser.add_argument('-s', '--context-scope', default=None, type=int, help='For each result segment, return SCOPE segments')
   query_parser.add_argument('-t', '--temperature', default='', help='Temperature')
   query_parser.add_argument('-M', '--max-tokens', default='', help='Max Output Tokens')
+  query_parser.add_argument('-f', '--format', default='', help='Reference format (xml, json, markdown, plain)')
+  query_parser.add_argument('-p', '--prompt-template', default='', help='Prompt template (default, instructive, scholarly, concise, analytical, conversational, technical)')
   query_parser.add_argument('-q', '--quiet', dest='verbose', action='store_false', help='Disable verbose output')
   query_parser.add_argument('-v', '--verbose', dest='verbose', action='store_true', help='Enable verbose output (default)')
   query_parser.add_argument('-d', '--debug', action='store_true', help='Enable debug output')
@@ -557,6 +559,17 @@ def main() -> None:
         os.environ['QUERY_MAX_TOKENS'] = args.max_tokens
       if args.role:
         os.environ['QUERY_ROLE'] = args.role
+      if args.prompt_template:
+        # Validate prompt template
+        from query.prompt_templates import validate_template_name
+        if not validate_template_name(args.prompt_template):
+          logger.error(f"Invalid prompt template: {args.prompt_template}")
+          from query.prompt_templates import list_templates
+          templates = list_templates()
+          logger.info("Available templates:")
+          for name, desc in templates.items():
+            logger.info(f"  {name}: {desc}")
+          sys.exit(1)
       result = process_query(args, logger)
       print(result)  # Keep print for user output
       logger.debug(f"Query command completed")

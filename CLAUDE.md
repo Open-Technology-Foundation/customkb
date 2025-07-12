@@ -25,7 +25,10 @@ CustomKB is a production-ready AI-powered knowledge base system that:
 ├── query/                    # Query processing
 ├── models/                   # Model management
 ├── utils/                    # Utility functions
-└── tests/                    # Test suite
+├── tests/                    # Test suite
+├── scripts/                  # Utility scripts
+├── setup/                    # Setup and maintenance scripts
+└── examples/                 # Example code and configurations
 ```
 
 ### Essential Commands
@@ -442,13 +445,19 @@ actual_model = model_info['model']  # 'claude-3-5-sonnet-20241022'
 # Always in virtual environment
 source .venv/bin/activate
 
-# Run all tests
+# Use the test runner script (recommended)
+./run_tests.py --unit        # Run unit tests only
+./run_tests.py --coverage    # Run with coverage report
+./run_tests.py --safe        # Run with memory limits and monitoring
+./run_tests.py safe          # Quick shortcut for safe mode
+
+# Safe mode options
+./run_tests.py --safe --memory-limit 1024  # Set 1GB memory limit
+./run_tests.py --safe --timeout 60         # Set 60s timeout
+
+# Direct pytest usage (alternative)
 pytest tests/
-
-# Run specific test
 pytest tests/unit/test_config_manager.py -v
-
-# Run with coverage
 pytest --cov=. tests/
 ```
 
@@ -567,6 +576,28 @@ SELECT DISTINCT file_hash FROM chunks;
 6. **Memory Leaks**: Clear large objects, use generators for big files
 7. **SQL Injection**: Use parameterized queries, never string formatting
 
+## Setup and Maintenance
+
+### NLTK Data Setup
+
+CustomKB requires NLTK stopwords and tokenizers for text processing. Use the consolidated setup script:
+
+```bash
+# Check current NLTK data status
+./setup/nltk_setup.py status
+
+# Download all required NLTK data
+sudo ./setup/nltk_setup.py download
+
+# Clean up unnecessary language files
+sudo ./setup/nltk_setup.py cleanup
+
+# Full setup (download then cleanup)
+sudo ./setup/nltk_setup.py download cleanup
+```
+
+The script manages stopwords for 12 languages: Chinese, Danish, Dutch, English, Finnish, French, German, Indonesian, Italian, Portuguese, Spanish, and Swedish.
+
 ## Quick Reference
 
 ### Key Environment Variables
@@ -585,6 +616,129 @@ QUERY_MODEL         # Override query model
 - `[LIMITS]`: Resource constraints
 - `[PERFORMANCE]`: Optimization parameters
 - `[ALGORITHMS]`: Processing thresholds and BM25 settings
+
+### Prompt Templates
+
+CustomKB provides flexible prompt templates to improve how queries are presented to LLMs, resulting in better quality responses:
+
+```bash
+# Use a specific prompt template
+customkb query myproject "What is climate change?" --prompt-template instructive
+customkb query research.cfg "Explain quantum computing" --prompt-template scholarly
+
+# Configure default template in config file
+[DEFAULT]
+query_prompt_template = analytical  # Default template for all queries
+
+# Override system role while using a template
+query_role = You are an expert in renewable energy.
+query_prompt_template = technical
+```
+
+**Available Templates:**
+
+1. **default** - Simple format matching original behavior with minimal instructions
+2. **instructive** - Clear instructions for context-based answering with explicit guidelines
+3. **scholarly** - Academic style with emphasis on citations and comprehensive analysis
+4. **concise** - Minimal, direct responses for quick answers
+5. **analytical** - Structured analytical approach with systematic breakdown
+6. **conversational** - Friendly, conversational tone while maintaining accuracy
+7. **technical** - Technical depth with precise terminology for expert users
+
+**Template Examples:**
+
+Instructive template:
+```
+Based on the following reference materials:
+[YOUR CONTEXT]
+
+Please answer this question: [YOUR QUERY]
+
+Instructions:
+- Base your answer solely on the provided references
+- If the references don't contain relevant information, state this clearly
+- Be concise but thorough in your response
+```
+
+Analytical template:
+```
+Available Information:
+[YOUR CONTEXT]
+
+Analysis Request: [YOUR QUERY]
+
+Please provide a structured analysis:
+1. Key Information: Identify relevant facts from the references
+2. Analysis: Examine the information in relation to the query
+3. Synthesis: Provide a clear, evidence-based response
+4. Limitations: Note any gaps in the available information
+```
+
+**Configuration Priority:**
+1. CLI argument (`--prompt-template`)
+2. Environment variable (`QUERY_PROMPT_TEMPLATE`)
+3. Config file (`query_prompt_template`)
+4. Default value (`default`)
+
+### Reference Output Formats
+
+CustomKB supports multiple output formats for search results to accommodate different LLM preferences:
+
+```bash
+# Query with specific format
+customkb query myproject "search query" --format json
+customkb query myproject "search query" --format markdown
+customkb query myproject "search query" --format plain
+
+# Configure default format in config file
+[DEFAULT]
+reference_format = json  # Options: xml, json, markdown, plain
+```
+
+**Available Formats:**
+- **xml** (default): Structured XML with `<context>` and `<metadata>` tags
+- **json**: Clean JSON structure with `references` and `context_files` arrays
+- **markdown**: Human-readable Markdown with headers and sections
+- **plain**: Minimal plain text format with simple separators
+
+**Format Examples:**
+
+XML (default):
+```xml
+<context src="document.txt:42">
+<metadata>
+<meta name="heading">Section Title</meta>
+<meta name="section_type">paragraph</meta>
+</metadata>
+Content here...
+</context>
+```
+
+JSON:
+```json
+{
+  "references": [{
+    "source": "document.txt",
+    "sid": 42,
+    "content": "Content here...",
+    "metadata": {"heading": "Section Title"}
+  }]
+}
+```
+
+Markdown:
+```markdown
+### document.txt:42
+**Heading:** Section Title
+
+Content here...
+```
+
+Plain:
+```
+--- document.txt:42 ---
+Content here...
+```
 
 ### Model Categories
 - `llm`: Language models for responses

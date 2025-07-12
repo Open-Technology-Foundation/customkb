@@ -60,7 +60,7 @@ When these processes consumed most available memory, the system became unrespons
 3. **Test incrementally**:
    ```bash
    # Single test with monitoring
-   python run_safe_test.py
+   python run_tests.py --safe
    
    # Small batch with strict limits
    python tests/batch_runner.py --batch unit_core --memory-limit 0.5 --force

@@ -38,7 +38,7 @@ def get_system_memory_gb() -> float:
 
 def get_optimized_settings(memory_gb: float = None) -> Dict:
   """
-  Get optimized settings based on available system memory.
+  Get optimized settings based on available system memory and GPU.
   
   Memory tiers:
   - Low: < 16GB (conservative settings)
@@ -50,10 +50,26 @@ def get_optimized_settings(memory_gb: float = None) -> Dict:
       memory_gb: System memory in GB. If None, auto-detect.
       
   Returns:
-      Dict containing tier info and optimization settings.
+      Dict containing tier info, optimization settings, and GPU info.
   """
   if memory_gb is None:
     memory_gb = get_system_memory_gb()
+  
+  # Get GPU information
+  from utils.gpu_utils import get_gpu_memory_mb, get_safe_gpu_memory_limit_mb
+  gpu_memory_mb = get_gpu_memory_mb()
+  gpu_info = {}
+  
+  if gpu_memory_mb:
+    gpu_info = {
+      'gpu_memory_mb': gpu_memory_mb,
+      'gpu_memory_gb': gpu_memory_mb / 1024.0,
+      'safe_limit_mb': get_safe_gpu_memory_limit_mb(buffer_gb=4.0),
+      'detected': True
+    }
+  else:
+    gpu_info = {'detected': False}
+    gpu_memory_mb = 0
   
   # Base settings that scale with memory
   if memory_gb < 16:
@@ -155,14 +171,30 @@ def get_optimized_settings(memory_gb: float = None) -> Dict:
         # Always use CPU for reranking to avoid GPU memory conflicts
         'reranking_device': 'cpu',
         'reranking_cache_size': str(reranking_cache),
-        # GPU optimization for FAISS - conservative settings
-        # Limit batch size to prevent GPU OOM
-        'faiss_gpu_batch_size': '1024',
-        # Always use float16 to save GPU memory (40% reduction)
-        'faiss_gpu_use_float16': 'true',
+        # GPU optimization for FAISS - dynamic based on GPU memory
+        'faiss_gpu_batch_size': str(get_gpu_batch_size(gpu_memory_mb, batch_factor)),
+        # Use float16 based on GPU memory availability
+        'faiss_gpu_use_float16': 'true' if gpu_memory_mb < 16384 else str(gpu_memory_mb < 24576),
+        # GPU memory buffer for safety
+        'faiss_gpu_memory_buffer_gb': '4.0',
       }
-    }
+    },
+    'gpu_info': gpu_info
   }
+
+
+def get_gpu_batch_size(gpu_memory_mb: int, batch_factor: float) -> int:
+  """Calculate appropriate GPU batch size based on GPU memory."""
+  if gpu_memory_mb == 0:
+    return 1024  # Default for no GPU
+  elif gpu_memory_mb < 8192:  # < 8GB
+    return 512
+  elif gpu_memory_mb < 16384:  # < 16GB
+    return 1024
+  elif gpu_memory_mb < 24576:  # < 24GB
+    return int(2048 * batch_factor)
+  else:  # >= 24GB
+    return int(4096 * batch_factor)
 
 
 def find_kb_configs(vectordbs_dir: str) -> List[str]:
@@ -215,15 +247,20 @@ def optimize_config(config_path: str, dry_run: bool = False, memory_gb: float = 
   # Get optimized settings based on system memory
   settings_info = get_optimized_settings(memory_gb)
   performance_optimizations = settings_info['optimizations']
+  gpu_info = settings_info.get('gpu_info', {})
   
-  # Adjust GPU settings based on FAISS index size
-  # GPU memory limit: ~15GB for FAISS index on 23GB GPU
-  if faiss_size_mb > 15000:  # 15GB limit
-    logger.info(f"FAISS index too large for GPU ({faiss_size_mb:.1f} MB), disabling GPU features")
-    # Disable GPU features for large indexes to prevent OOM
-    performance_optimizations['ALGORITHMS']['faiss_gpu_batch_size'] = '512'  # Minimal batch size
-    performance_optimizations['ALGORITHMS']['faiss_gpu_use_float16'] = 'true'  # Always use float16
-    # Note: The actual GPU loading will be handled by query_manager.py
+  # Adjust GPU settings based on FAISS index size and GPU memory
+  if gpu_info and faiss_size_mb > 0:
+    from utils.gpu_utils import should_use_gpu_for_index
+    gpu_suitable, reason = should_use_gpu_for_index(faiss_size_mb, kb_config=None)
+    
+    if not gpu_suitable:
+      logger.info(f"GPU not suitable for FAISS index: {reason}")
+      # Conservative GPU settings for large indexes
+      performance_optimizations['ALGORITHMS']['faiss_gpu_batch_size'] = '512'  # Minimal batch size
+      performance_optimizations['ALGORITHMS']['faiss_gpu_use_float16'] = 'true'  # Always use float16
+    else:
+      logger.info(f"GPU suitable for FAISS index: {reason}")
   
   # Load existing configuration
   config = configparser.ConfigParser()
@@ -327,6 +364,15 @@ def show_optimization_tiers() -> str:
   """
   output = ["Optimization Tiers for CustomKB", "=" * 80, ""]
   
+  # Show current GPU info if available
+  from utils.gpu_utils import get_gpu_info_string
+  gpu_info_str = get_gpu_info_string()
+  output.extend([
+    "System Configuration:",
+    f"  {gpu_info_str}",
+    ""
+  ])
+  
   tiers = [
     (8, "Low Memory (<16GB)"),
     (32, "Medium Memory (16-64GB)"),
@@ -353,6 +399,8 @@ def show_optimization_tiers() -> str:
       f"  BM25 max results: {opts['ALGORITHMS']['bm25_max_results']}",
       f"  Hybrid search enabled: {opts['ALGORITHMS']['enable_hybrid_search']}",
       f"  Reranking batch size: {opts['ALGORITHMS']['reranking_batch_size']}",
+      f"  GPU batch size: {opts['ALGORITHMS']['faiss_gpu_batch_size']}",
+      f"  GPU float16 mode: {opts['ALGORITHMS']['faiss_gpu_use_float16']}",
       ""
     ])
   
@@ -470,6 +518,7 @@ def process_optimize(args, logger) -> str:
   # Show system memory info
   memory_gb = args.memory_gb if hasattr(args, 'memory_gb') and args.memory_gb else get_system_memory_gb()
   settings_info = get_optimized_settings(memory_gb)
+  gpu_info = settings_info.get('gpu_info', {})
   
   output.extend([
     f"\nSystem Memory: {memory_gb:.1f} GB",
@@ -478,6 +527,15 @@ def process_optimize(args, logger) -> str:
     f"  - Reference batch size: {settings_info['optimizations']['PERFORMANCE']['reference_batch_size']}",
     f"  - Thread pools: {settings_info['optimizations']['PERFORMANCE']['io_thread_pool_size']}"
   ])
+  
+  # Show GPU info if available
+  if gpu_info and gpu_info.get('detected'):
+    output.extend([
+      f"\nGPU Detected: {gpu_info['gpu_memory_gb']:.1f} GB",
+      f"  - Safe FAISS limit: {gpu_info['safe_limit_mb']} MB",
+      f"  - GPU batch size: {settings_info['optimizations']['ALGORITHMS']['faiss_gpu_batch_size']}",
+      f"  - Float16 mode: {settings_info['optimizations']['ALGORITHMS']['faiss_gpu_use_float16']}"
+    ])
   
   if hasattr(args, 'analyze') and args.analyze:
     # Analyze mode - show KB sizes and recommendations

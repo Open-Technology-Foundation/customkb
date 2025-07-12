@@ -51,6 +51,8 @@ export  ANTHROPIC_API_KEY \
 # Source envvars from .env if exists
 [[ -f "$PRGDIR/.env" ]] && source "$PRGDIR/.env"
 
+# CUDA check removed - now handled in Python with proper initialization
+
 # Execute Python script with all passed arguments
 "$PRGDIR/.venv/bin/python3" "$PRGDIR/$PRG.py" "$@"
 

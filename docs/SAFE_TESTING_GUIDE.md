@@ -4,7 +4,27 @@ This guide explains how to run tests safely without causing system crashes or me
 
 ## Quick Start
 
-### Option 1: Use the Batch Runner (Recommended)
+### Option 1: Use the Test Runner Safe Mode (Recommended)
+
+```bash
+# Run tests in safe mode with automatic memory limits
+python run_tests.py --safe
+
+# Quick shortcut
+python run_tests.py safe
+
+# Run specific test types safely
+python run_tests.py --safe --unit
+python run_tests.py --safe --integration
+
+# Custom memory limit (in MB)
+python run_tests.py --safe --memory-limit 1024  # 1GB limit
+
+# Custom timeout (in seconds)
+python run_tests.py --safe --timeout 120  # 2 minute timeout
+```
+
+### Option 2: Use the Batch Runner
 
 ```bash
 # List available test batches
@@ -20,7 +40,7 @@ python tests/batch_runner.py --batch all --stop-on-failure
 python tests/batch_runner.py --batch unit_core --memory-limit 1.5
 ```
 
-### Option 2: Use Safe pytest Configuration
+### Option 3: Use Safe pytest Configuration
 
 ```bash
 # Run with safe configuration
@@ -30,7 +50,7 @@ pytest -c pytest-safe.ini
 pytest -c pytest-safe.ini tests/unit/test_config_manager.py
 ```
 
-### Option 3: Manual pytest with Resource Limits
+### Option 4: Manual pytest with Resource Limits
 
 ```bash
 # Run with explicit timeouts and no parallelization

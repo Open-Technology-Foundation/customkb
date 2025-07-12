@@ -527,6 +527,44 @@ class TestAIResponseGeneration:
         system_message = call_args[1]['messages'][0]['content']
         assert "{{datetime}}" not in system_message
         assert "Current time:" in system_message
+  
+  @pytest.mark.asyncio
+  async def test_generate_ai_response_grok(self, temp_config_file):
+    """Test AI response generation with Grok model."""
+    kb = KnowledgeBase(temp_config_file)
+    kb.query_model = "grok-4"
+    kb.query_role = "You are Grok, a helpful AI assistant."
+    kb.query_temperature = 0.7
+    kb.query_max_tokens = 1000
+    
+    # Mock the xAI response using OpenAI-compatible format
+    mock_response = Mock()
+    mock_response.choices = [Mock(message=Mock(content="Test Grok response"))]
+    
+    mock_client = AsyncMock()
+    mock_client.chat.completions.create.return_value = mock_response
+    
+    with patch('query.query_manager.async_xai_client', mock_client):
+      with patch('query.query_manager.elapsed_time', return_value="5s"):
+        result = await generate_ai_response(kb, "Reference context", "Test query")
+        
+        assert result == "Test Grok response"
+        mock_client.chat.completions.create.assert_called_once()
+        call_args = mock_client.chat.completions.create.call_args
+        assert call_args[1]['model'] == "grok-4"
+        assert call_args[1]['temperature'] == 0.7
+        assert call_args[1]['max_tokens'] == 1000
+  
+  @pytest.mark.asyncio
+  async def test_generate_ai_response_grok_no_client(self, temp_config_file):
+    """Test error when xAI client is not initialized."""
+    kb = KnowledgeBase(temp_config_file)
+    kb.query_model = "grok-4"
+    
+    with patch('query.query_manager.async_xai_client', None):
+      result = await generate_ai_response(kb, "Reference context", "Test query")
+      
+      assert "xAI client not initialized" in result
 
 
 class TestProcessQuery:

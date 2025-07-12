@@ -51,14 +51,27 @@ def load_and_validate_api_keys():
   if not validate_api_key(anthropic_key, 'sk-ant-', 95):
     raise ValueError("Invalid Anthropic API key format")
   
-  return openai_key, anthropic_key
+  # Load xAI API key (optional for now)
+  xai_key = os.getenv('XAI_API_KEY')
+  # xAI key validation is optional since not all users will have it
+  if xai_key and not validate_api_key(xai_key, 'xai-', 20):
+    raise ValueError("Invalid xAI API key format")
+  
+  return openai_key, anthropic_key, xai_key
 
 try:
-  OPENAI_API_KEY, ANTHROPIC_API_KEY = load_and_validate_api_keys()
+  OPENAI_API_KEY, ANTHROPIC_API_KEY, XAI_API_KEY = load_and_validate_api_keys()
   openai_client = OpenAI(api_key=OPENAI_API_KEY)
   async_openai_client = AsyncOpenAI(api_key=OPENAI_API_KEY)
   anthropic_client = Anthropic(api_key=ANTHROPIC_API_KEY)
   async_anthropic_client = AsyncAnthropic(api_key=ANTHROPIC_API_KEY)
+  # xAI client will use OpenAI-compatible API
+  if XAI_API_KEY:
+    xai_client = OpenAI(api_key=XAI_API_KEY, base_url="https://api.x.ai/v1")
+    async_xai_client = AsyncOpenAI(api_key=XAI_API_KEY, base_url="https://api.x.ai/v1")
+  else:
+    xai_client = None
+    async_xai_client = None
 except (EnvironmentError, ValueError) as e:
   # Don't use safe_log_error during module initialization
   # as logging may not be set up yet
@@ -797,20 +810,49 @@ async def process_query_async(args: argparse.Namespace, logger) -> str:
     index = faiss.read_index(kb.knowledge_base_vector)
   
   # Move index to GPU if available and index size permits
-  ngpus = faiss.get_num_gpus()
   use_gpu = False
+  
+  # Import CUDA initialization helper
+  from utils.cuda_init import get_faiss_with_fallback, init_cuda
+  
+  # Check if GPU should be disabled
+  disable_gpu = os.getenv('FAISS_NO_GPU', '').lower() in ('1', 'true', 'yes')
+  
+  if disable_gpu:
+    logger.info("FAISS GPU disabled by environment variable FAISS_NO_GPU")
+    ngpus = 0
+  else:
+    # Try to initialize CUDA before checking GPUs
+    cuda_initialized = init_cuda()
+    if not cuda_initialized:
+      logger.warning("CUDA initialization failed. Falling back to CPU.")
+      ngpus = 0
+    else:
+      try:
+        ngpus = faiss.get_num_gpus()
+      except (RuntimeError, AssertionError) as e:
+        logger.warning(f"GPU detection failed after CUDA init: {e}. Falling back to CPU.")
+        logger.warning("To avoid this error, set environment variable: export FAISS_NO_GPU=1")
+        ngpus = 0
   
   if ngpus > 0:
     # Check index size
     index_size_mb = os.path.getsize(kb.knowledge_base_vector) / (1024 * 1024)
     logger.info(f"FAISS index size: {index_size_mb:.1f} MB")
     
-    # Only use GPU for indexes that fit comfortably (leave 4GB buffer for temp memory)
-    gpu_memory_limit_mb = 19 * 1024  # 19GB limit for 23GB GPU
+    # Use dynamic GPU memory detection
+    from utils.gpu_utils import should_use_gpu_for_index, get_gpu_info_string
     
-    if index_size_mb < gpu_memory_limit_mb:
+    # Log GPU info
+    logger.info(get_gpu_info_string())
+    
+    # Determine if GPU should be used
+    use_gpu_decision, reason = should_use_gpu_for_index(index_size_mb, kb)
+    
+    if use_gpu_decision:
       try:
-        logger.info(f"GPU detected, moving FAISS index to GPU (found {ngpus} GPU(s))")
+        logger.info(f"GPU decision: {reason}")
+        logger.info(f"Moving FAISS index to GPU (found {ngpus} GPU(s))")
         res = faiss.StandardGpuResources()
         # Configure GPU resources
         co = faiss.GpuClonerOptions()
@@ -823,7 +865,7 @@ async def process_query_async(args: argparse.Namespace, logger) -> str:
         logger.warning(f"Failed to load index on GPU, falling back to CPU: {e}")
         # Index remains on CPU
     else:
-      logger.info(f"Index too large for GPU ({index_size_mb:.1f} MB > {gpu_memory_limit_mb} MB limit), using CPU")
+      logger.info(f"GPU decision: {reason}")
   
   if not use_gpu:
     logger.info("Using CPU for FAISS search")
@@ -905,7 +947,8 @@ async def process_query_async(args: argparse.Namespace, logger) -> str:
       ))
 
   # Build reference string
-  reference_string = build_reference_string(kb, unique_reference, context_files_content)
+  format_type = args.format if hasattr(args, 'format') and args.format else None
+  reference_string = build_reference_string(kb, unique_reference, context_files_content, debug=args.debug, format_type=format_type)
 
   logger.info(f"context_length={int(len(reference_string) / 1024)}KB, {return_context_only=}")
 
@@ -915,7 +958,8 @@ async def process_query_async(args: argparse.Namespace, logger) -> str:
     return reference_string
 
   # Generate AI response
-  return await generate_ai_response(kb, reference_string, query_text)
+  prompt_template = args.prompt_template if hasattr(args, 'prompt_template') and args.prompt_template else None
+  return await generate_ai_response(kb, reference_string, query_text, prompt_template)
 
 def process_query(args: argparse.Namespace, logger) -> str:
   """
@@ -947,7 +991,8 @@ def process_query(args: argparse.Namespace, logger) -> str:
   return asyncio.run(process_query_async(args, logger))
 
 def build_reference_string(kb: KnowledgeBase, reference: List[List[Any]], 
-                          context_files_content: List[Tuple[str, str]] = None) -> str:
+                          context_files_content: List[Tuple[str, str]] = None,
+                          debug: bool = False, format_type: str = None) -> str:
   """
   Build a reference string from the retrieved documents.
 
@@ -955,31 +1000,43 @@ def build_reference_string(kb: KnowledgeBase, reference: List[List[Any]],
       kb: The KnowledgeBase instance.
       reference: List of reference documents.
       context_files_content: Pre-loaded context files content.
+      debug: If True, include all metadata fields. If False, only show contextually useful fields.
+      format_type: Output format type ('xml', 'json', 'markdown', 'plain'). Uses kb.reference_format if None.
 
   Returns:
       The formatted reference string.
   """
+  from query.formatters import get_formatter
+  
+  # Get format type from KB config or parameter
+  format_type = format_type or getattr(kb, 'reference_format', 'xml')
+  formatter = get_formatter(format_type)
+  
   reference_string = ''
 
   # Add context files if specified
   if context_files_content:
     for file_content, base_name in context_files_content:
       if file_content and base_name:
-        reference_string += f'<reference src="{xml.sax.saxutils.escape(base_name)}">\n'
-        reference_string += f"{file_content}\n</reference>\n\n"
+        reference_string += formatter.format_context_file(file_content, base_name)
 
   # Add reference documents
   src = old_src = ''
   sid = old_sid = 0
   end_context = ''
+  current_content = ''
 
-  logger.info(f'Processing {len(reference)} reference items')
+  logger.info(f'Processing {len(reference)} reference items with {format_type} formatter')
 
   for item in reference:
     src = item[1]
     sid = item[2]
     rtext = item[3].strip("\n")
-    rtext = xml.sax.saxutils.escape(rtext)
+    
+    # For XML formatter, escape the text; others will handle it themselves
+    if format_type == 'xml':
+      rtext = xml.sax.saxutils.escape(rtext)
+    
     similarity = item[4] if len(item) > 4 else 1.0
     
     # Intelligent path truncation for display
@@ -994,7 +1051,7 @@ def build_reference_string(kb: KnowledgeBase, reference: List[List[Any]],
     
     # Extract metadata if available
     metadata_str = item[5] if len(item) > 5 else None
-    metadata_attrs = ""
+    metadata_elems = []
     
     if metadata_str:
       try:
@@ -1018,41 +1075,69 @@ def build_reference_string(kb: KnowledgeBase, reference: List[List[Any]],
             metadata = {}
         
         # Add relevant metadata as attributes
-        metadata_elems = []
         for key, value in metadata.items():
-          if key in ['heading', 'section_type', 'source', 'char_length', 'word_count']:
-            safe_value = xml.sax.saxutils.escape(str(value))
-            metadata_elems.append(f'<meta name="{key}">{safe_value}</meta>')
+          # In normal mode, only show heading and section_type
+          # In debug mode, show all metadata fields
+          if debug:
+            if key in ['heading', 'section_type', 'source', 'char_length', 'word_count']:
+              safe_value = xml.sax.saxutils.escape(str(value))
+              metadata_elems.append(f'<meta name="{key}">{safe_value}</meta>')
+          else:
+            # Only show contextually useful metadata in normal mode
+            if key in ['heading', 'section_type']:
+              safe_value = xml.sax.saxutils.escape(str(value))
+              metadata_elems.append(f'<meta name="{key}">{safe_value}</meta>')
         
-        metadata_attrs = " ".join(metadata_elems)
       except (ValueError, SyntaxError, TypeError) as e:
         logger.warning(f"Error parsing metadata: {e}")
     
-    # Add similarity score as an attribute
-    similarity_attr = f'<meta name="similarity">{1.0 - similarity:.4f}</meta>'
+    # Add similarity score as an attribute (only in debug mode)
+    similarity_attr = f'<meta name="similarity">{1.0 - similarity:.4f}</meta>' if debug else ""
 
-    if src != old_src or sid != (old_sid + 1):
+    # Handle document grouping if formatter needs it
+    if formatter.needs_document_grouping() and (src != old_src or sid != (old_sid + 1)):
       # Close previous context if needed
       if end_context:
-        reference_string += end_context
+        reference_string += formatter.format_document_end()
       
-      # Open new context with metadata (use display_src for readability)
-      reference_string += f'<context src="{xml.sax.saxutils.escape(display_src)}:{sid}">\n'
+      # Open new context with metadata
+      reference_string += formatter.format_document_start(src, sid, display_src)
       
-      # Add metadata elements if available
-      if metadata_attrs or similarity_attr:
-        reference_string += f'<metadata>\n{metadata_attrs}\n{similarity_attr}\n</metadata>\n'
-
-    end_context = f'</context>\n\n'
+      # Add metadata if available
+      metadata_str = formatter.format_metadata(metadata_elems, similarity_attr, debug)
+      reference_string += metadata_str
+      
+      end_context = True
+    elif not formatter.needs_document_grouping():
+      # For formatters that handle their own grouping (like JSON)
+      reference_string += formatter.format_document_start(src, sid, display_src)
+      reference_string += formatter.format_metadata(metadata_elems, similarity_attr, debug)
+    else:
+      # Consecutive document in a group - add section header if formatter supports it
+      section_header = formatter.format_section_header(src, sid, display_src)
+      if section_header:
+        reference_string += section_header
+        # Add metadata for this section if available
+        metadata_str = formatter.format_metadata(metadata_elems, similarity_attr, debug)
+        reference_string += metadata_str
+    
     old_src = src
     old_sid = sid
-    reference_string += rtext + "\n"
+    reference_string += formatter.format_document_content(rtext)
+    
+    # For non-grouping formatters, close each document immediately
+    if not formatter.needs_document_grouping():
+      reference_string += formatter.format_document_end()
 
-  reference_string += end_context
+  # Close final context if needed
+  if end_context and formatter.needs_document_grouping():
+    reference_string += formatter.format_document_end()
 
-  return reference_string
+  # Apply any final formatting
+  return formatter.finalize(reference_string)
 
-async def generate_ai_response(kb: KnowledgeBase, reference_string: str, query_text: str) -> str:
+async def generate_ai_response(kb: KnowledgeBase, reference_string: str, query_text: str, 
+                              prompt_template: str = None) -> str:
   """
   Generate an AI response based on the reference string and query text.
 
@@ -1060,12 +1145,25 @@ async def generate_ai_response(kb: KnowledgeBase, reference_string: str, query_t
       kb: The KnowledgeBase instance.
       reference_string: The formatted reference string.
       query_text: The user's query text.
+      prompt_template: Optional prompt template name to use.
 
   Returns:
       The AI-generated response.
   """
-  # Replace datetime placeholder in query role
-  kb.query_role = kb.query_role.replace('{{datetime}}', datetime.now().isoformat())
+  from query.prompt_templates import get_prompt_template
+  
+  # Get the prompt template
+  template_name = prompt_template or getattr(kb, 'query_prompt_template', 'default')
+  template = get_prompt_template(template_name, kb.query_role)
+  
+  # Format the user message with the template
+  user_message = template['user'].format(
+    reference_string=reference_string,
+    query_text=query_text
+  )
+  
+  # Get system message and replace datetime placeholder
+  system_message = template['system'].replace('{{datetime}}', datetime.now().isoformat())
 
   from utils.logging_utils import log_model_operation, log_operation_error, OperationLogger
   
@@ -1081,8 +1179,8 @@ async def generate_ai_response(kb: KnowledgeBase, reference_string: str, query_t
         response = await async_openai_client.chat.completions.create(
           model=kb.query_model,
           messages=[
-            {"role": "system", "content": kb.query_role},
-            {"role": "user", "content": f"{reference_string}\n\n{query_text}"}
+            {"role": "system", "content": system_message},
+            {"role": "user", "content": user_message}
           ],
           temperature=kb.query_temperature,
           max_tokens=kb.query_max_tokens,
@@ -1092,7 +1190,7 @@ async def generate_ai_response(kb: KnowledgeBase, reference_string: str, query_t
         response_content = response.choices[0].message.content
         op_logger.add_context(
           response_tokens=len(response_content.split()) if response_content else 0,
-          input_tokens=len(f"{kb.query_role}\n{reference_string}\n{query_text}".split())
+          input_tokens=len(f"{system_message}\n{user_message}".split())
         )
         
         logger.info(f"Elapsed Time: {elapsed_time(kb.start_time)}")
@@ -1103,7 +1201,7 @@ async def generate_ai_response(kb: KnowledgeBase, reference_string: str, query_t
         response = await async_openai_client.chat.completions.create(
           model=kb.query_model,
           messages=[
-            {"role": "user", "content": f"{kb.query_role}\n\n{reference_string}\n\n{query_text}\n"}
+            {"role": "user", "content": f"{system_message}\n\n{user_message}\n"}
           ],
         )
         
@@ -1119,16 +1217,43 @@ async def generate_ai_response(kb: KnowledgeBase, reference_string: str, query_t
         op_logger.add_context(provider="anthropic", model_type="claude")
         message = await async_anthropic_client.messages.create(
           max_tokens=kb.query_max_tokens,
-          messages=[{"role": "user", "content": f"{reference_string}\n\n{query_text}"}],
+          messages=[{"role": "user", "content": user_message}],
           model=kb.query_model,
-          system=kb.query_role,
+          system=system_message,
           temperature=kb.query_temperature
         )
         
         response_content = message.content[0].text
         op_logger.add_context(
           response_tokens=len(response_content.split()) if response_content else 0,
-          input_tokens=len(f"{kb.query_role}\n{reference_string}\n{query_text}".split())
+          input_tokens=len(f"{system_message}\n{user_message}".split())
+        )
+        
+        logger.info(f"Elapsed Time: {elapsed_time(kb.start_time)}")
+        return response_content
+
+      elif kb.query_model.startswith('grok'):
+        if not async_xai_client:
+          raise ValueError("xAI client not initialized. Please set XAI_API_KEY environment variable.")
+        
+        op_logger.add_context(provider="xai", model_type="grok")
+        
+        # Use OpenAI-compatible API for xAI
+        response = await async_xai_client.chat.completions.create(
+          model=kb.query_model,
+          messages=[
+            {"role": "system", "content": system_message},
+            {"role": "user", "content": user_message}
+          ],
+          temperature=kb.query_temperature,
+          max_tokens=kb.query_max_tokens,
+          stop=None
+        )
+        
+        response_content = response.choices[0].message.content
+        op_logger.add_context(
+          response_tokens=len(response_content.split()) if response_content else 0,
+          input_tokens=len(f"{system_message}\n{user_message}".split())
         )
         
         logger.info(f"Elapsed Time: {elapsed_time(kb.start_time)}")
@@ -1140,8 +1265,8 @@ async def generate_ai_response(kb: KnowledgeBase, reference_string: str, query_t
         response = llama_client.chat.completions.create(
           model=kb.query_model,
           messages=[
-            {"role": "system", "content": kb.query_role},
-            {"role": "user", "content": f"{reference_string}\n\n{query_text}"}
+            {"role": "system", "content": system_message},
+            {"role": "user", "content": user_message}
           ],
           temperature=kb.query_temperature,
           max_tokens=kb.query_max_tokens,
@@ -1151,7 +1276,7 @@ async def generate_ai_response(kb: KnowledgeBase, reference_string: str, query_t
         response_content = response.choices[0].message.content
         op_logger.add_context(
           response_tokens=len(response_content.split()) if response_content else 0,
-          input_tokens=len(f"{kb.query_role}\n{reference_string}\n{query_text}".split())
+          input_tokens=len(f"{system_message}\n{user_message}".split())
         )
         
         logger.info(f"Elapsed Time: {elapsed_time(kb.start_time)}")
