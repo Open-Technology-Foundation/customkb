@@ -23,7 +23,11 @@ EXPECTED_INDEXES = [
   'idx_embedded_embedtext', 
   'idx_keyphrase_processed',
   'idx_sourcedoc',
-  'idx_sourcedoc_sid'
+  'idx_sourcedoc_sid',
+  'idx_id',  # Primary key index for fast ID lookups
+  'idx_language_embedded',  # Composite index for language-filtered queries
+  'idx_metadata',  # Index on JSON metadata field
+  'idx_sourcedoc_sid_covering'  # Covering index for context retrieval
 ]
 
 
@@ -142,7 +146,11 @@ def create_missing_indexes(db_path: str, dry_run: bool = False) -> List[str]:
     'idx_embedded': f'CREATE INDEX idx_embedded ON {table_name}(embedded)',
     'idx_embedded_embedtext': f'CREATE INDEX idx_embedded_embedtext ON {table_name}(embedded, embedtext)',
     'idx_sourcedoc': f'CREATE INDEX idx_sourcedoc ON {table_name}(sourcedoc)',
-    'idx_sourcedoc_sid': f'CREATE INDEX idx_sourcedoc_sid ON {table_name}(sourcedoc, sid)'
+    'idx_sourcedoc_sid': f'CREATE INDEX idx_sourcedoc_sid ON {table_name}(sourcedoc, sid)',
+    'idx_id': f'CREATE UNIQUE INDEX idx_id ON {table_name}(id)',
+    'idx_language_embedded': f'CREATE INDEX idx_language_embedded ON {table_name}(language, embedded)',
+    'idx_metadata': f'CREATE INDEX idx_metadata ON {table_name}(metadata)',
+    'idx_sourcedoc_sid_covering': f'CREATE INDEX idx_sourcedoc_sid_covering ON {table_name}(sourcedoc, sid, id, originaltext, metadata)'
   }
   
   # Add keyphrase index based on schema

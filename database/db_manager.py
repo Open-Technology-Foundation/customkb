@@ -524,6 +524,27 @@ def connect_to_database(kb: KnowledgeBase) -> None:
         CREATE INDEX IF NOT EXISTS idx_embedded_embedtext ON docs(embedded, embedtext);
       ''')
       
+      # Primary key index for ID lookups (speeds up fetch_document_by_id)
+      kb.sql_cursor.execute('''
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_id ON docs(id);
+      ''')
+      
+      # Composite index for language-filtered embedding queries
+      kb.sql_cursor.execute('''
+        CREATE INDEX IF NOT EXISTS idx_language_embedded ON docs(language, embedded);
+      ''')
+      
+      # Index for metadata queries (enables efficient metadata-based searches)
+      kb.sql_cursor.execute('''
+        CREATE INDEX IF NOT EXISTS idx_metadata ON docs(metadata);
+      ''')
+      
+      # Covering index for context retrieval queries to avoid table lookups
+      kb.sql_cursor.execute('''
+        CREATE INDEX IF NOT EXISTS idx_sourcedoc_sid_covering 
+        ON docs(sourcedoc, sid, id, originaltext, metadata);
+      ''')
+      
       # Commit the index creation
       kb.sql_connection.commit()
       if logger:
