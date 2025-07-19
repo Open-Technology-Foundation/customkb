@@ -1,0 +1,8 @@
+{
+  "error": {
+    "message": "Rate limit reached for default-gpt-4o-mini in organization org-xxx. Limit: 60 / min. Please try again in 1s.",
+    "type": "rate_limit_exceeded",
+    "param": null,
+    "code": "rate_limit_exceeded"
+  }
+}

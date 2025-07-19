@@ -1,0 +1,13 @@
+# Database files
+citations.db
+citations.db-shm
+citations.db-wal
+
+# Backup files
+*.bak
+*~
+*.swp
+
+# Temporary files
+/tmp/
+.tmp.*
