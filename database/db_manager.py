@@ -333,7 +333,7 @@ def process_database(args: argparse.Namespace, logger) -> str:
   # Get configuration file
   config_file = get_fq_cfg_filename(args.config_file)
   if not config_file:
-    return "Error: Configuration file not found."
+    return f"Error: Knowledge base '{args.config_file}' not found."
 
   logger.info(f"{config_file=}")
 
@@ -487,6 +487,9 @@ def connect_to_database(kb: KnowledgeBase) -> None:
   try:
     kb.sql_connection = sqlite3.connect(kb.knowledge_base_db)
     kb.sql_cursor = kb.sql_connection.cursor()
+    
+    # Enable foreign key constraints for referential integrity
+    kb.sql_cursor.execute("PRAGMA foreign_keys = ON")
 
     try:
       kb.sql_cursor.execute('''

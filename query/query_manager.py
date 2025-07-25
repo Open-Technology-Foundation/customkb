@@ -727,7 +727,7 @@ async def process_query_async(args: argparse.Namespace, logger) -> str:
   # Get configuration file
   cfgfile = get_fq_cfg_filename(args.config_file)
   if not cfgfile:
-    return "Error: Configuration file not found."
+    return f"Error: Knowledge base '{args.config_file}' not found."
 
   logger.info(f"Knowledgebase config: {cfgfile}")
 

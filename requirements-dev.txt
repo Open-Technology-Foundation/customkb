@@ -1,0 +1,16 @@
+# Development and security scanning dependencies
+# These tools help identify security vulnerabilities and code quality issues
+
+# Security vulnerability scanning
+safety>=3.0.0           # Checks Python dependencies for known security vulnerabilities
+bandit>=1.7.0          # Identifies common security issues in Python code
+
+# Code quality and linting (optional but recommended)
+flake8>=6.0.0          # Style guide enforcement
+mypy>=1.0.0            # Static type checking
+black>=23.0.0          # Code formatter
+isort>=5.12.0          # Import sorting
+
+# Testing tools (if not already in requirements-test.txt)
+pytest-cov>=4.0.0      # Coverage plugin for pytest
+pre-commit>=3.0.0      # Git hook framework

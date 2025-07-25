@@ -32,21 +32,21 @@ CustomKB enables the creation, management, and querying of custom knowledge base
 - **Flexible Configuration**:
   - `.cfg` files with environment variable overrides
   - Model aliasing through Models.json
-  - Domain-style knowledge base naming
+  - Knowledge bases organized in VECTORDBS directory
 
 ## Usage
 
 ```
-customkb <command> <config_file> [options]
+customkb <command> <knowledge_base> [options]
 ```
 
 ### Commands
 
 1. **database**: Process text files into the knowledge base
    ```
-   customkb database <config_file> [files...]
+   customkb database <knowledge_base> [files...]
    ```
-   - **Config**: Knowledge base configuration file
+   - **Knowledge Base**: Name of the knowledge base (must exist in VECTORDBS)
    - **Files**: File paths or glob patterns to process
    - **Options**:
      - `-l, --language`: Stopwords language (default: english)
@@ -55,17 +55,17 @@ customkb <command> <config_file> [options]
 
 2. **embed**: Generate embeddings for stored text
    ```
-   customkb embed <config_file> [options]
+   customkb embed <knowledge_base> [options]
    ```
-   - **Config**: Knowledge base configuration file
+   - **Knowledge Base**: Name of the knowledge base
    - **Options**:
      - `-r, --reset-database`: Reset embedding status flags
 
 3. **query**: Search the knowledge base
    ```
-   customkb query <config_file> <query_text> [options]
+   customkb query <knowledge_base> <query_text> [options]
    ```
-   - **Config**: Knowledge base configuration file
+   - **Knowledge Base**: Name of the knowledge base
    - **Query**: The search text
    - **Options**:
      - `-Q, --query_file`: Load additional query text from file
@@ -79,15 +79,15 @@ customkb <command> <config_file> [options]
 
 4. **edit**: Edit configuration file
    ```
-   customkb edit <config_file>
+   customkb edit <knowledge_base>
    ```
-   - Opens the configuration file in system editor
+   - Opens the knowledge base configuration file in system editor
 
 5. **optimize**: Optimize knowledge base performance
    ```
-   customkb optimize [config_file] [options]
+   customkb optimize [knowledge_base] [options]
    ```
-   - **Config**: Optional KB config file or directory (default: all KBs in VECTORDBS)
+   - **Knowledge Base**: Optional KB name (default: all KBs in VECTORDBS)
    - **Options**:
      - `--dry-run`: Show what would be changed without modifying files
      - `--analyze`: Analyze KB sizes and show optimization recommendations
@@ -101,9 +101,9 @@ customkb <command> <config_file> [options]
 
 6. **verify-indexes**: Verify database indexes
    ```
-   customkb verify-indexes <config_file>
+   customkb verify-indexes <knowledge_base>
    ```
-   - **Config**: Knowledge base configuration file
+   - **Knowledge Base**: Name of the knowledge base
    - **Features**:
      - Checks for all expected SQLite indexes in the database
      - Reports missing indexes that could impact performance
@@ -153,6 +153,11 @@ import time
 from pathlib import Path
 import warnings
 # Type hints are used inline, no need to import at module level
+
+# Check Python version requirement
+if sys.version_info < (3, 10):
+  print(f"Error: Python 3.10 or higher is required. You are using Python {sys.version}")
+  sys.exit(1)
 
 # Suppress PyTorch CUDA initialization warnings
 warnings.filterwarnings("ignore", message="CUDA initialization: CUDA unknown error")
@@ -207,6 +212,7 @@ def edit_config(args: argparse.Namespace, logger) -> int:
   # Get config file path
   config_file = get_fq_cfg_filename(args.config_file)
   if not config_file:
+    logger.error(f"Knowledge base '{args.config_file}' not found")
     sys.exit(1)
     
   logger.debug(f"{config_file=}")
@@ -346,7 +352,7 @@ def main() -> None:
     description=textwrap.dedent(process_query.__doc__),
     formatter_class=argparse.RawDescriptionHelpFormatter,
   )
-  query_parser.add_argument('config_file', help='Knowledge base configuration file (e.g., myproject.cfg)')
+  query_parser.add_argument('config_file', help='Knowledge base name (e.g., myproject)')
   query_parser.add_argument('query_text', help='Query text (e.g., "What are the key features?")')
   query_parser.add_argument('-Q', '--query_file', default='', help='Query text from file')
   query_parser.add_argument('-c', '--context', '--context-only', dest='context_only', action='store_true', help='Return only context')
@@ -369,7 +375,7 @@ def main() -> None:
     description=textwrap.dedent(process_database.__doc__),
     formatter_class=argparse.RawDescriptionHelpFormatter,
   )
-  database_parser.add_argument('config_file', help='Knowledge base configuration file (e.g., myproject.cfg)')
+  database_parser.add_argument('config_file', help='Knowledge base name (e.g., myproject)')
   database_parser.add_argument('files', nargs='*', help='File paths or patterns to process (e.g., *.txt *.md docs/)')
   database_parser.add_argument('-l', '--language', default='en', help='Language code (ISO 639-1, e.g., en, fr, de) or full name (e.g., english, french, german)')
   database_parser.add_argument('--detect-language', action='store_true', help='Automatically detect language for each file (requires langdetect library)')
@@ -385,7 +391,7 @@ def main() -> None:
     description=textwrap.dedent(process_embeddings.__doc__),
     formatter_class=argparse.RawDescriptionHelpFormatter,
   )
-  embed_parser.add_argument('config_file', help='Knowledge base configuration file (e.g., myproject.cfg)')
+  embed_parser.add_argument('config_file', help='Knowledge base name (e.g., myproject)')
   embed_parser.add_argument('-r', '--reset-database', action='store_true', help='Reset already-embedded flag in knowledgebase database file')
   embed_parser.add_argument('-q', '--quiet', dest='verbose', action='store_false', help='Disable verbose output')
   embed_parser.add_argument('-v', '--verbose', dest='verbose', action='store_true', help='Enable verbose output (default)')
@@ -398,7 +404,7 @@ def main() -> None:
     description=textwrap.dedent(edit_config.__doc__),
     formatter_class=argparse.RawDescriptionHelpFormatter,
   )
-  edit_parser.add_argument('config_file', help='Knowledge base configuration file (e.g., myproject.cfg)')
+  edit_parser.add_argument('config_file', help='Knowledge base name (e.g., myproject)')
   edit_parser.add_argument('-q', '--quiet', dest='verbose', action='store_false', help='Disable verbose output')
   edit_parser.add_argument('-v', '--verbose', dest='verbose', action='store_true', help='Enable verbose output (default)')
   edit_parser.add_argument('-d', '--debug', action='store_true', help='Enable debug output')
@@ -409,7 +415,7 @@ def main() -> None:
     'bm25',
     description='Build or rebuild BM25 index for hybrid search',
   )
-  bm25_parser.add_argument('config_file', help='Knowledge base configuration file')
+  bm25_parser.add_argument('config_file', help='Knowledge base name')
   bm25_parser.add_argument('--force', action='store_true', help='Force rebuild even if index exists')
 
   # OPTIMIZE
@@ -417,7 +423,7 @@ def main() -> None:
     'optimize',
     description='Optimize CustomKB performance for production use',
   )
-  optimize_parser.add_argument('config_file', nargs='?', help='Specific KB config file or directory to optimize (default: all KBs in VECTORDBS)')
+  optimize_parser.add_argument('config_file', nargs='?', help='Specific knowledge base name to optimize (default: all KBs in VECTORDBS)')
   optimize_parser.add_argument('--dry-run', action='store_true', help='Show what would be changed without modifying files')
   optimize_parser.add_argument('--analyze', action='store_true', help='Analyze KB sizes and show optimization recommendations')
   optimize_parser.add_argument('--show-tiers', action='store_true', help='Show optimization settings for all memory tiers')
@@ -432,7 +438,7 @@ def main() -> None:
     'verify-indexes',
     description='Verify that all expected indexes exist in the knowledge base database',
   )
-  verify_parser.add_argument('config_file', help='Knowledge base configuration file')
+  verify_parser.add_argument('config_file', help='Knowledge base name')
   verify_parser.add_argument('-q', '--quiet', dest='verbose', action='store_false', help='Disable verbose output')
   verify_parser.add_argument('-v', '--verbose', dest='verbose', action='store_true', help='Enable verbose output (default)')
   verify_parser.add_argument('-d', '--debug', action='store_true', help='Enable debug output')
@@ -515,7 +521,7 @@ def main() -> None:
   
   config_file_fq = get_fq_cfg_filename(args.config_file)
   if not config_file_fq:
-    print("Error: Configuration file not found.", file=sys.stderr)
+    print(f"Error: Knowledge base '{args.config_file}' not found in {os.getenv('VECTORDBS', '/var/lib/vectordbs')}", file=sys.stderr)
     sys.exit(1)
     
   try:

@@ -692,15 +692,15 @@ class TestProcessQuery:
   
   @pytest.mark.asyncio
   async def test_process_query_invalid_config(self):
-    """Test query processing with invalid config file."""
+    """Test query processing with invalid knowledge base."""
     args = Mock()
-    args.config_file = "nonexistent.cfg"
+    args.config_file = "nonexistent_kb"
     
     mock_logger = Mock()
     
     result = await process_query_async(args, mock_logger)
     
-    assert "Configuration file not found" in result
+    assert "Knowledge base 'nonexistent_kb' not found" in result or "Configuration file not found" in result
   
   @pytest.mark.asyncio
   async def test_process_query_missing_database(self, temp_config_file):

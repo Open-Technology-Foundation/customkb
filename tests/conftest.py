@@ -111,26 +111,88 @@ def sample_texts(mock_data_generator):
 
 
 @pytest.fixture
-def temp_kb_directory(temp_data_manager):
-  """Create a temporary knowledge base directory."""
-  kb_dir = temp_data_manager.create_temp_dir(prefix="kb_test_")
+def temp_kb_directory(temp_data_manager, monkeypatch):
+  """Create a temporary knowledge base directory within VECTORDBS."""
+  # Create temporary VECTORDBS if not already set
+  temp_vectordbs = tempfile.mkdtemp(prefix='test_vectordbs_')
+  temp_data_manager.temp_dirs.append(temp_vectordbs)
+  
+  # Create KB directory
+  kb_name = 'test_kb'
+  kb_dir = os.path.join(temp_vectordbs, kb_name)
+  os.makedirs(kb_dir)
   
   # Create logs directory
   logs_dir = os.path.join(kb_dir, 'logs')
   os.makedirs(logs_dir, exist_ok=True)
   
+  # Monkeypatch VECTORDBS
+  monkeypatch.setattr('config.config_manager.VECTORDBS', temp_vectordbs)
+  
   return kb_dir
 
 
 @pytest.fixture
-def temp_config_file(temp_data_manager, sample_config_content, temp_kb_directory):
-  """Create a temporary configuration file."""
-  config_path = os.path.join(temp_kb_directory, "test_kb.cfg")
+def temp_config_file(temp_data_manager, sample_config_content, monkeypatch):
+  """Create a temporary KB structure and return KB name."""
+  # Create temporary VECTORDBS
+  temp_vectordbs = tempfile.mkdtemp(prefix='test_vectordbs_')
+  temp_data_manager.temp_dirs.append(temp_vectordbs)
+  
+  # Create KB directory structure
+  kb_name = 'test_kb'
+  kb_dir = os.path.join(temp_vectordbs, kb_name)
+  os.makedirs(kb_dir)
+  
+  # Create config file
+  config_path = os.path.join(kb_dir, f'{kb_name}.cfg')
   with open(config_path, 'w') as f:
     f.write(sample_config_content)
   
+  # Create logs directory
+  logs_dir = os.path.join(kb_dir, 'logs')
+  os.makedirs(logs_dir)
+  
   temp_data_manager.temp_files.append(config_path)
-  return config_path
+  
+  # Monkeypatch VECTORDBS for all tests using this fixture
+  monkeypatch.setattr('config.config_manager.VECTORDBS', temp_vectordbs)
+  
+  # Return the KB name for the new resolution system
+  return kb_name
+
+
+@pytest.fixture
+def temp_kb_setup(temp_data_manager, sample_config_content):
+  """Create a complete KB setup in temporary VECTORDBS."""
+  import tempfile
+  from unittest.mock import patch
+  
+  # Create temporary VECTORDBS directory
+  temp_vectordbs = tempfile.mkdtemp(prefix='test_vectordbs_')
+  temp_data_manager.temp_dirs.append(temp_vectordbs)
+  
+  # Create KB directory structure
+  kb_name = 'test_kb'
+  kb_dir = os.path.join(temp_vectordbs, kb_name)
+  os.makedirs(kb_dir)
+  
+  # Create config file
+  config_path = os.path.join(kb_dir, f'{kb_name}.cfg')
+  with open(config_path, 'w') as f:
+    f.write(sample_config_content)
+  
+  # Create logs directory
+  logs_dir = os.path.join(kb_dir, 'logs')
+  os.makedirs(logs_dir)
+  
+  # Return KB info
+  return {
+    'kb_name': kb_name,
+    'kb_dir': kb_dir,
+    'config_path': config_path,
+    'vectordbs': temp_vectordbs
+  }
 
 
 @pytest.fixture

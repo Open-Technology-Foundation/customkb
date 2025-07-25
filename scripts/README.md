@@ -36,6 +36,12 @@ This directory contains utility scripts for managing and optimizing CustomKB ins
   - Use `python run_tests.py --safe` for memory-limited test execution
   - See `/tests/README.md` for full testing documentation
 
+### Security
+- **security-check.sh** - Run security scans on dependencies and code
+  - Usage: `./scripts/security-check.sh`
+  - Checks for known vulnerabilities in dependencies (Safety)
+  - Scans code for security issues (Bandit)
+
 ## Quick Start
 
 1. **Optimize a knowledge base:**

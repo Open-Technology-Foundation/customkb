@@ -39,99 +39,91 @@ if not os.path.exists(VECTORDBS):
 logger = get_logger(__name__)
 
 
+def get_kb_name(kb_input: str) -> Optional[str]:
+  """
+  Extract and validate knowledge base name from user input.
+  
+  Strips any path components and .cfg extension, then validates that
+  the knowledge base exists as a subdirectory in VECTORDBS.
+  
+  Args:
+      kb_input: User input which may include paths or .cfg extension
+      
+  Returns:
+      Clean knowledge base name if valid, None otherwise
+  """
+  if not kb_input:
+    logger.error("Knowledge base name cannot be empty")
+    return None
+  
+  # Remove any path components (like basename command)
+  kb_name = os.path.basename(kb_input)
+  
+  # Remove .cfg extension if present
+  if kb_name.endswith('.cfg'):
+    kb_name = kb_name[:-4]
+  
+  # Validate KB name is not empty after cleaning
+  if not kb_name:
+    logger.error("Knowledge base name cannot be empty after removing path/extension")
+    return None
+  
+  # Check if knowledge base directory exists
+  kb_dir = os.path.join(VECTORDBS, kb_name)
+  if not os.path.isdir(kb_dir):
+    logger.error(f"Knowledge base '{kb_name}' not found in {VECTORDBS}")
+    
+    # List available KBs for helpful error message
+    try:
+      available_kbs = [d for d in os.listdir(VECTORDBS) 
+                      if os.path.isdir(os.path.join(VECTORDBS, d)) 
+                      and not d.startswith('.')]
+      if available_kbs:
+        logger.info(f"Available knowledge bases: {', '.join(sorted(available_kbs))}")
+    except OSError:
+      pass  # Ignore errors listing directory
+    
+    return None
+  
+  return kb_name
+
+
 def get_fq_cfg_filename(cfgfile: str) -> Optional[str]:
   """
-  Resolve a configuration filename to its fully-qualified, validated path.
+  Resolve knowledge base name to its configuration file path.
   
-  This function implements a sophisticated path resolution system that:
-  1. Validates the input path for security (no path traversal, etc.)
-  2. Handles domain-style names (e.g., 'example.com' → 'example.com.cfg')
-  3. Automatically appends '.cfg' extension if missing
-  4. Searches in VECTORDBS directory if file not found locally
-  5. Ensures the resolved path is within allowed directories
-
+  This function now requires that knowledge bases exist as subdirectories
+  within VECTORDBS. It strips any path components and .cfg extensions
+  from the input to get a clean KB name.
+  
   Args:
-      cfgfile: Configuration file path or name. Can be:
-        - Full path: '/path/to/config.cfg'
-        - Relative path: 'configs/myproject.cfg'
-        - Domain-style: 'example.com' (becomes 'example.com.cfg')
-        - Base name: 'myproject' (becomes 'myproject.cfg')
-
+      cfgfile: Knowledge base name (paths and .cfg extensions will be stripped)
+      
   Returns:
-      The fully-qualified, validated path to the configuration file,
-      or None if the file cannot be found or fails validation.
-
+      Full path to configuration file if KB exists, None otherwise
+      
   Examples:
-      >>> get_fq_cfg_filename('example.com')
-      '/var/lib/vectordbs/example.com.cfg'
-      >>> get_fq_cfg_filename('myproject')
-      '/current/dir/myproject.cfg'
+      >>> get_fq_cfg_filename('okusimail')
+      '/var/lib/vectordbs/okusimail/okusimail.cfg'
+      >>> get_fq_cfg_filename('/path/to/okusimail.cfg')
+      '/var/lib/vectordbs/okusimail/okusimail.cfg'
   """
-  from utils.security_utils import validate_file_path, validate_safe_path
-  
-  if not cfgfile:
-    logger.error("Configuration file name cannot be empty")
+  # Get clean KB name
+  kb_name = get_kb_name(cfgfile)
+  if not kb_name:
     return None
   
-  # First check if this might be a domain-style name (e.g., 'example.com')
-  # before validating extensions
-  if '.' in cfgfile and not cfgfile.endswith('.cfg') and not cfgfile.startswith('/') and not cfgfile.startswith('./'):
-    # This might be a domain-style name, try with .cfg extension
-    candidate_cfg = f"{cfgfile}.cfg"
-    
-    # First check current directory
-    if os.path.exists(candidate_cfg):
-      try:
-        return validate_file_path(candidate_cfg, ['.cfg'], allow_absolute=True, allow_relative_traversal=True)
-      except ValueError:
-        pass
-    
-    # Then check VECTORDBS
-    domain_path = find_file(candidate_cfg, VECTORDBS)
-    if domain_path and validate_safe_path(domain_path, VECTORDBS):
-      return domain_path
+  # Construct config file path
+  config_path = os.path.join(VECTORDBS, kb_name, f"{kb_name}.cfg")
   
-  # Now do regular validation
-  try:
-    # Security validation: prevent path traversal and dangerous characters
-    # Allow absolute paths and relative traversal for KB config files (trusted user input)
-    validated_cfgfile = validate_file_path(cfgfile, ['.cfg', ''], allow_absolute=True, allow_relative_traversal=True)
-  except ValueError as e:
-    logger.error(f"Invalid configuration file path: {e}")
+  # Verify config file exists
+  if not os.path.isfile(config_path):
+    logger.error(f"Configuration file not found: {config_path}")
+    logger.info(f"Expected to find {kb_name}.cfg in {os.path.join(VECTORDBS, kb_name)}/")
     return None
   
-  # Handle regular paths
-  _dir, _file, _ext, _fqfn = split_filepath(validated_cfgfile, adddir=False, realpath=False)
-  if not _ext:
-    logger.info('adding ext .cfg')
-    _ext = '.cfg'
-    _fqfn += _ext
-  if _ext != '.cfg':
-    logger.error('Not a .cfg file!')
-    return None
-    
-  if not os.path.exists(_fqfn):
-    if logger:
-      logger.warning(f'{_fqfn} does not exist, searching in {VECTORDBS}')
-    if _dir:
-      if logger:
-        logger.error(f"File '{_fqfn}' does not exist.")
-      return None
-    _fqfn = find_file(f"{_file}{_ext}", VECTORDBS)
-    if not _fqfn:
-      if logger:
-        logger.error(f"File '{_file}{_ext}' could not be found.")
-      return None
-    
-    # Validate the found file is in a safe location
-    if not validate_safe_path(_fqfn, VECTORDBS):
-      if logger:
-        logger.error(f"Found file '{_fqfn}' is outside allowed directory")
-      return None
-    
-    return _fqfn
-  
-  return _fqfn
+  logger.debug(f"Resolved '{cfgfile}' to '{config_path}'")
+  return config_path
 
 class KnowledgeBase:
   """

@@ -729,7 +729,7 @@ def process_embeddings(args: argparse.Namespace, logger) -> str:
   # Get configuration file
   config_file = get_fq_cfg_filename(args.config_file)
   if not config_file:
-    return "Error: Configuration file not found."
+    return f"Error: Knowledge base '{args.config_file}' not found."
     
   logger.info(f"{config_file=}")
   reset_database = args.reset_database

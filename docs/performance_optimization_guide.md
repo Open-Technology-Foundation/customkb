@@ -30,35 +30,34 @@ CustomKB automatically optimizes settings based on available system memory. Here
 
 #### 1. Analyze your system and KBs:
 ```bash
-cd /ai/scripts/customkb
-./optimize-kb --analyze
+customkb optimize --analyze
 ```
 
 #### 2. Preview optimizations (dry run):
 ```bash
 # For current system memory
-./optimize-kb myknowledgebase --dry-run
+customkb optimize myknowledgebase --dry-run
 
 # Simulate different memory tier
-./optimize-kb myknowledgebase --dry-run --memory-gb 128
+customkb optimize myknowledgebase --dry-run --memory-gb 128
 ```
 
 #### 3. Apply optimizations:
 ```bash
 # Optimize for current system
-./optimize-kb myknowledgebase
+customkb optimize myknowledgebase
 
 # Optimize all KBs
-./optimize-kb
+customkb optimize
 ```
 
 #### 4. Test specific memory configurations:
 ```bash
 # Test low memory settings (8GB)
-./optimize-kb myknowledgebase --memory-gb 8
+customkb optimize myknowledgebase --memory-gb 8
 
 # Test high memory settings (96GB)
-./optimize-kb myknowledgebase --memory-gb 96
+customkb optimize myknowledgebase --memory-gb 96
 ```
 
 ### Performance Impact

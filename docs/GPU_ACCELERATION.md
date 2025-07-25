@@ -53,7 +53,7 @@ Most modern GPUs (4GB+ VRAM) can handle these models comfortably.
 Use the provided monitoring script to check GPU utilization:
 
 ```bash
-./scripts/gpu_monitor.sh "your query" knowledge_base_name
+./scripts/gpu_monitor.sh "your query" kb_name
 ```
 
 This will show:
@@ -66,7 +66,7 @@ This will show:
 Compare GPU vs CPU performance for your specific workload:
 
 ```bash
-python scripts/benchmark_gpu.py kb_config --iterations 5
+python scripts/benchmark_gpu.py kb_name --iterations 5
 ```
 
 ## Example Configurations

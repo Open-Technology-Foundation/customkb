@@ -75,7 +75,12 @@ CustomKB is a production-ready knowledge base system that transforms your docume
 
 ### Basic Usage Example
 
-1. **Create a configuration file** (`myproject.cfg`):
+1. **Create a knowledge base directory**:
+   ```bash
+   mkdir -p /var/lib/vectordbs/myproject
+   ```
+
+2. **Create a configuration file** (`/var/lib/vectordbs/myproject/myproject.cfg`):
    ```ini
    [DEFAULT]
    vector_model = text-embedding-3-small
@@ -84,25 +89,25 @@ CustomKB is a production-ready knowledge base system that transforms your docume
    db_max_tokens = 400
    ```
 
-2. **Process your documents**:
+3. **Process your documents**:
    ```bash
-   customkb database myproject.cfg docs/*.md *.txt
+   customkb database myproject docs/*.md *.txt
    ```
 
-3. **Generate embeddings**:
+4. **Generate embeddings**:
    ```bash
-   customkb embed myproject.cfg
+   customkb embed myproject
    ```
 
-4. **Query your knowledge base**:
+5. **Query your knowledge base**:
    ```bash
-   customkb query myproject.cfg "How do I configure the vector model?"
+   customkb query myproject "How do I configure the vector model?"
    ```
 
-> **💡 Flexible Path Handling**: CustomKB supports multiple ways to specify knowledge base locations:
-> - **Direct config path**: `/path/to/project.cfg`
-> - **Relative traversal**: `../sibling-project/config.cfg`
-> - **KB name search**: `myproject` (searches `$VECTORDBS`)
+> **💡 Knowledge Base Resolution**: CustomKB requires all knowledge bases to be organized within the VECTORDBS directory:
+> - **Simple KB name**: `myproject` → `/var/lib/vectordbs/myproject/myproject.cfg`
+> - **Auto-stripping**: Paths and `.cfg` extensions are automatically removed
+> - **Helpful errors**: Lists available KBs when one isn't found
 
 ## 📖 Detailed Documentation
 
@@ -122,7 +127,7 @@ Processes text files and stores them in the knowledge base.
 
 **Example:**
 ```bash
-customkb database myproject.cfg ~/documents/**/*.md -l english
+customkb database myproject ~/documents/**/*.md -l english
 ```
 
 #### `embed` - Generate Embeddings
@@ -137,7 +142,7 @@ Creates vector embeddings for all text chunks in the database.
 
 **Example:**
 ```bash
-customkb embed myproject.cfg --verbose
+customkb embed myproject --verbose
 ```
 
 #### `query` - Search Knowledge Base
@@ -157,26 +162,25 @@ Performs semantic search and generates AI responses.
 
 **Examples:**
 ```bash
-# Simple query with config file
-customkb query myproject.cfg "What are the main features?"
-
-# Absolute path to knowledge base
-customkb query /var/lib/vectordbs/docs/docs.cfg "How to install?"
-
-# Relative path with directory traversal
-customkb query ../other-project/config.cfg "What's new?"
-
-# KB name search (searches $VECTORDBS directory)
+# Simple query with KB name
 customkb query myproject "What are the main features?"
 
+# With .cfg extension (automatically stripped)
+customkb query myproject.cfg "How to install?"
+
 # Context-only search
-customkb query myproject.cfg "authentication" --context-only
+customkb query myproject "authentication" --context-only
 
 # Custom model and parameters
-customkb query myproject.cfg "Explain the architecture" \
+customkb query myproject "Explain the architecture" \
   --model claude-3-5-sonnet-20241022 \
   --temperature 0.7 \
   --max-tokens 2000
+
+# All KB files must be in VECTORDBS directory:
+# /var/lib/vectordbs/myproject/myproject.cfg
+# /var/lib/vectordbs/myproject/myproject.db
+# /var/lib/vectordbs/myproject/myproject.faiss
 ```
 
 #### `edit` - Modify Configuration
@@ -353,37 +357,49 @@ heading_search_limit = 200             # Characters to scan for headings
 
 ### Knowledge Base Organization
 
-#### Configuration Path Flexibility
+#### Standardized KB Structure
 
-CustomKB supports three different approaches for organizing and accessing knowledge bases:
+All knowledge bases MUST be organized as subdirectories within the VECTORDBS directory:
 
-**1. Absolute Paths** - Direct file system access:
 ```bash
-# Config file anywhere in the filesystem
-customkb query /home/user/projects/docs/docs.cfg "search terms"
-customkb query /var/lib/vectordbs/company/hr.cfg "policy questions"
+# Set the KB base directory (default: /var/lib/vectordbs)
+export VECTORDBS="/var/lib/vectordbs"
 
-# KB files created in same directory as config:
-# /home/user/projects/docs/docs.db
-# /home/user/projects/docs/docs.faiss
-# /home/user/projects/docs/logs/
-```
+# Create a new knowledge base
+mkdir -p $VECTORDBS/myproject
 
-**2. Relative Paths with Directory Traversal** - Navigate between related KBs:
-```bash
-# From /var/lib/vectordbs/project-a/ directory
-customkb query ../project-b/config.cfg "cross-project search"
-customkb query ../../archives/old-docs.cfg "historical data"
-```
+# Process documents - KB name only
+customkb database myproject docs/*.md
 
-**3. Knowledge Base Name Search** - Convenient VECTORDBS lookup:
-```bash
-# Searches $VECTORDBS/myproject/myproject.cfg
+# Generate embeddings
+customkb embed myproject
+
+# Query the knowledge base
 customkb query myproject "search terms"
+```
 
-# Set custom search location
-export VECTORDBS="/custom/kb/location"
-customkb query docs "search terms"  # Looks in /custom/kb/location/docs/docs.cfg
+#### KB Name Resolution
+
+The system automatically handles various input formats:
+```bash
+# All of these resolve to the same KB:
+customkb query myproject "search"           # Simple name
+customkb query myproject.cfg "search"       # With .cfg extension
+customkb query /path/to/myproject "search"  # With path (stripped)
+customkb query ../myproject.cfg "search"    # Relative path (stripped)
+
+# Result: Uses $VECTORDBS/myproject/myproject.cfg
+```
+
+#### Required Directory Structure
+
+```
+$VECTORDBS/
+├── myproject/
+│   ├── myproject.cfg    # Configuration file
+│   ├── myproject.db     # SQLite database
+│   ├── myproject.faiss  # Vector index
+│   └── logs/            # Runtime logs
 ```
 
 #### Multi-Project Setup Example
@@ -404,10 +420,10 @@ Organize related knowledge bases for easy cross-referencing:
     ├── customer-support.db
     └── customer-support.faiss
 
-# Query any KB from any location
+# Query any KB using just the name
 customkb query company-docs "HR policies"
-customkb query ../api-reference/api-reference.cfg "authentication"
-customkb query /var/lib/vectordbs/customer-support/customer-support.cfg "tickets"
+customkb query api-reference "authentication"
+customkb query customer-support "tickets"
 ```
 
 ### Performance Tuning
@@ -483,17 +499,24 @@ reranking_cache_size = 5000  # Increase cache for repeated queries
 ### Domain-Style Knowledge Bases
 ```bash
 # Create knowledge base with domain naming
-customkb database example.com.cfg ~/example-docs/*.md
+mkdir -p /var/lib/vectordbs/example.com
+cat > /var/lib/vectordbs/example.com/example.com.cfg <<EOF
+[DEFAULT]
+vector_model = text-embedding-3-small
+query_model = gpt-4o-mini
+EOF
+
+customkb database example.com ~/example-docs/*.md
 
 # The system will create:
-# /var/lib/vectordbs/example.com.db
-# /var/lib/vectordbs/example.com.faiss
+# /var/lib/vectordbs/example.com/example.com.db
+# /var/lib/vectordbs/example.com/example.com.faiss
 ```
 
 ### Multi-Language Processing
 ```bash
 # Process French documents
-customkb database multilang.cfg docs/*.txt --language french
+customkb database multilang docs/*.txt --language french
 
 # Supported languages: english, french, german, spanish, italian, 
 # portuguese, dutch, swedish, norwegian, danish, finnish, russian,
@@ -519,17 +542,17 @@ done
 import subprocess
 import json
 
-def query_knowledge_base(config_file, query_text):
+def query_knowledge_base(kb_name, query_text):
     """Query CustomKB from Python code."""
     result = subprocess.run(
-        ['customkb', 'query', config_file, query_text, '--context-only'],
+        ['customkb', 'query', kb_name, query_text, '--context-only'],
         capture_output=True,
         text=True
     )
     return result.stdout
 
 # Example usage
-context = query_knowledge_base('myproject.cfg', 'How to install?')
+context = query_knowledge_base('myproject', 'How to install?')
 print(context)
 ```
 
@@ -622,9 +645,10 @@ CustomKB automatically optimizes performance based on available system resources
 
 ### Common Issues
 
-**"Configuration file not found"**
-- Ensure the .cfg file exists and has correct permissions
+**"Knowledge base 'name' not found"**
+- Ensure the knowledge base directory exists in VECTORDBS
 - Check if VECTORDBS environment variable is set correctly
+- The error message will list available knowledge bases
 
 **"API rate limit exceeded"**
 - Adjust `api_call_delay_seconds` in configuration

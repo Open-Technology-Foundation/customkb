@@ -240,50 +240,71 @@ except sqlite3.DatabaseError as e:
   raise DatabaseError(f"Failed to process chunk: {e}") from e
 ```
 
-## Knowledge Base Configuration Paths
+## Knowledge Base Resolution System
 
-CustomKB supports three flexible ways to specify knowledge base configuration files:
+CustomKB uses a standardized resolution system where all knowledge bases MUST exist as subdirectories within the VECTORDBS directory (`/var/lib/vectordbs` by default).
 
-### Case 1: Absolute Path to Config File
+### How It Works
+
+1. **Knowledge Base Name**: You specify only the KB name
+2. **Automatic Path Stripping**: Any paths or `.cfg` extensions are automatically removed
+3. **Directory Validation**: The system verifies `VECTORDBS/<kb_name>/` exists
+4. **Config File Location**: Always expects `VECTORDBS/<kb_name>/<kb_name>.cfg`
+
+### Examples
+
 ```bash
-customkb query /var/lib/vectordbs/myproject/myproject.cfg 'search query'
-customkb query /home/user/projects/kb/config.cfg 'search query'
-```
-- Direct path to `.cfg` file anywhere in the filesystem
-- KB files (`.db`, `.faiss`, `logs/`) created in same directory as config
-- Most explicit and reliable method
+# All of these resolve to the same KB:
+customkb query okusimail "test"
+customkb query okusimail.cfg "test"
+customkb query /path/to/okusimail "test"
+customkb query /path/to/okusimail.cfg "test"
 
-### Case 2: Knowledge Base Name (searches VECTORDBS)
+# Result: Uses /var/lib/vectordbs/okusimail/okusimail.cfg
+```
+
+### Error Messages
+
+When a KB isn't found, the system provides helpful feedback:
 ```bash
-customkb query myproject 'search query'
-```
-- Searches `$VECTORDBS` directory for `myproject/myproject.cfg`
-- Default `VECTORDBS=/var/lib/vectordbs`
-- Convenient for standard installations
+# Old error:
+Error: Configuration file not found.
 
-### Case 3: Relative Path with Traversal
-```bash
-# From /var/lib/vectordbs/okusiassociates/
-customkb query ../okusimail/okusimail.cfg 'search query'
-```
-- Allows `../` to reference sibling directories
-- Useful for projects with multiple related knowledge bases
-- Maintains security while allowing legitimate navigation
-
-### Implementation Notes
-
-The path resolution uses enhanced security validation:
-```python
-# In config_manager.py
-validated_cfgfile = validate_file_path(cfgfile, ['.cfg', ''], 
-                                      allow_absolute=True, 
-                                      allow_relative_traversal=True)
+# New error:
+Error: Knowledge base 'myproject' not found in /var/lib/vectordbs
+Available knowledge bases: okusimail, okusiassociates, jakartapost
 ```
 
-This approach:
-- **Allows** absolute paths and relative traversal for KB configs (trusted user input)
-- **Maintains** strict validation for other security checks (dangerous characters, etc.)
-- **Preserves** VECTORDBS search functionality for backward compatibility
+### Required Directory Structure
+
+```
+/var/lib/vectordbs/
+├── okusimail/
+│   ├── okusimail.cfg      # Configuration file
+│   ├── okusimail.db       # SQLite database
+│   ├── okusimail.faiss    # Vector index
+│   └── logs/              # Runtime logs
+├── okusiassociates/
+│   ├── okusiassociates.cfg
+│   ├── okusiassociates.db
+│   └── okusiassociates.faiss
+```
+
+### Implementation Details
+
+The new `get_kb_name()` function in `config_manager.py`:
+- Extracts clean KB name from any input format
+- Strips paths using `os.path.basename()`
+- Removes `.cfg` extensions
+- Validates KB directory exists in VECTORDBS
+- Lists available KBs on error
+
+### Migration Guide
+
+For existing installations:
+1. Move all KB directories to `VECTORDBS`
+2. Ensure each KB has its own subdirectory
+3. Update scripts to use KB names instead of paths
 
 ## Common Optimization Scenarios
 
@@ -569,8 +590,8 @@ SELECT DISTINCT file_hash FROM chunks;
 2. **Missing Imports**: Check relative imports from other modules
 3. **Hardcoded Paths**: Use `VECTORDBS` environment variable
 4. **Unvalidated Input**: Always validate user-provided paths and data
-   - Use `validate_file_path()` with appropriate parameters for the use case
-   - KB config paths: `allow_absolute=True, allow_relative_traversal=True`
+   - Use `validate_file_path()` for file operations
+   - Use `get_kb_name()` for KB resolution (handles validation internally)
    - Untrusted input: use defaults (strict validation)
 5. **Synchronous API Calls**: Use async patterns from embed_manager.py
 6. **Memory Leaks**: Clear large objects, use generators for big files

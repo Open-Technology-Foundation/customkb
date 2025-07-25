@@ -1,0 +1,19 @@
+version: 2
+updates:
+  # Enable version updates for Python dependencies
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "04:00"
+    reviewers:
+      - "@security-team"
+    labels:
+      - "dependencies"
+      - "security"
+    # Limit number of open pull requests for version updates
+    open-pull-requests-limit: 5
+    # Allow both direct and indirect (transitive) dependency updates
+    allow:
+      - dependency-type: "all"
