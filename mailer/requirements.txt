@@ -21,7 +21,7 @@ PyYAML==6.0.2
 openai==1.86.0
 
 # Anthropic Claude Haiku for fallback spam detection
-anthropic==0.54.0
+anthropic==0.59.0
 
 # Standard Library Dependencies (included with Python 3.8+)
 # ----------------------------------------------------------
