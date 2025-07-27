@@ -9,7 +9,7 @@ numpy==1.26.4
 openai>=1.67.0
 rank-bm25==0.2.2
 sentence-transformers>=2.7.0
-spacy==3.7.5
+spacy==3.8.7
 tokenizers==0.21.1
 langdetect==1.0.9
 google-genai>=0.1.0
