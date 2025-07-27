@@ -6,7 +6,7 @@ This document provides specific instructions and context for AI assistants (like
 
 CustomKB is a production-ready AI-powered knowledge base system that:
 - Processes documents into searchable vector databases
-- Generates embeddings using OpenAI/Anthropic models
+- Generates embeddings using OpenAI/Google AI models
 - Performs semantic search with context-aware AI responses
 - Supports multiple file formats and languages
 - Implements enterprise-grade security and performance features
@@ -625,6 +625,7 @@ The script manages stopwords for 12 languages: Chinese, Danish, Dutch, English, 
 ```bash
 OPENAI_API_KEY       # OpenAI API key
 ANTHROPIC_API_KEY    # Anthropic API key
+GOOGLE_API_KEY       # Google API key (or GEMINI_API_KEY)
 VECTORDBS           # Base directory for KBs (default: /var/lib/vectordbs)
 NLTK_DATA           # NLTK data directory
 VECTOR_MODEL        # Override embedding model
@@ -767,6 +768,31 @@ Content here...
 - `image`: Image generation models
 - `tts`: Text-to-speech models
 - `stt`: Speech-to-text models
+
+### Supported Embedding Models
+
+**OpenAI Models:**
+- `text-embedding-ada-002`: 1536 dimensions, legacy model
+- `text-embedding-3-small`: 1536 dimensions, 5x cheaper than ada-002
+- `text-embedding-3-large`: 3072 dimensions, best performance
+
+**Google Models:**
+- `gemini-embedding-001`: Configurable dimensions (768/1536/3072)
+  - Uses Matryoshka Representation Learning
+  - Supports longer context (30k tokens)
+  - Superior MTEB benchmark scores
+
+**Configuration Example:**
+```ini
+[DEFAULT]
+# For OpenAI embeddings
+vector_model = text-embedding-3-small
+
+# For Google embeddings
+vector_model = gemini-embedding-001
+# Optional: specify dimensions for Google model
+embedding_dimensions = 1536
+```
 
 ## Getting Help
 

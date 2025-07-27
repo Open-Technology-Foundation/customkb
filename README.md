@@ -4,7 +4,7 @@
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
 [![Version](https://img.shields.io/badge/version-0.8.0-green.svg)](https://github.com/Open-Technology-Foundation/customkb)
 
-CustomKB is a production-ready knowledge base system that transforms your document collections into AI-powered, searchable knowledge repositories. It combines state-of-the-art embedding models with efficient vector search to deliver contextually relevant answers from your data.
+CustomKB is a production-ready knowledge base system that transforms your document collections into AI-powered, searchable knowledge repositories. It supports multiple embedding providers (OpenAI, Google) and combines state-of-the-art models with efficient vector search to deliver contextually relevant answers from your data.
 
 ## 🌟 Key Features
 
@@ -676,8 +676,8 @@ CustomKB uses INI-style configuration files with environment variable overrides.
 ```ini
 [DEFAULT]
 # Embedding model configuration
-vector_model = text-embedding-3-small  # Options: ada-002, 3-small, 3-large
-vector_dimensions = 1536               # Must match model output
+vector_model = text-embedding-3-small  # Options: ada-002, 3-small, 3-large, gemini-embedding-001
+vector_dimensions = 1536               # Must match model output (auto-detected for most models)
 vector_chunks = 500                    # Max chunks to process per batch
 
 # Text processing parameters
@@ -788,9 +788,14 @@ reranking_cache_size = 10000          # Cache size for reranking
 - Phi-4 14B
 
 ##### Embedding Models
+
+**OpenAI Models:**
 - text-embedding-3-large (3072 dimensions)
 - text-embedding-3-small (1536 dimensions)
 - text-embedding-ada-002 (1536 dimensions)
+
+**Google Models:**
+- gemini-embedding-001 (configurable: 768/1536/3072 dimensions)
 
 #### Model Aliases
 
@@ -804,6 +809,35 @@ customkb query myproject "test" -m gemini2    # → gemini-2.0-flash
 # List all models and aliases
 customkb query myproject "test" -m list
 ```
+
+#### Using Google Embeddings
+
+CustomKB now supports Google's Gemini embedding models with superior performance:
+
+**Setup:**
+```bash
+# Set your Google API key
+export GOOGLE_API_KEY="your-google-api-key"
+# or
+export GEMINI_API_KEY="your-gemini-api-key"
+```
+
+**Configuration:**
+```ini
+[DEFAULT]
+vector_model = gemini-embedding-001
+# Optional: specify dimensions (768, 1536, or 3072)
+# If not specified, defaults to 3072
+vector_dimensions = 1536
+```
+
+**Key Advantages:**
+- **Superior Performance**: 68% MTEB benchmark score vs 64.6% for OpenAI
+- **Configurable Dimensions**: Choose 768, 1536, or 3072 based on your needs
+- **Longer Context**: Supports up to 30k tokens vs 8k for OpenAI
+- **Matryoshka Learning**: Maintains quality even at lower dimensions
+
+**Note**: Google API limits batch size to 100 embeddings per request (automatically handled).
 
 ### Integration with Dejavu2-CLI (dv2)
 

@@ -12,3 +12,4 @@ sentence-transformers>=2.7.0
 spacy==3.7.5
 tokenizers==0.21.1
 langdetect==1.0.9
+google-genai>=0.1.0

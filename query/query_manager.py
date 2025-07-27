@@ -24,10 +24,18 @@ from utils.logging_utils import setup_logging, get_logger, elapsed_time
 from utils.text_utils import clean_text
 from config.config_manager import KnowledgeBase, get_fq_cfg_filename
 from database.db_manager import connect_to_database, close_database
+from models.model_manager import get_canonical_model
 
 # Import AI clients with validation
 from openai import OpenAI, AsyncOpenAI
 from anthropic import Anthropic, AsyncAnthropic
+
+# Import Google AI client
+try:
+  from google import genai
+  GOOGLE_AI_AVAILABLE = True
+except ImportError:
+  GOOGLE_AI_AVAILABLE = False
 
 # Import reranking functionality
 from embedding.rerank_manager import rerank_search_results
@@ -82,6 +90,24 @@ except (EnvironmentError, ValueError) as e:
 llama_client = OpenAI(api_key='ollama', base_url='http://localhost:11434/v1')
 
 logger = get_logger(__name__)
+
+# Initialize Google AI client if available
+google_client = None
+
+if GOOGLE_AI_AVAILABLE:
+  try:
+    # Try to load Google API key from environment
+    GOOGLE_API_KEY = os.getenv('GOOGLE_API_KEY') or os.getenv('GEMINI_API_KEY')
+    if GOOGLE_API_KEY:
+      # Validate Google API key (basic check)
+      if not validate_api_key(GOOGLE_API_KEY, min_length=20):
+        logger.warning("Google API key validation failed")
+      else:
+        google_client = genai.Client()
+        logger.info("Google AI client initialized successfully for query embeddings")
+  except Exception as e:
+    logger.warning(f"Google AI client initialization failed: {e}")
+    google_client = None
 
 # Cache settings
 CACHE_DIR = os.path.join(os.getenv('VECTORDBS', '/var/lib/vectordbs'), '.query_cache')
@@ -522,11 +548,25 @@ async def get_query_embedding(query_text: str, model: str, kb: Optional['Knowled
     logger.info("Using cached query embedding")
     embedding = cached_embedding
   else:
-    response = await async_openai_client.embeddings.create(
-      input=query_for_embedding, 
-      model=model
-    )
-    embedding = response.data[0].embedding
+    # Detect provider and route to appropriate client
+    if model.startswith('gemini-'):
+      if not google_client:
+        raise ValueError("Google AI client not initialized. Please set GOOGLE_API_KEY or GEMINI_API_KEY.")
+      
+      # Use Google client (sync call in async context - consider using async version in future)
+      # Note: Google's SDK uses client.aio for async, but for simplicity we use sync here
+      response = google_client.models.embed_content(
+        model=model,
+        contents=query_for_embedding
+      )
+      embedding = response.embeddings[0].values
+    else:
+      # Use OpenAI client (existing code)
+      response = await async_openai_client.embeddings.create(
+        input=query_for_embedding, 
+        model=model
+      )
+      embedding = response.data[0].embedding
     save_query_embedding_to_cache(query_for_embedding, model, embedding)
     
   return np.array(embedding, dtype=np.float32).reshape(1, -1)
@@ -1169,15 +1209,26 @@ async def generate_ai_response(kb: KnowledgeBase, reference_string: str, query_t
   
   # Generate response using the appropriate model
   try:
+    # Resolve model to get canonical name and provider info
+    try:
+      model_info = get_canonical_model(kb.query_model)
+      actual_model = model_info['model']
+      model_family = model_info.get('family', '')
+    except (KeyError, FileNotFoundError):
+      # If model resolution fails, fall back to original logic
+      actual_model = kb.query_model
+      model_family = ''
+    
     with OperationLogger(logger, "ai_response_generation", 
-                        model=kb.query_model, 
+                        model=actual_model, 
                         temperature=kb.query_temperature,
                         max_tokens=kb.query_max_tokens) as op_logger:
       
-      if kb.query_model.startswith('gpt'):
+      # Route based on model family or prefix
+      if model_family == 'openai' or actual_model.startswith('gpt'):
         op_logger.add_context(provider="openai", model_type="gpt")
         response = await async_openai_client.chat.completions.create(
-          model=kb.query_model,
+          model=actual_model,
           messages=[
             {"role": "system", "content": system_message},
             {"role": "user", "content": user_message}
@@ -1196,10 +1247,10 @@ async def generate_ai_response(kb: KnowledgeBase, reference_string: str, query_t
         logger.info(f"Elapsed Time: {elapsed_time(kb.start_time)}")
         return response_content
 
-      elif kb.query_model.startswith('o1') or kb.query_model.startswith('o3'):
+      elif actual_model.startswith('o1') or actual_model.startswith('o3'):
         op_logger.add_context(provider="openai", model_type="o1")
         response = await async_openai_client.chat.completions.create(
-          model=kb.query_model,
+          model=actual_model,
           messages=[
             {"role": "user", "content": f"{system_message}\n\n{user_message}\n"}
           ],
@@ -1213,12 +1264,12 @@ async def generate_ai_response(kb: KnowledgeBase, reference_string: str, query_t
         logger.info(f"Elapsed Time: {elapsed_time(kb.start_time)}")
         return response_content
 
-      elif kb.query_model.startswith('claude'):
+      elif model_family == 'anthropic' or actual_model.startswith('claude'):
         op_logger.add_context(provider="anthropic", model_type="claude")
         message = await async_anthropic_client.messages.create(
           max_tokens=kb.query_max_tokens,
           messages=[{"role": "user", "content": user_message}],
-          model=kb.query_model,
+          model=actual_model,
           system=system_message,
           temperature=kb.query_temperature
         )
@@ -1232,7 +1283,7 @@ async def generate_ai_response(kb: KnowledgeBase, reference_string: str, query_t
         logger.info(f"Elapsed Time: {elapsed_time(kb.start_time)}")
         return response_content
 
-      elif kb.query_model.startswith('grok'):
+      elif model_family == 'xai' or actual_model.startswith('grok'):
         if not async_xai_client:
           raise ValueError("xAI client not initialized. Please set XAI_API_KEY environment variable.")
         
@@ -1240,7 +1291,7 @@ async def generate_ai_response(kb: KnowledgeBase, reference_string: str, query_t
         
         # Use OpenAI-compatible API for xAI
         response = await async_xai_client.chat.completions.create(
-          model=kb.query_model,
+          model=actual_model,
           messages=[
             {"role": "system", "content": system_message},
             {"role": "user", "content": user_message}
@@ -1260,27 +1311,33 @@ async def generate_ai_response(kb: KnowledgeBase, reference_string: str, query_t
         return response_content
 
       else:
-        # Fallback to synchronous for non-async clients (llama)
-        op_logger.add_context(provider="ollama", model_type="llama")
-        response = llama_client.chat.completions.create(
-          model=kb.query_model,
-          messages=[
-            {"role": "system", "content": system_message},
-            {"role": "user", "content": user_message}
-          ],
-          temperature=kb.query_temperature,
-          max_tokens=kb.query_max_tokens,
-          stop=None
-        )
-        
-        response_content = response.choices[0].message.content
-        op_logger.add_context(
-          response_tokens=len(response_content.split()) if response_content else 0,
-          input_tokens=len(f"{system_message}\n{user_message}".split())
-        )
-        
-        logger.info(f"Elapsed Time: {elapsed_time(kb.start_time)}")
-        return response_content
+        # For local/Ollama models or unrecognized models
+        # Only use Ollama if it's actually a local model
+        if model_family == 'meta' or model_family == 'llama' or actual_model.startswith('llama'):
+          op_logger.add_context(provider="ollama", model_type="llama")
+          response = llama_client.chat.completions.create(
+            model=actual_model,
+            messages=[
+              {"role": "system", "content": system_message},
+              {"role": "user", "content": user_message}
+            ],
+            temperature=kb.query_temperature,
+            max_tokens=kb.query_max_tokens,
+            stop=None
+          )
+          
+          response_content = response.choices[0].message.content
+          op_logger.add_context(
+            response_tokens=len(response_content.split()) if response_content else 0,
+            input_tokens=len(f"{system_message}\n{user_message}".split())
+          )
+          
+          logger.info(f"Elapsed Time: {elapsed_time(kb.start_time)}")
+          return response_content
+        else:
+          # Unrecognized model - raise error
+          raise ValueError(f"Unrecognized model '{kb.query_model}' (resolved to '{actual_model}'). "
+                         f"Model family '{model_family}' is not supported.")
   except Exception as e:
     log_operation_error(logger, "ai_response_generation", e,
                        model=kb.query_model,

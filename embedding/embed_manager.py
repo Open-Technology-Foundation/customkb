@@ -27,6 +27,13 @@ from database.db_manager import connect_to_database, close_database
 
 # Import OpenAI client with validation
 from openai import OpenAI, AsyncOpenAI
+
+# Import Google AI client
+try:
+  from google import genai
+  GOOGLE_AI_AVAILABLE = True
+except ImportError:
+  GOOGLE_AI_AVAILABLE = False
 from utils.security_utils import validate_api_key, safe_log_error
 
 def load_and_validate_openai_key():
@@ -51,6 +58,25 @@ except (EnvironmentError, ValueError) as e:
   raise
 
 logger = get_logger(__name__)
+
+# Initialize Google AI client if available
+google_client = None
+async_google_client = None
+
+if GOOGLE_AI_AVAILABLE:
+  try:
+    # Try to load Google API key from environment
+    GOOGLE_API_KEY = os.getenv('GOOGLE_API_KEY') or os.getenv('GEMINI_API_KEY')
+    if GOOGLE_API_KEY:
+      # Validate Google API key (basic check)
+      if not validate_api_key(GOOGLE_API_KEY, min_length=20):
+        logger.warning("Google API key validation failed")
+      else:
+        google_client = genai.Client()
+        logger.info("Google AI client initialized successfully")
+  except Exception as e:
+    logger.warning(f"Google AI client initialization failed: {e}")
+    google_client = None
 
 # Embedding cache directory
 CACHE_DIR = os.path.join(os.getenv('VECTORDBS', '/var/lib/vectordbs'), '.embedding_cache')
@@ -454,13 +480,18 @@ def calculate_optimal_batch_size(chunks: List[str], model: str, max_batch_size: 
   model_limits = {
     "text-embedding-3-small": 8191,
     "text-embedding-3-large": 8191,
-    "text-embedding-ada-002": 8191
+    "text-embedding-ada-002": 8191,
+    "gemini-embedding-001": 30720  # Google model supports longer context
   }
   
   token_limit = model_limits.get(model, 8191)
   
   # Calculate max chunks per batch
   max_chunks = min(max_batch_size, int(token_limit / avg_tokens))
+  
+  # Google's API has a hard limit of 100 items per batch
+  if model.startswith('gemini-'):
+    max_chunks = min(max_chunks, 100)
   
   # Ensure at least one chunk per batch
   return max(1, max_chunks)
@@ -489,6 +520,11 @@ async def process_embedding_batch_async(kb: KnowledgeBase, chunks: List[str]) ->
   
   # Split into smaller sub-batches to improve reliability
   max_batch_size_config = getattr(kb, 'embedding_batch_size', 100)
+  
+  # Google's API has a hard limit of 100 items per batch
+  if kb.vector_model.startswith('gemini-'):
+    max_batch_size_config = min(max_batch_size_config, 100)
+  
   sub_batch_size = min(max_batch_size_config, len(uncached_chunks))
   sub_batches = [uncached_chunks[i:i+sub_batch_size] for i in range(0, len(uncached_chunks), sub_batch_size)]
   sub_indices = [uncached_indices[i:i+sub_batch_size] for i in range(0, len(uncached_indices), sub_batch_size)]
@@ -504,12 +540,25 @@ async def process_embedding_batch_async(kb: KnowledgeBase, chunks: List[str]) ->
         api_delay = getattr(kb, 'api_call_delay_seconds', 0.05)
         await asyncio.sleep(api_delay)
         
-        response = await async_openai_client.embeddings.create(
-          input=sub_batch, 
-          model=kb.vector_model
-        )
-        
-        new_embeddings = [data.embedding for data in response.data]
+        # Detect provider and route to appropriate client
+        if kb.vector_model.startswith('gemini-'):
+          if not google_client:
+            raise ValueError("Google AI client not initialized. Please set GOOGLE_API_KEY or GEMINI_API_KEY.")
+          
+          # Use Google client (sync call in async context - consider using async version in future)
+          # Note: Google's SDK uses client.aio for async, but for simplicity we use sync here
+          response = google_client.models.embed_content(
+            model=kb.vector_model,
+            contents=sub_batch
+          )
+          new_embeddings = [emb.values for emb in response.embeddings]
+        else:
+          # Use OpenAI client (existing code)
+          response = await async_openai_client.embeddings.create(
+            input=sub_batch, 
+            model=kb.vector_model
+          )
+          new_embeddings = [data.embedding for data in response.data]
         
         # Cache the new embeddings
         for i, chunk_idx, emb in zip(range(len(sub_batch)), sub_idx, new_embeddings):
@@ -574,14 +623,27 @@ async def get_embeddings_for_batch(kb: KnowledgeBase, chunks: List[str]) -> List
     
     if uncached_texts:
       # Get embeddings from API
-      response = openai_client.embeddings.create(
-        input=uncached_texts,
-        model=kb.vector_model
-      )
+      # Detect provider and route to appropriate client
+      if kb.vector_model.startswith('gemini-'):
+        if not google_client:
+          raise ValueError("Google AI client not initialized. Please set GOOGLE_API_KEY or GEMINI_API_KEY.")
+        
+        # Use Google client
+        response = google_client.models.embed_content(
+          model=kb.vector_model,
+          contents=uncached_texts
+        )
+        embeddings = [emb.values for emb in response.embeddings]
+      else:
+        # Use OpenAI client (existing code)
+        response = openai_client.embeddings.create(
+          input=uncached_texts,
+          model=kb.vector_model
+        )
+        embeddings = [data.embedding for data in response.data]
       
       # Fill in the embeddings and cache them
-      for idx, (text_idx, embedding_data) in enumerate(zip(uncached_indices, response.data)):
-        embedding = embedding_data.embedding
+      for idx, (text_idx, embedding) in enumerate(zip(uncached_indices, embeddings)):
         embeddings_list[text_idx] = embedding
         # Cache the embedding
         save_embedding_to_cache(uncached_texts[idx], kb.vector_model, embedding, kb)
@@ -798,10 +860,23 @@ def process_embeddings(args: argparse.Namespace, logger) -> str:
     if cached_embedding:
       embedding_dimensions = len(cached_embedding)
     else:
-      response = openai_client.embeddings.create(input=rows[0][1], model=kb.vector_model)
-      embedding_dimensions = len(response.data[0].embedding)
+      # Detect provider and get dimensions
+      if kb.vector_model.startswith('gemini-'):
+        if not google_client:
+          raise ValueError("Google AI client not initialized. Please set GOOGLE_API_KEY or GEMINI_API_KEY.")
+        response = google_client.models.embed_content(
+          model=kb.vector_model,
+          contents=rows[0][1]
+        )
+        embedding_dimensions = len(response.embeddings[0].values)
+      else:
+        response = openai_client.embeddings.create(input=rows[0][1], model=kb.vector_model)
+        embedding_dimensions = len(response.data[0].embedding)
       # Cache this embedding
-      save_embedding_to_cache(rows[0][1], kb.vector_model, response.data[0].embedding, kb)
+      if kb.vector_model.startswith('gemini-'):
+        save_embedding_to_cache(rows[0][1], kb.vector_model, response.embeddings[0].values, kb)
+      else:
+        save_embedding_to_cache(rows[0][1], kb.vector_model, response.data[0].embedding, kb)
     
     logger.info(f"Using {embedding_dimensions=}")
     index = get_optimal_faiss_index(embedding_dimensions, len(rows), kb)
@@ -824,6 +899,12 @@ def process_embeddings(args: argparse.Namespace, logger) -> str:
   sample_chunks = [row[1] for row in rows[:min(100, len(rows))]]
   configured_batch_size = kb.vector_chunks
   optimal_batch_size = calculate_optimal_batch_size(sample_chunks, kb.vector_model, configured_batch_size, kb)
+  
+  # Log if Google's limit is being applied
+  if kb.vector_model.startswith('gemini-') and optimal_batch_size > 100:
+    logger.info(f"Google API limit: reducing batch size from {optimal_batch_size} to 100")
+    optimal_batch_size = 100
+  
   logger.info(f"Using optimal batch size of {optimal_batch_size} (configured max: {configured_batch_size})")
   
   # Deduplicate texts to avoid embedding the same text multiple times
