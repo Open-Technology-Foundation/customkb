@@ -1,162 +1,153 @@
-# Byte-compiled / optimized / DLL files
-__pycache__/
-*.py[cod]
+*~
+.*~
 *$py.class
-
-# C extensions
-*.so
-
-# Distribution / packaging
-.Python
+AUDIT-EVALUATE*
+AUDIT-EVALUATE.md
+*.bak
 build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-share/python-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
-MANIFEST
-
-# PyInstaller
-*.manifest
-*.spec
-
-# Installer logs
-pip-log.txt
-pip-delete-this-directory.txt
-
-# Unit test / coverage reports
-htmlcov/
-.tox/
-.nox/
-.coverage
-.coverage.*
 .cache
-nosetests.xml
-coverage.xml
-*.cover
-*.py,cover
-.hypothesis/
-.pytest_cache/
-cover/
-
-# Translations
-*.mo
-*.pot
-
-# Django stuff:
-*.log
-local_settings.py
-db.sqlite3
-db.sqlite3-journal
-
-# Flask stuff:
-instance/
-.webassets-cache
-
-# Scrapy stuff:
-.scrapy
-
-# Sphinx documentation
-docs/_build/
-
-# PyBuilder
-.pybuilder/
-target/
-
-# Jupyter Notebook
-.ipynb_checkpoints
-
-# IPython
-profile_default/
-ipython_config.py
-
-# pyenv
-# .python-version
-
-# pipenv
-#Pipfile.lock
-
-# poetry
-#poetry.lock
-
-# pdm
-#pdm.lock
-.pdm.toml
-
-# PEP 582
-__pypackages__/
-
-# Celery stuff
-celerybeat-schedule
 celerybeat.pid
-
-# SageMath parsed files
-*.sage.py
-
-# Environments
-.env
-.venv
-env/
-venv/
-ENV/
-env.bak/
-venv.bak/
-
-# Spyder project settings
-.spyderproject
-.spyproject
-
-# Rope project settings
-.ropeproject
-
-# mkdocs documentation
-/site
-
-# mypy
-.mypy_cache/
-.dmypy.json
-dmypy.json
-
-# Pyre type checker
-.pyre/
-
-# pytype static type analyzer
-.pytype/
-
-# Cython debug symbols
-cython_debug/
-
-# PyCharm
-.idea/
-
-# CustomKB specific files
-*.db
-*.faiss
-.embedding_cache/
-.query_cache/
-.temp/
-tmp/
-temp/
-.gudang/
-sessions/
-
-# Development leftovers
-.symlink
-EOF < /dev/null
-
-
+celerybeat-schedule
+CHANGES.md
 .claude*
 CLAUDE*
+CLAUDE.md
+*.cover
+cover/
+.coverage
+.coverage.*
+coverage_html/
+coverage.xml
+curtest.sh
+cython_debug/
+*.db
+db.sqlite3
+db.sqlite3-journal
+.dev/
+dev/
+develop-eggs/
+DEVELOPMENT.md
+DISCOVER.md
+dist/
+.dmypy.json
+dmypy.json
+docs/_build/
+downloads/
+.DS_Store
+*.egg
+*.egg-info/
+.eggs/
+eggs/
+.embedding_cache/
+.env
+env/
+ENV/
+env.bak/
+.env.local
+EOF < /dev/null
+*.faiss
+.git
 .git*
+.git/*
+git/
+.gitcommit
+gitcommit
+.gitignore
+gitignore
+.gudang
+.gudang/
+gudang
+htmlcov/
+.hypothesis/
+.idea/
+IMPROVEMENTS.md
+index.php
+.installed.cfg
+instance/
+.ipynb_checkpoints
+.ipynb_checkpoints/
+ipython_config.py
+*.json
+lib/
+lib64/
+local_settings.py
+*.log
 .mailer
-AUDIT-EVALUATE*
+*.manifest
+MANIFEST
+*.mo
+*.mp3
+.mypy_cache/
+nosetests.xml
+.nox/
+*.old
+.old
+old/
+parts/
+.pdm.toml
+pip-delete-this-directory.txt
+pip-log.txt
+*.pot
+profile_default/
+PURPOSE-FUNCTIONALITY-USAGE.md
+.pybuilder/
+__pycache__
+__pycache__/
+*.py[cod]
+*.py,cover
+__pypackages__/
+.pyre/
+.pytest_cache/
+.Python
+.pytype/
+.query_cache/
+*.raw
+.ropeproject
+*.sage.py
+.scrapy
+.script
+sdist/
+sessions/
+share/python-wheels/
+/site
+*.so
+*.spec
+.spyderproject
+.spyproject
+*.srt
+*.swo
+*.swp
+.symlink
+t
+t1
+t2
+t3
+t4
+target/
+.temp
+.temp/
+temp
+temp/
+t.htm*
+Thumbs.db
+.tmp
+tmp
+tmp/
+.tox/
+t.py
+tt
+tt.htm*
+tt.py
+ttt
+ttt.htm*
+ttt.py
+var/
+.venv
+.venv/
+venv/
+venv.bak/
+.vscode/
+*.vtt
+*.wav
+.webassets-cache
+wheels/
