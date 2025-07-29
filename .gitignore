@@ -153,3 +153,9 @@ sessions/
 # Development leftovers
 .symlink
 EOF < /dev/null
+
+
+.claude*
+CLAUDE*
+.git*
+.mailer
