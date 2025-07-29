@@ -159,4 +159,3 @@ EOF < /dev/null
 CLAUDE*
 .git*
 .mailer
-AUDIT-EVALUATE*
