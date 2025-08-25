@@ -31,7 +31,7 @@ dependencies = [
     "faiss-gpu-cu12==1.11.0",
     "langchain_text_splitters==0.3.7",
     "nltk==3.9.1",
-    "numpy==1.26.4",
+    "numpy==2.3.2",
     "openai>=1.67.0",
     "rank-bm25==0.2.2",
     "sentence-transformers>=2.7.0",
