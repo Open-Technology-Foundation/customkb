@@ -1,0 +1,175 @@
+#!/bin/bash
+# Bash completion for customkb command
+
+_customkb_completion() {
+    local cur prev opts commands
+    COMPREPLY=()
+    cur="${COMP_WORDS[COMP_CWORD]}"
+    prev="${COMP_WORDS[COMP_CWORD-1]}"
+
+    # Main commands
+    commands="database embed query edit optimize verify-indexes bm25 categorize help version"
+
+    # Common options across most commands
+    common_opts="-h --help -q --quiet -v --verbose -d --debug"
+
+    # If we're completing the first argument (command)
+    if [[ ${COMP_CWORD} -eq 1 ]]; then
+        COMPREPLY=($(compgen -W "${commands}" -- "${cur}"))
+        return 0
+    fi
+
+    # Get the command
+    local command="${COMP_WORDS[1]}"
+
+    case "${command}" in
+        database)
+            case "${prev}" in
+                -l|--language)
+                    COMPREPLY=($(compgen -W "en fr de es it pt nl da sv fi zh id" -- "${cur}"))
+                    return 0
+                    ;;
+                *)
+                    if [[ ${COMP_CWORD} -eq 2 ]]; then
+                        # Knowledge base name completion
+                        _customkb_kb_completion
+                    else
+                        # File completion for remaining arguments
+                        COMPREPLY=($(compgen -f -- "${cur}"))
+                    fi
+                    opts="-l --language --detect-language -f --force ${common_opts}"
+                    COMPREPLY+=($(compgen -W "${opts}" -- "${cur}"))
+                    ;;
+            esac
+            ;;
+        embed)
+            if [[ ${COMP_CWORD} -eq 2 ]]; then
+                _customkb_kb_completion
+            fi
+            opts="-r --reset-database ${common_opts}"
+            COMPREPLY+=($(compgen -W "${opts}" -- "${cur}"))
+            ;;
+        query)
+            case "${prev}" in
+                -Q|--query_file)
+                    COMPREPLY=($(compgen -f -- "${cur}"))
+                    return 0
+                    ;;
+                -R|--role)
+                    # No specific completion for role
+                    return 0
+                    ;;
+                -m|--model)
+                    COMPREPLY=($(compgen -W "gpt-4 gpt-4o gpt-4o-mini gpt-3.5-turbo claude-3-5-sonnet claude-3-opus claude-3-haiku gemini-pro" -- "${cur}"))
+                    return 0
+                    ;;
+                -k|--top-k|-s|--context-scope|-M|--max-tokens)
+                    # Numeric values - no completion
+                    return 0
+                    ;;
+                -t|--temperature)
+                    COMPREPLY=($(compgen -W "0.0 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1.0 1.1 1.2 1.3 1.4 1.5" -- "${cur}"))
+                    return 0
+                    ;;
+                -f|--format)
+                    COMPREPLY=($(compgen -W "xml json markdown plain" -- "${cur}"))
+                    return 0
+                    ;;
+                -p|--prompt-template)
+                    COMPREPLY=($(compgen -W "default instructive scholarly concise analytical conversational technical" -- "${cur}"))
+                    return 0
+                    ;;
+                --category|--categories)
+                    # Category completion would require reading the KB - skip for now
+                    return 0
+                    ;;
+                *)
+                    if [[ ${COMP_CWORD} -eq 2 ]]; then
+                        _customkb_kb_completion
+                    elif [[ ${COMP_CWORD} -eq 3 ]]; then
+                        # Query text - no completion
+                        return 0
+                    fi
+                    opts="-Q --query_file -c --context --context-only -R --role -m --model -k --top-k -s --context-scope -t --temperature -M --max-tokens -f --format -p --prompt-template --category --categories ${common_opts}"
+                    COMPREPLY+=($(compgen -W "${opts}" -- "${cur}"))
+                    ;;
+            esac
+            ;;
+        edit|verify-indexes|bm25)
+            if [[ ${COMP_CWORD} -eq 2 ]]; then
+                _customkb_kb_completion
+            fi
+            if [[ "${command}" == "bm25" ]]; then
+                opts="--force"
+            else
+                opts="${common_opts}"
+            fi
+            COMPREPLY+=($(compgen -W "${opts}" -- "${cur}"))
+            ;;
+        optimize)
+            case "${prev}" in
+                -m|--memory-gb)
+                    # Numeric values - no completion
+                    return 0
+                    ;;
+                *)
+                    if [[ ${COMP_CWORD} -eq 2 ]]; then
+                        _customkb_kb_completion
+                    fi
+                    opts="-n --dry-run -a --analyze -s --show-tiers -m --memory-gb ${common_opts}"
+                    COMPREPLY+=($(compgen -W "${opts}" -- "${cur}"))
+                    ;;
+            esac
+            ;;
+        categorize)
+            case "${prev}" in
+                -S|--sample|-M|--max-concurrent)
+                    # Numeric values - no completion
+                    return 0
+                    ;;
+                -m|--model)
+                    COMPREPLY=($(compgen -W "gpt-4o-mini gpt-4o gpt-4 claude-3-5-sonnet" -- "${cur}"))
+                    return 0
+                    ;;
+                -s|--sampling)
+                    COMPREPLY=($(compgen -W "5-10-5 3-7-3 10-20-10" -- "${cur}"))
+                    return 0
+                    ;;
+                -c|--confidence-threshold|--dedup-threshold)
+                    COMPREPLY=($(compgen -W "0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9" -- "${cur}"))
+                    return 0
+                    ;;
+                *)
+                    if [[ ${COMP_CWORD} -eq 2 ]]; then
+                        _customkb_kb_completion
+                    fi
+                    opts="-S --sample -f --full --resume --import --list -m --model -s --sampling -M --max-concurrent -c --confidence-threshold -D --no-dedup --dedup-threshold --fixed-categories ${common_opts}"
+                    COMPREPLY+=($(compgen -W "${opts}" -- "${cur}"))
+                    ;;
+            esac
+            ;;
+        version)
+            opts="--build ${common_opts}"
+            COMPREPLY+=($(compgen -W "${opts}" -- "${cur}"))
+            ;;
+        help)
+            # No additional completion for help
+            ;;
+        *)
+            # Unknown command
+            ;;
+    esac
+}
+
+# Function to complete knowledge base names
+_customkb_kb_completion() {
+    local vectordbs_dir="${VECTORDBS:-/var/lib/vectordbs}"
+    if [[ -d "${vectordbs_dir}" ]]; then
+        local kb_names
+        kb_names=$(find "${vectordbs_dir}" -mindepth 1 -maxdepth 1 -type d -printf "%f\n" 2>/dev/null | sort)
+        COMPREPLY+=($(compgen -W "${kb_names}" -- "${cur}"))
+    fi
+}
+
+# Register the completion function
+complete -F _customkb_completion customkb

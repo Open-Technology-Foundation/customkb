@@ -1,11 +1,11 @@
 #!/usr/bin/env python
 """
-Configuration management for CustomKB knowledge base system.
+Configuration management for CustomKB knowledgebase system.
 
 This module provides the core configuration infrastructure for CustomKB, handling:
 - Configuration file loading and validation with security checks
 - Environment variable overrides with type conversion
-- Domain-style knowledge base naming (e.g., 'example.com.cfg')
+- Domain-style knowledgebase naming (e.g., 'example.com.cfg')
 - Path resolution and validation for configuration files
 - Comprehensive configuration parameters across 5 categories:
   * DEFAULT: Core model and processing settings
@@ -25,7 +25,7 @@ import configparser
 import time
 from typing import Optional
 
-from utils.logging_utils import get_logger
+from utils.logging_config import get_logger
 from utils.text_utils import split_filepath, find_file, get_env
 
 # Initialize vector database directory
@@ -41,19 +41,19 @@ logger = get_logger(__name__)
 
 def get_kb_name(kb_input: str) -> Optional[str]:
   """
-  Extract and validate knowledge base name from user input.
+  Extract and validate knowledgebase name from user input.
   
   Strips any path components and .cfg extension, then validates that
-  the knowledge base exists as a subdirectory in VECTORDBS.
+  the knowledgebase exists as a subdirectory in VECTORDBS.
   
   Args:
       kb_input: User input which may include paths or .cfg extension
       
   Returns:
-      Clean knowledge base name if valid, None otherwise
+      Clean knowledgebase name if valid, None otherwise
   """
   if not kb_input:
-    logger.error("Knowledge base name cannot be empty")
+    logger.error("Knowledgebase name cannot be empty")
     return None
   
   # Remove any path components (like basename command)
@@ -65,13 +65,13 @@ def get_kb_name(kb_input: str) -> Optional[str]:
   
   # Validate KB name is not empty after cleaning
   if not kb_name:
-    logger.error("Knowledge base name cannot be empty after removing path/extension")
+    logger.error("Knowledgebase name cannot be empty after removing path/extension")
     return None
   
-  # Check if knowledge base directory exists
+  # Check if knowledgebase directory exists
   kb_dir = os.path.join(VECTORDBS, kb_name)
   if not os.path.isdir(kb_dir):
-    logger.error(f"Knowledge base '{kb_name}' not found in {VECTORDBS}")
+    logger.error(f"Knowledgebase '{kb_name}' not found in {VECTORDBS}")
     
     # List available KBs for helpful error message
     try:
@@ -79,7 +79,7 @@ def get_kb_name(kb_input: str) -> Optional[str]:
                       if os.path.isdir(os.path.join(VECTORDBS, d)) 
                       and not d.startswith('.')]
       if available_kbs:
-        logger.info(f"Available knowledge bases: {', '.join(sorted(available_kbs))}")
+        logger.info(f"Available knowledgebases: {', '.join(sorted(available_kbs))}")
     except OSError:
       pass  # Ignore errors listing directory
     
@@ -90,14 +90,14 @@ def get_kb_name(kb_input: str) -> Optional[str]:
 
 def get_fq_cfg_filename(cfgfile: str) -> Optional[str]:
   """
-  Resolve knowledge base name to its configuration file path.
+  Resolve knowledgebase name to its configuration file path.
   
-  This function now requires that knowledge bases exist as subdirectories
+  This function now requires that knowledgebases exist as subdirectories
   within VECTORDBS. It strips any path components and .cfg extensions
   from the input to get a clean KB name.
   
   Args:
-      cfgfile: Knowledge base name (paths and .cfg extensions will be stripped)
+      cfgfile: Knowledgebase name (paths and .cfg extensions will be stripped)
       
   Returns:
       Full path to configuration file if KB exists, None otherwise
@@ -127,10 +127,10 @@ def get_fq_cfg_filename(cfgfile: str) -> Optional[str]:
 
 class KnowledgeBase:
   """
-  Central configuration and resource manager for a CustomKB knowledge base instance.
+  Central configuration and resource manager for a CustomKB knowledgebase instance.
   
   This class serves as the primary configuration hub, managing all settings and
-  resources needed for a knowledge base to function. It implements a three-tier
+  resources needed for a knowledgebase to function. It implements a three-tier
   configuration hierarchy: environment variables (highest priority), config file
   values, and built-in defaults.
   
@@ -142,7 +142,7 @@ class KnowledgeBase:
   - ALGORITHMS: Algorithm-specific thresholds and tuning parameters
   
   Attributes:
-      knowledge_base_name: The base name of this knowledge base
+      knowledge_base_name: The base name of this knowledgebase
       knowledge_base_db: Path to the SQLite database file
       knowledge_base_vector: Path to the FAISS vector index file
       vector_model: Name of the embedding model to use
@@ -162,7 +162,7 @@ class KnowledgeBase:
 
     Args:
         kb_base: Path to configuration file (e.g., 'myproject.cfg') or 
-            base name of the knowledge base. If a .cfg file is provided,
+            base name of the knowledgebase. If a .cfg file is provided,
             configuration will be loaded from it. Otherwise, defaults or
             kwargs will be used.
         **kwargs: Additional parameters to override configuration values.
@@ -267,6 +267,8 @@ class KnowledgeBase:
       'DEF_QUERY_ENHANCEMENT_CACHE_TTL_DAYS': (int, 30),
       'DEF_SPELLING_CORRECTION_THRESHOLD': (float, 0.8),
       'DEF_SYNONYM_RELEVANCE_THRESHOLD': (float, 0.6),
+      # Categorization configuration
+      'DEF_ENABLE_CATEGORIZATION': (bool, False),
       # Reranking configuration
       'DEF_ENABLE_RERANKING': (bool, True),
       'DEF_RERANKING_MODEL': (str, 'cross-encoder/ms-marco-MiniLM-L-6-v2'),
@@ -334,7 +336,7 @@ class KnowledgeBase:
     Load configuration from .cfg file or use provided values.
 
     Args:
-        kb_base: Base name or path of the knowledge base.
+        kb_base: Base name or path of the knowledgebase.
         **kwargs: Additional parameters to override configuration values.
     """
     if kb_base.endswith('.cfg'):
@@ -522,6 +524,10 @@ class KnowledgeBase:
         algorithms_section.getfloat('spelling_correction_threshold', fallback=self.DEF_SPELLING_CORRECTION_THRESHOLD), float)
       self.synonym_relevance_threshold = get_env('SYNONYM_RELEVANCE_THRESHOLD',
         algorithms_section.getfloat('synonym_relevance_threshold', fallback=self.DEF_SYNONYM_RELEVANCE_THRESHOLD), float)
+      
+      # Categorization configuration
+      self.enable_categorization = get_env('ENABLE_CATEGORIZATION',
+        algorithms_section.getboolean('enable_categorization', fallback=self.DEF_ENABLE_CATEGORIZATION), bool)
       
       # Reranking configuration
       self.enable_reranking = get_env('ENABLE_RERANKING',

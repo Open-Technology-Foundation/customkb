@@ -10979,7 +10979,7 @@ INSERT INTO citations VALUES(10966,'zenquotes/quotes/0817.txt/0817.txt','','F.M.
 INSERT INTO citations VALUES(10967,'zenquotes/quotes/1626.txt/1626.txt','','','','','2025-07-16 14:38:04','2025-07-16 14:38:04');
 INSERT INTO citations VALUES(10968,'zenquotes/quotes/1637.txt/1637.txt','','Fyodor Dostoevski','','Fyodor Dostoevski','2025-07-16 14:38:04','2025-07-16 14:38:04');
 INSERT INTO citations VALUES(10969,'zenquotes/quotes/1845.txt/1845.txt','','','','','2025-07-16 14:38:04','2025-07-16 14:38:04');
-INSERT INTO citations VALUES(10970,'transcripts/c_nCjlSB1Zk.transcript.txt/c_nCjlSB1Zk.transcript.txt','Embedding Knowledge Bases for Business Automation','','','"Embedding Knowledge Bases for Business Automation"','2025-07-16 14:38:04','2025-07-16 14:38:04');
+INSERT INTO citations VALUES(10970,'transcripts/c_nCjlSB1Zk.transcript.txt/c_nCjlSB1Zk.transcript.txt','Embedding Knowledgebases for Business Automation','','','"Embedding Knowledgebases for Business Automation"','2025-07-16 14:38:04','2025-07-16 14:38:04');
 INSERT INTO citations VALUES(10971,'zenquotes/quotes/1301.txt/1301.txt','','Zhao Hong','','Zhao Hong','2025-07-16 14:38:04','2025-07-16 14:38:04');
 INSERT INTO citations VALUES(10972,'zenquotes/quotes/1664.txt/1664.txt','','','','','2025-07-16 14:38:04','2025-07-16 14:38:04');
 INSERT INTO citations VALUES(10973,'zenquotes/quotes/0223.txt/0223.txt','','','','','2025-07-16 14:38:04','2025-07-16 14:38:04');

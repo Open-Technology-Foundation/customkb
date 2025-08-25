@@ -11,7 +11,6 @@ import os
 import sys
 import time
 import numpy as np
-import faiss
 import argparse
 import asyncio
 import hashlib
@@ -24,6 +23,10 @@ from concurrent.futures import ThreadPoolExecutor
 from utils.logging_utils import setup_logging, get_logger, time_to_finish
 from config.config_manager import KnowledgeBase, get_fq_cfg_filename
 from database.db_manager import connect_to_database, close_database
+
+# Load FAISS with proper GPU initialization
+from utils.faiss_loader import get_faiss
+faiss, FAISS_GPU_AVAILABLE = get_faiss()
 
 # Import OpenAI client with validation
 from openai import OpenAI, AsyncOpenAI

@@ -90,7 +90,7 @@ query_role = You are a helpful assistant.
     assert "embeddings" in embed_result
     assert "saved to" in embed_result
     
-    # Step 3: Query the knowledge base
+    # Step 3: Query the knowledgebase
     query_args = Mock()
     query_args.config_file = config_file
     query_args.query_text = "What is machine learning?"
@@ -353,7 +353,7 @@ class TestCLIIntegration:
     
     help_text = customkb_usage()
     assert "CustomKB" in help_text
-    assert "AI-Powered Knowledge Base System" in help_text
+    assert "AI-Powered Knowledgebase System" in help_text
   
   def test_cli_version_command(self):
     """Test CLI version command."""

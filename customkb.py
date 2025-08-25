@@ -1,17 +1,17 @@
 #!/usr/bin/env python
 """
-CustomKB: AI-Powered Knowledge Base System
+CustomKB: AI-Powered Knowledgebase System
 
-Create and query AI knowledge bases with semantic search and LLM integration.
+Create and query AI knowledgebases with semantic search and LLM integration.
 
 Usage:
   customkb <command> <knowledge_base> [options]
 
 Commands:
-  database     Process text files into knowledge base
+  database     Process text files into knowledgebase
   embed        Generate embeddings for stored text
-  query        Search knowledge base with AI responses
-  edit         Edit knowledge base configuration
+  query        Search knowledgebase with AI responses
+  edit         Edit knowledgebase configuration
   optimize     Optimize performance and create indexes
   verify-indexes   Check database index health
   bm25         Build BM25 index for hybrid search
@@ -19,10 +19,10 @@ Commands:
   help         Show this help message
 
 Examples:
-  customkb database myproject docs/*.txt
-  customkb embed myproject
-  customkb query myproject "What are the key features?"
-  customkb optimize myproject --analyze
+  customkb database knowledgebase docs/*.txt
+  customkb embed knowledgebase
+  customkb query knowledgebase "What are the key features?"
+  customkb optimize knowledgebase --analyze
 
 Run 'customkb <command> -h' for detailed help on each command.
 """
@@ -51,7 +51,7 @@ if str(project_root) not in sys.path:
   sys.path.insert(0, str(project_root))
 
 # Import modules
-from utils.logging_utils import setup_logging, dashes, elapsed_time
+from utils.logging_config import setup_logging, dashes, elapsed_time
 from config.config_manager import get_fq_cfg_filename, KnowledgeBase
 from database.db_manager import process_database
 from embedding.embed_manager import process_embeddings
@@ -72,7 +72,7 @@ def customkb_usage() -> str:
 
 def edit_config(args: argparse.Namespace, logger) -> int:
   """
-  Edit the knowledge base configuration file in system editor.
+  Edit the knowledgebase configuration file in system editor.
   
   Args:
       args: Command-line arguments with config_file
@@ -84,7 +84,7 @@ def edit_config(args: argparse.Namespace, logger) -> int:
   # Get config file path
   config_file = get_fq_cfg_filename(args.config_file)
   if not config_file:
-    logger.error(f"Knowledge base '{args.config_file}' not found")
+    logger.error(f"Knowledgebase '{args.config_file}' not found")
     sys.exit(1)
     
   logger.debug(f"{config_file=}")
@@ -152,11 +152,11 @@ def rebuild_bm25_index(args: argparse.Namespace, logger) -> str:
     # Get configuration file
     cfgfile = get_fq_cfg_filename(args.config_file)
     if not cfgfile:
-      return f"Error: Knowledge base '{args.config_file}' not found."
+      return f"Error: Knowledgebase '{args.config_file}' not found."
 
     logger.info(f"Building BM25 index for: {cfgfile}")
     
-    # Initialize knowledge base
+    # Initialize knowledgebase
     kb = KnowledgeBase(cfgfile)
     
     # Check if hybrid search is enabled
@@ -217,10 +217,10 @@ def main() -> None:
   # QUERY
   query_parser = subparsers.add_parser(
     "query",
-    description="Search knowledge base and get AI-powered answers",
+    description="Search knowledgebase and get AI-powered answers",
     formatter_class=argparse.RawDescriptionHelpFormatter,
   )
-  query_parser.add_argument('config_file', help='Knowledge base name')
+  query_parser.add_argument('config_file', help='Knowledgebase name')
   query_parser.add_argument('query_text', help='Search query text')
   query_parser.add_argument('-Q', '--query_file', default='', help='Read query from file')
   query_parser.add_argument('-c', '--context', '--context-only', dest='context_only', action='store_true', help='Return only context without AI response')
@@ -232,6 +232,9 @@ def main() -> None:
   query_parser.add_argument('-M', '--max-tokens', default='', help='Maximum response tokens')
   query_parser.add_argument('-f', '--format', default='', help='Output format: xml, json, markdown, plain')
   query_parser.add_argument('-p', '--prompt-template', default='', help='Prompt style: default, instructive, scholarly, concise, analytical, conversational, technical')
+  query_parser.add_argument('--category', default='', help='Filter results by category (exact match)')
+  query_parser.add_argument('--categories', default='', help='Filter results by multiple categories (comma-separated)')
+  query_parser.add_argument('--context-files', nargs='+', help='Additional context files to include in the query')
   query_parser.add_argument('-q', '--quiet', dest='verbose', action='store_false', help='Disable verbose output')
   query_parser.add_argument('-v', '--verbose', dest='verbose', action='store_true', help='Enable verbose output (default)')
   query_parser.add_argument('-d', '--debug', action='store_true', help='Enable debug output')
@@ -240,10 +243,10 @@ def main() -> None:
   # DATABASE
   database_parser = subparsers.add_parser(
     'database',
-    description="Process text files into knowledge base",
+    description="Process text files into knowledgebase",
     formatter_class=argparse.RawDescriptionHelpFormatter,
   )
-  database_parser.add_argument('config_file', help='Knowledge base name')
+  database_parser.add_argument('config_file', help='Knowledgebase name')
   database_parser.add_argument('files', nargs='*', help='Files or patterns to process (e.g., *.txt docs/)')
   database_parser.add_argument('-l', '--language', default='en', help='Language for stopwords (en, fr, de, etc.)')
   database_parser.add_argument('--detect-language', action='store_true', help='Auto-detect language per file')
@@ -256,10 +259,10 @@ def main() -> None:
   # EMBED
   embed_parser = subparsers.add_parser(
     'embed',
-    description="Generate vector embeddings for text in knowledge base",
+    description="Generate vector embeddings for text in knowledgebase",
     formatter_class=argparse.RawDescriptionHelpFormatter,
   )
-  embed_parser.add_argument('config_file', help='Knowledge base name')
+  embed_parser.add_argument('config_file', help='Knowledgebase name')
   embed_parser.add_argument('-r', '--reset-database', action='store_true', help='Reset embedding status flags')
   embed_parser.add_argument('-q', '--quiet', dest='verbose', action='store_false', help='Disable verbose output')
   embed_parser.add_argument('-v', '--verbose', dest='verbose', action='store_true', help='Enable verbose output (default)')
@@ -269,10 +272,10 @@ def main() -> None:
   # EDIT
   edit_parser = subparsers.add_parser(
     'edit',
-    description="Edit knowledge base configuration file",
+    description="Edit knowledgebase configuration file",
     formatter_class=argparse.RawDescriptionHelpFormatter,
   )
-  edit_parser.add_argument('config_file', help='Knowledge base name')
+  edit_parser.add_argument('config_file', help='Knowledgebase name')
   edit_parser.add_argument('-q', '--quiet', dest='verbose', action='store_false', help='Disable verbose output')
   edit_parser.add_argument('-v', '--verbose', dest='verbose', action='store_true', help='Enable verbose output (default)')
   edit_parser.add_argument('-d', '--debug', action='store_true', help='Enable debug output')
@@ -283,7 +286,7 @@ def main() -> None:
     'bm25',
     description='Build BM25 index for keyword + semantic hybrid search',
   )
-  bm25_parser.add_argument('config_file', help='Knowledge base name')
+  bm25_parser.add_argument('config_file', help='Knowledgebase name')
   bm25_parser.add_argument('--force', action='store_true', help='Force rebuild existing index')
 
   # OPTIMIZE
@@ -291,11 +294,11 @@ def main() -> None:
     'optimize',
     description='Optimize performance and create database indexes',
   )
-  optimize_parser.add_argument('config_file', nargs='?', help='Knowledge base name (default: all KBs)')
-  optimize_parser.add_argument('--dry-run', action='store_true', help='Preview changes without applying')
-  optimize_parser.add_argument('--analyze', action='store_true', help='Analyze and show recommendations')
-  optimize_parser.add_argument('--show-tiers', action='store_true', help='Display all memory tier settings')
-  optimize_parser.add_argument('--memory-gb', type=float, help='Override detected memory (GB)')
+  optimize_parser.add_argument('config_file', nargs='?', help='Knowledgebase name (default: all KBs)')
+  optimize_parser.add_argument('-n', '--dry-run', action='store_true', help='Preview changes without applying')
+  optimize_parser.add_argument('-a', '--analyze', action='store_true', help='Analyze and show recommendations')
+  optimize_parser.add_argument('-s', '--show-tiers', action='store_true', help='Display all memory tier settings')
+  optimize_parser.add_argument('-m', '--memory-gb', type=float, help='Override detected memory (GB)')
   optimize_parser.add_argument('-q', '--quiet', dest='verbose', action='store_false', help='Disable verbose output')
   optimize_parser.add_argument('-v', '--verbose', dest='verbose', action='store_true', help='Enable verbose output (default)')
   optimize_parser.add_argument('-d', '--debug', action='store_true', help='Enable debug output')
@@ -306,11 +309,56 @@ def main() -> None:
     'verify-indexes',
     description='Check database indexes for performance issues',
   )
-  verify_parser.add_argument('config_file', help='Knowledge base name')
+  verify_parser.add_argument('config_file', help='Knowledgebase name')
   verify_parser.add_argument('-q', '--quiet', dest='verbose', action='store_false', help='Disable verbose output')
   verify_parser.add_argument('-v', '--verbose', dest='verbose', action='store_true', help='Enable verbose output (default)')
   verify_parser.add_argument('-d', '--debug', action='store_true', help='Enable debug output')
   verify_parser.set_defaults(verbose=True)
+
+  # CATEGORIZE
+  categorize_parser = subparsers.add_parser(
+    'categorize',
+    description='Auto-categorize articles in knowledgebase using AI',
+    formatter_class=argparse.RawDescriptionHelpFormatter,
+    epilog="""
+Examples:
+  customkb categorize knowledgebase -S 10        # Process 10 sample articles
+  customkb categorize knowledgebase --full       # Process all articles
+  customkb categorize knowledgebase --resume     # Resume from checkpoint
+  customkb categorize knowledgebase --list       # List existing categories
+    """
+  )
+  categorize_parser.add_argument('config_file', help='Knowledgebase name')
+  categorize_parser.add_argument('-S', '--sample', type=int, metavar='N',
+                                help='Process only N sample articles')
+  categorize_parser.add_argument('-f', '--full', action='store_true',
+                                help='Process all articles (default if neither --sample nor --full)')
+  categorize_parser.add_argument('--resume', action='store_true',
+                                help='Resume from checkpoint if available')
+  categorize_parser.add_argument('--import', dest='import_to_db', action='store_true',
+                                help='Import categories to database after processing')
+  categorize_parser.add_argument('--list', dest='list_categories', action='store_true',
+                                help='List existing categories and counts')
+  categorize_parser.add_argument('-m', '--model', default='gpt-4o-mini',
+                                help='AI model to use (default: gpt-4o-mini)')
+  categorize_parser.add_argument('-s', '--sampling', type=str, metavar='T-M-B',
+                                help='Chunk sampling config (e.g., 5-10-5 for top-middle-bottom)')
+  categorize_parser.add_argument('-M', '--max-concurrent', type=int, default=5,
+                                help='Maximum concurrent API requests (default: 5)')
+  categorize_parser.add_argument('-c', '--confidence-threshold', type=float, default=0.5,
+                                help='Minimum confidence for category assignment (default: 0.5)')
+  categorize_parser.add_argument('-D', '--no-dedup', dest='enable_deduplication',
+                                action='store_false', default=True,
+                                help='Disable category deduplication')
+  categorize_parser.add_argument('--dedup-threshold', type=float, default=85.0,
+                                help='Similarity threshold for deduplication (default: 85.0)')
+  categorize_parser.add_argument('--fixed-categories', dest='use_variable_categories',
+                                action='store_false', default=True,
+                                help='Use fixed number of categories per article')
+  categorize_parser.add_argument('-v', '--verbose', action='store_true', help='Enable verbose output')
+  categorize_parser.add_argument('-q', '--quiet', action='store_true', help='Minimal output')
+  categorize_parser.add_argument('-d', '--debug', action='store_true', help='Enable debug output')
+  categorize_parser.set_defaults(verbose=True)
 
   # HELP
   help_parser = subparsers.add_parser(
@@ -384,11 +432,11 @@ def main() -> None:
   
   # Extract KB info from config file for logging setup
   from config.config_manager import get_fq_cfg_filename
-  from utils.logging_utils import get_kb_info_from_config
+  from utils.logging_config import get_kb_info_from_config
   
   config_file_fq = get_fq_cfg_filename(args.config_file)
   if not config_file_fq:
-    print(f"Error: Knowledge base '{args.config_file}' not found in {os.getenv('VECTORDBS', '/var/lib/vectordbs')}", file=sys.stderr)
+    print(f"Error: Knowledgebase '{args.config_file}' not found in {os.getenv('VECTORDBS', '/var/lib/vectordbs')}", file=sys.stderr)
     sys.exit(1)
     
   try:
@@ -461,6 +509,11 @@ def main() -> None:
       result = process_verify_indexes(args, logger)
       print(result)  # Keep print for user output
       logger.debug(f"Verify-indexes command completed")
+    elif args.command == 'categorize':
+      from categorize.categorize_manager import process_categorize
+      result = process_categorize(args, logger)
+      print(result)  # Keep print for user output
+      logger.debug(f"Categorize command completed")
     else:
       logger.error(f'Unknown command: {args.command}')
       sys.exit(1)

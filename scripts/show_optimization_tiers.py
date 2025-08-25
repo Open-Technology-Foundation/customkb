@@ -43,7 +43,7 @@ def main():
         print(f"  FAISS use float16: {opts['ALGORITHMS'].get('faiss_gpu_use_float16', 'N/A'):>9}")
     
     print("\n" + "=" * 80)
-    print("\nTo apply these settings to your knowledge base:")
+    print("\nTo apply these settings to your knowledgebase:")
     print("  ./optimize-kb <kb-name> --memory-gb <memory>")
     print("\nTo see current system memory:")
     print("  ./optimize-kb --analyze")

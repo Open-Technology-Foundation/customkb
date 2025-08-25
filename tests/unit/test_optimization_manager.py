@@ -121,7 +121,7 @@ class TestOptimizationManager:
             with patch('utils.optimization_manager.optimize_config') as mock_optimize:
                 mock_optimize.return_value = {}
                 result = process_optimize(args, logger)
-                assert 'Found 1 knowledge base configuration(s)' in result
+                assert 'Found 1 knowledgebase configuration(s)' in result
 
 
 class TestIndexCreation:

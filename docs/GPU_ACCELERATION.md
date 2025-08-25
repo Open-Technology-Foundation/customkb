@@ -6,7 +6,7 @@ CustomKB supports GPU acceleration for the reranking step using CUDA-compatible 
 
 ## Configuration
 
-To enable GPU acceleration, set the following in your knowledge base configuration:
+To enable GPU acceleration, set the following in your knowledgebase configuration:
 
 ```ini
 [ALGORITHMS]

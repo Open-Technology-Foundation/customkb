@@ -531,7 +531,8 @@ enable_hybrid_search = true
       filled_terms = random.sample(terms, min(3, len(terms)))
       try:
         text = pattern.format(*filled_terms)
-      except:
+      except (IndexError, KeyError) as e:
+        # Not enough terms for pattern or format error
         text = f"Document {i} about machine learning and artificial intelligence algorithms."
       
       tokens, length = tokenize_for_bm25(text, 'en')

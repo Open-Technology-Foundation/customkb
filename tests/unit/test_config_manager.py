@@ -239,7 +239,7 @@ class TestKnowledgeBase:
         assert kb.knowledge_base_vector == f"{expected_base}.faiss"
   
   def test_domain_style_paths(self):
-    """Test paths for domain-style knowledge base names."""
+    """Test paths for domain-style knowledgebase names."""
     with tempfile.TemporaryDirectory() as tmpdir:
       # Create domain-style KB directory
       kb_dir = os.path.join(tmpdir, 'example.com')

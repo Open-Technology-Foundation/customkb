@@ -22,6 +22,28 @@ from tests.fixtures.mock_data import MockDataGenerator, TestDataManager
 from utils.resource_manager import ResourceGuard, cleanup_caches
 
 
+@pytest.fixture
+def mock_db_connection():
+  """
+  Provide a fully mocked database connection with all necessary methods.
+  """
+  conn = Mock()
+  conn.commit = Mock()
+  conn.close = Mock()
+  conn.rollback = Mock()
+  
+  cursor = Mock()
+  cursor.fetchall = Mock(return_value=[])
+  cursor.fetchone = Mock(return_value=None)
+  cursor.execute = Mock()
+  cursor.executemany = Mock()
+  cursor.close = Mock()
+  
+  conn.cursor = Mock(return_value=cursor)
+  
+  return conn, cursor
+
+
 @pytest.fixture(scope="session", autouse=True)
 def session_resource_guard():
   """
@@ -63,7 +85,8 @@ def test_cleanup():
   try:
     import matplotlib.pyplot as plt
     plt.close('all')
-  except:
+  except ImportError:
+    # matplotlib not installed, skip
     pass
 
 
@@ -112,7 +135,7 @@ def sample_texts(mock_data_generator):
 
 @pytest.fixture
 def temp_kb_directory(temp_data_manager, monkeypatch):
-  """Create a temporary knowledge base directory within VECTORDBS."""
+  """Create a temporary knowledgebase directory within VECTORDBS."""
   # Create temporary VECTORDBS if not already set
   temp_vectordbs = tempfile.mkdtemp(prefix='test_vectordbs_')
   temp_data_manager.temp_dirs.append(temp_vectordbs)

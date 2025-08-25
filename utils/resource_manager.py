@@ -15,7 +15,7 @@ import signal
 from typing import Dict, Optional, Tuple, Callable, Any
 from contextlib import contextmanager
 
-from utils.logging_utils import get_logger
+from utils.logging_config import get_logger
 
 logger = get_logger(__name__)
 
@@ -350,8 +350,11 @@ def cleanup_caches():
   try:
     import matplotlib.pyplot as plt
     plt.close('all')
-  except:
+  except ImportError:
+    # matplotlib not installed, skip cleanup
     pass
+  except Exception as e:
+    logger.debug(f"Could not close matplotlib figures: {e}")
   
   logger.info("Cache cleanup completed")
 

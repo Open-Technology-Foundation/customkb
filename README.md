@@ -1,10 +1,10 @@
-# CustomKB: AI-Powered Knowledge Base System
+# CustomKB: AI-Powered Knowledgebase System
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
 [![Version](https://img.shields.io/badge/version-0.8.0-green.svg)](https://github.com/Open-Technology-Foundation/customkb)
 
-CustomKB is a production-ready knowledge base system that transforms your document collections into AI-powered, searchable knowledge repositories. It supports multiple embedding providers (OpenAI, Google) and combines state-of-the-art models with efficient vector search to deliver contextually relevant answers from your data.
+CustomKB is a production-ready knowledgebase system that transforms your document collections into AI-powered, searchable knowledge repositories. It supports multiple embedding providers (OpenAI, Google) and combines state-of-the-art models with efficient vector search to deliver contextually relevant answers from your data.
 
 ## 🌟 Key Features
 
@@ -88,7 +88,7 @@ CustomKB is a production-ready knowledge base system that transforms your docume
 
 ### Basic Usage Example
 
-1. **Create a knowledge base directory**:
+1. **Create a knowledgebase directory**:
    ```bash
    mkdir -p /var/lib/vectordbs/myproject
    ```
@@ -112,7 +112,7 @@ CustomKB is a production-ready knowledge base system that transforms your docume
    customkb embed myproject
    ```
 
-5. **Query your knowledge base**:
+5. **Query your knowledgebase**:
    ```bash
    customkb query myproject "How do I configure the vector model?"
    ```
@@ -131,7 +131,7 @@ customkb <command> <knowledge_base> [options]
 ```bash
 customkb database <knowledge_base> [files...] [options]
 ```
-Processes text files and stores them in the knowledge base.
+Processes text files and stores them in the knowledgebase.
 
 **Options:**
 - `-l, --language LANG`: Language for stopwords (en, fr, de, etc.)
@@ -167,7 +167,7 @@ Creates vector embeddings for all text chunks in the database.
 customkb embed myproject --verbose
 ```
 
-##### `query` - Search Knowledge Base
+##### `query` - Search Knowledgebase
 ```bash
 customkb query <knowledge_base> "<query>" [options]
 ```
@@ -204,7 +204,7 @@ customkb query myproject "Explain the architecture" \
 ```bash
 customkb optimize [knowledge_base] [options]
 ```
-Automatically optimizes knowledge base performance based on system resources.
+Automatically optimizes knowledgebase performance based on system resources.
 
 **Options:**
 - `--dry-run`: Preview changes without applying
@@ -217,7 +217,7 @@ Automatically optimizes knowledge base performance based on system resources.
 # Show optimization tiers
 customkb optimize --show-tiers
 
-# Analyze all knowledge bases
+# Analyze all knowledgebases
 customkb optimize --analyze
 
 # Optimize specific KB
@@ -271,19 +271,19 @@ customkb help
 ```
 Displays comprehensive usage information.
 
-### Creating a Knowledge Base
+### Creating a Knowledgebase
 
-A complete guide to creating a production-ready knowledge base from raw data to deployment.
+A complete guide to creating a production-ready knowledgebase from raw data to deployment.
 
 #### Overview
 
-A knowledge base consists of:
+A knowledgebase consists of:
 - Configuration file (`.cfg`) - Settings and system prompts
 - SQLite database (`.db`) - Structured text storage
 - FAISS index (`.faiss`) - Vector embeddings
 - BM25 index (`.bm25`) - Keyword search (optional)
 
-All knowledge bases are stored in `$VECTORDBS` (default: `/var/lib/vectordbs/`)
+All knowledgebases are stored in `$VECTORDBS` (default: `/var/lib/vectordbs/`)
 
 #### Step 1: Data Acquisition
 
@@ -369,7 +369,7 @@ done
 
 #### Step 4: Create Configuration
 
-Create the knowledge base configuration file:
+Create the knowledgebase configuration file:
 
 ```bash
 cat > /var/lib/vectordbs/myproject/myproject.cfg << 'EOF'
@@ -392,7 +392,7 @@ query_temperature = 0.1
 
 # System role - customize for your use case
 query_role = |
-  You are an expert assistant with deep knowledge of the documents in this knowledge base.
+  You are an expert assistant with deep knowledge of the documents in this knowledgebase.
   Provide accurate, detailed answers based on the provided context.
   Always cite specific sources when making claims.
   If information is not available in the context, clearly state this limitation.
@@ -415,7 +415,7 @@ EOF
 Process staged documents into the database:
 
 ```bash
-# Create the knowledge base directory structure
+# Create the knowledgebase directory structure
 cd /var/lib/vectordbs/myproject
 
 # Ingest all documents from staging directory
@@ -469,7 +469,7 @@ customkb verify-indexes myproject
 
 #### Step 8: Testing and Validation
 
-Test your knowledge base before deployment:
+Test your knowledgebase before deployment:
 
 ```bash
 # Test basic query
@@ -530,7 +530,7 @@ Configure for production use:
 
 #### Complete Example: Email Archive KB
 
-Here's a real-world example of creating an email archive knowledge base:
+Here's a real-world example of creating an email archive knowledgebase:
 
 ```bash
 # 1. Acquisition - Extract emails from mail server
@@ -616,15 +616,15 @@ customkb query email_archive "Show me emails about project deadlines"
 5. **Monitoring**: Regular index verification and performance analysis
 6. **Backup**: Regular backups of both configuration and data files
 
-### Knowledge Base Organization
+### Knowledgebase Organization
 
 #### Directory Structure
 
-All knowledge bases MUST be organized as subdirectories within the VECTORDBS directory:
+All knowledgebases MUST be organized as subdirectories within the VECTORDBS directory:
 
 ```
 $VECTORDBS/                          # Default: /var/lib/vectordbs
-├── myproject/                       # Knowledge base directory
+├── myproject/                       # Knowledgebase directory
 │   ├── myproject.cfg               # Configuration file (required)
 │   ├── myproject.db                # SQLite database
 │   ├── myproject.faiss             # FAISS vector index
@@ -843,10 +843,10 @@ vector_dimensions = 1536
 
 CustomKB integrates seamlessly with [dejavu2-cli](https://github.com/Open-Technology-Foundation/dejavu2-cli) for enhanced AI interactions.
 
-#### Using CustomKB as dv2 Knowledge Base
+#### Using CustomKB as dv2 Knowledgebase
 
 ```bash
-# Query with dv2 using CustomKB knowledge base
+# Query with dv2 using CustomKB knowledgebase
 dv2 -k /var/lib/vectordbs/myproject/myproject.cfg "What are the key features?"
 
 # Use pre-configured templates (Agents)
@@ -1031,7 +1031,7 @@ customkb database multilang docs/ --detect-language
 
 ```python
 #!/usr/bin/env python
-"""Batch process multiple knowledge bases"""
+"""Batch process multiple knowledgebases"""
 
 import subprocess
 import glob
@@ -1121,7 +1121,7 @@ python run_tests.py --coverage --html
 
 #### Common Issues
 
-**"Knowledge base 'name' not found"**
+**"Knowledgebase 'name' not found"**
 - Ensure KB directory exists in `$VECTORDBS`
 - Check VECTORDBS environment variable
 - Error message lists available KBs

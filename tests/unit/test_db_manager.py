@@ -23,7 +23,7 @@ from database.db_manager import (
 from config.config_manager import KnowledgeBase
 
 # Initialize logger for tests
-from utils.logging_utils import get_logger
+from utils.logging_config import get_logger
 logger = get_logger(__name__)
 
 

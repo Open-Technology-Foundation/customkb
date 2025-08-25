@@ -3,7 +3,7 @@
 ## Files Updated for New KB Resolution System
 
 ### 1. CLAUDE.md
-- Replaced "Knowledge Base Configuration Paths" section with "Knowledge Base Resolution System"
+- Replaced "KnowledgeBase Configuration Paths" section with "Knowledgebase Resolution System"
 - Added clear examples showing how all input formats resolve to KB names
 - Updated error handling documentation
 - Added migration guide section
@@ -49,7 +49,7 @@ customkb query myproject "search"
 
 ### Error Messages
 **Old**: "Configuration file not found"
-**New**: "Knowledge base 'name' not found in /var/lib/vectordbs"
+**New**: "Knowledgebase 'name' not found in /var/lib/vectordbs"
 
 ### Directory Structure
 All KBs must now be organized as:

@@ -76,7 +76,7 @@ Use bullet points or numbered lists where appropriate for clarity.''',
   
   'conversational': {
     'system': 'You are a friendly, conversational assistant. Provide helpful answers in a natural, approachable tone while staying accurate to the provided information.',
-    'user': '''Here's what I found in the knowledge base:
+    'user': '''Here's what I found in the knowledgebase:
 
 {reference_string}
 

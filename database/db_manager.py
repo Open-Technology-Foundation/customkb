@@ -1,6 +1,14 @@
 #!/usr/bin/env python
 """
-Database management module for CustomKB knowledge base system.
+Database management module for CustomKB knowledgebase system.
+
+NOTE: This module is being refactored. New code should import from:
+- database.connection for connection management
+- database.chunking for text splitting and chunking
+- database.migrations for schema updates
+
+This file maintains backward compatibility during the transition.
+All imports below will trigger deprecation warnings after 2025-08-30.
 
 This module handles all database-related operations including:
 - SQLite database creation and management
@@ -27,12 +35,108 @@ import os
 import sqlite3
 import argparse
 import re
+import warnings
 from typing import List, Optional, Dict, Any, Tuple, Set
 from contextlib import contextmanager
+from datetime import datetime
 
-from utils.logging_utils import setup_logging, get_logger, elapsed_time, time_to_finish
+from utils.logging_config import setup_logging, get_logger, elapsed_time, time_to_finish
 from utils.text_utils import get_files, split_filepath, clean_text, enhanced_clean_text, nlp
 from config.config_manager import KnowledgeBase, get_fq_cfg_filename
+
+# Import from new refactored modules
+from .connection import (
+    connect_to_database as _connect_to_database,
+    close_database as _close_database,
+    create_tables as _create_tables,
+    database_connection as _database_connection,
+    sqlite_connection as _sqlite_connection,
+    get_connection_info as _get_connection_info
+)
+
+from .chunking import (
+    detect_file_type as _detect_file_type,
+    init_text_splitter as _init_text_splitter,
+    get_language_specific_splitter as _get_language_specific_splitter,
+    split_text as _split_text,
+    calculate_chunk_statistics as _calculate_chunk_statistics,
+    optimize_chunk_size as _optimize_chunk_size,
+    merge_small_chunks as _merge_small_chunks,
+    validate_chunks as _validate_chunks
+)
+
+from .migrations import (
+    get_current_schema_version as _get_current_schema_version,
+    create_migration_table as _create_migration_table,
+    record_migration as _record_migration,
+    migrate_for_bm25 as _migrate_for_bm25,
+    migrate_add_categories as _migrate_add_categories,
+    migrate_add_timestamps as _migrate_add_timestamps,
+    run_all_migrations as _run_all_migrations,
+    check_migration_status as _check_migration_status
+)
+
+# Deprecation warning helper
+def _deprecation_warning(func_name: str, new_module: str):
+    """Issue deprecation warning for function usage."""
+    warnings.warn(
+        f"Importing '{func_name}' from database.db_manager is deprecated. "
+        f"Import from database.{new_module} instead. "
+        f"This compatibility layer will be removed after 2025-08-30.",
+        DeprecationWarning,
+        stacklevel=3
+    )
+
+# Export commonly used functions directly (without deprecation for new ones)
+# These are new exports that weren't in the original db_manager
+split_text = _split_text
+calculate_chunk_statistics = _calculate_chunk_statistics
+optimize_chunk_size = _optimize_chunk_size
+merge_small_chunks = _merge_small_chunks
+validate_chunks = _validate_chunks
+get_language_specific_splitter = _get_language_specific_splitter
+get_current_schema_version = _get_current_schema_version
+create_migration_table = _create_migration_table
+record_migration = _record_migration
+migrate_add_categories = _migrate_add_categories
+migrate_add_timestamps = _migrate_add_timestamps
+run_all_migrations = _run_all_migrations
+check_migration_status = _check_migration_status
+get_connection_info = _get_connection_info
+create_tables = _create_tables
+
+# Define public API
+__all__ = [
+    # Original functions (deprecated but still exported)
+    'connect_to_database',
+    'close_database', 
+    'database_connection',
+    'sqlite_connection',
+    'detect_file_type',
+    'init_text_splitter',
+    'migrate_for_bm25',
+    'process_database',
+    'process_text_file',
+    'extract_metadata',
+    'get_iso_code',
+    'get_full_language_name',
+    # New functions from refactored modules
+    'split_text',
+    'calculate_chunk_statistics',
+    'optimize_chunk_size',
+    'merge_small_chunks',
+    'validate_chunks',
+    'get_language_specific_splitter',
+    'get_current_schema_version',
+    'create_migration_table',
+    'record_migration',
+    'migrate_add_categories',
+    'migrate_add_timestamps',
+    'run_all_migrations',
+    'check_migration_status',
+    'get_connection_info',
+    'create_tables',
+]
 
 # Import NLTK for text processing
 import nltk
@@ -77,8 +181,10 @@ for lang in required_languages:
 # Load spaCy model for entity recognition
 try:
   nlp = spacy.load("en_core_web_sm")
-except:
+except (OSError, ImportError) as e:
   # Fall back if spacy model isn't installed
+  logger = get_logger(__name__)
+  logger.debug(f"spaCy model 'en_core_web_sm' not available: {e}")
   nlp = None
 
 # Language codes mapping - Limited to languages with NLTK support that we use
@@ -145,36 +251,22 @@ def detect_file_type(filename: str) -> str:
   """
   Detect file type based on extension to select appropriate text processing strategy.
   
+  DEPRECATED: Import from database.chunking instead.
+  
   Args:
       filename: Path to the file to analyze.
   
   Returns:
       File type identifier: 'markdown', 'code', 'html', or 'text'.
-      
-  Note:
-      This determines which text splitter will be used for optimal chunking.
-      Each file type has specialized handling to preserve structure and context.
   """
-  ext = os.path.splitext(filename)[1].lower()
-  
-  # Markdown files
-  if ext in ['.md', '.markdown']:
-    return 'markdown'
-  
-  # Code files
-  if ext in ['.py', '.js', '.java', '.c', '.cpp', '.go', '.rs', '.php', '.rb', '.ts', '.swift']:
-    return 'code'
-  
-  # HTML files
-  if ext in ['.html', '.htm', '.xml']:
-    return 'html'
-  
-  # Default to text
-  return 'text'
+  _deprecation_warning('detect_file_type', 'chunking')
+  return _detect_file_type(filename)
 
 def init_text_splitter(kb: KnowledgeBase, file_type: str = 'text') -> Any:
   """
   Initialize appropriate text splitter based on file type with specified token limits.
+  
+  DEPRECATED: Import from database.chunking instead.
 
   Args:
       kb: The KnowledgeBase instance containing configuration.
@@ -183,47 +275,8 @@ def init_text_splitter(kb: KnowledgeBase, file_type: str = 'text') -> Any:
   Returns:
       A configured text splitter instance.
   """
-  min_tokens = kb.db_min_tokens
-  max_tokens = kb.db_max_tokens
-  # Get configurable overlap parameters
-  max_chunk_overlap = getattr(kb, 'max_chunk_overlap', 100)
-  overlap_ratio = getattr(kb, 'overlap_ratio', 0.5)
-  chunk_overlap = min(max_chunk_overlap, int(min_tokens * overlap_ratio))  # Overlap to maintain context between chunks
-  
-  if file_type == 'markdown':
-    return MarkdownTextSplitter(
-      chunk_size=max_tokens,
-      chunk_overlap=chunk_overlap
-    )
-  elif file_type == 'code':
-    # Determine language from filename or default to Python
-    return RecursiveCharacterTextSplitter.from_language(
-      language=getattr(Language, getattr(kb, 'default_code_language', 'PYTHON').upper(), Language.PYTHON),  # Configurable default language
-      chunk_size=max_tokens,
-      chunk_overlap=chunk_overlap
-    )
-  elif file_type == 'html':
-    # HTML-aware text splitter
-    from bs4 import BeautifulSoup
-    
-    def html_splitter(text):
-      soup = BeautifulSoup(text, 'html.parser')
-      text_content = soup.get_text(separator='\n', strip=True)
-      splitter = RecursiveCharacterTextSplitter(
-        chunk_size=max_tokens,
-        chunk_overlap=chunk_overlap,
-        separators=["\n\n", "\n", ". ", " ", ""]
-      )
-      return splitter.split_text(text_content)
-    
-    return html_splitter
-  else:
-    # Default recursive text splitter
-    return RecursiveCharacterTextSplitter(
-      chunk_size=max_tokens,
-      chunk_overlap=chunk_overlap,
-      separators=["\n\n", "\n", ". ", " ", ""]
-    )
+  _deprecation_warning('init_text_splitter', 'chunking')
+  return _init_text_splitter(kb, file_type)
 
 def extract_metadata(text: str, file_path: str, kb) -> Dict[str, Any]:
   """
@@ -298,7 +351,7 @@ def extract_metadata(text: str, file_path: str, kb) -> Dict[str, Any]:
 
 def process_database(args: argparse.Namespace, logger) -> str:
   """
-  Process and store text files into the CustomKB knowledge base.
+  Process and store text files into the CustomKB knowledgebase.
   
   Takes input text files, processes them with appropriate text splitters based on file type,
   and stores them as chunks in the SQLite database. Supports various file formats and
@@ -306,7 +359,7 @@ def process_database(args: argparse.Namespace, logger) -> str:
   
   Args:
       args: Command-line arguments containing:
-          config_file: Path to knowledge base configuration
+          config_file: Path to knowledgebase configuration
           files: List of file paths or patterns to process
           language: Language for stopwords (default: english)
           force: Whether to reprocess files already in the database
@@ -333,11 +386,11 @@ def process_database(args: argparse.Namespace, logger) -> str:
   # Get configuration file
   config_file = get_fq_cfg_filename(args.config_file)
   if not config_file:
-    return f"Error: Knowledge base '{args.config_file}' not found."
+    return f"Error: Knowledgebase '{args.config_file}' not found."
 
   logger.info(f"{config_file=}")
 
-  # Initialize knowledge base
+  # Initialize knowledgebase
   kb = KnowledgeBase(config_file)
   if args.verbose:
     kb.save_config()
@@ -472,6 +525,8 @@ def process_database(args: argparse.Namespace, logger) -> str:
 def connect_to_database(kb: KnowledgeBase) -> None:
   """
   Connect to the SQLite database and create the 'docs' table if it doesn't exist.
+  
+  DEPRECATED: Import from database.connection instead.
 
   Args:
       kb: The KnowledgeBase instance.
@@ -479,93 +534,15 @@ def connect_to_database(kb: KnowledgeBase) -> None:
   Raises:
       Exception: If there's an error connecting to the database or creating the table.
   """
-  if not os.path.exists(kb.knowledge_base_db):
-    user_input = input(f"Database {kb.knowledge_base_db} does not exist. Do you want to create it? (y/n): ")
-    if user_input.lower() != 'y':
-      raise Exception(f"Database {kb.knowledge_base_db} does not exist. Process aborted.")
-
-  try:
-    kb.sql_connection = sqlite3.connect(kb.knowledge_base_db)
-    kb.sql_cursor = kb.sql_connection.cursor()
-    
-    # Enable foreign key constraints for referential integrity
-    kb.sql_cursor.execute("PRAGMA foreign_keys = ON")
-
-    try:
-      kb.sql_cursor.execute('''
-        CREATE TABLE IF NOT EXISTS docs (
-            id INTEGER PRIMARY KEY,
-            sid INTEGER,
-            sourcedoc VARCHAR(255),
-            originaltext TEXT,
-            embedtext TEXT,
-            embedded INTEGER DEFAULT 0,
-            language TEXT default "en",
-            metadata TEXT,
-            keyphrase_processed INTEGER default 0
-        );
-      ''')
-      
-      # Create necessary indexes for performance optimization
-      # Index on sourcedoc for fast file existence checks
-      kb.sql_cursor.execute('''
-        CREATE INDEX IF NOT EXISTS idx_sourcedoc ON docs(sourcedoc);
-      ''')
-      
-      # Index on embedded flag for efficient embedding queries
-      kb.sql_cursor.execute('''
-        CREATE INDEX IF NOT EXISTS idx_embedded ON docs(embedded);
-      ''')
-      
-      # Compound index on sourcedoc and sid for efficient context retrieval
-      kb.sql_cursor.execute('''
-        CREATE INDEX IF NOT EXISTS idx_sourcedoc_sid ON docs(sourcedoc, sid);
-      ''')
-      
-      # Composite index for embedding queries (embedded=0 AND embedtext != '')
-      kb.sql_cursor.execute('''
-        CREATE INDEX IF NOT EXISTS idx_embedded_embedtext ON docs(embedded, embedtext);
-      ''')
-      
-      # Primary key index for ID lookups (speeds up fetch_document_by_id)
-      kb.sql_cursor.execute('''
-        CREATE UNIQUE INDEX IF NOT EXISTS idx_id ON docs(id);
-      ''')
-      
-      # Composite index for language-filtered embedding queries
-      kb.sql_cursor.execute('''
-        CREATE INDEX IF NOT EXISTS idx_language_embedded ON docs(language, embedded);
-      ''')
-      
-      # Index for metadata queries (enables efficient metadata-based searches)
-      kb.sql_cursor.execute('''
-        CREATE INDEX IF NOT EXISTS idx_metadata ON docs(metadata);
-      ''')
-      
-      # Covering index for context retrieval queries to avoid table lookups
-      kb.sql_cursor.execute('''
-        CREATE INDEX IF NOT EXISTS idx_sourcedoc_sid_covering 
-        ON docs(sourcedoc, sid, id, originaltext, metadata);
-      ''')
-      
-      # Commit the index creation
-      kb.sql_connection.commit()
-      if logger:
-        logger.debug("Database schema and indexes verified")
-      
-      # Migrate database for BM25 support if needed
-      migrate_for_bm25(kb)
-      
-    except sqlite3.Error as e:
-      raise Exception(f"Error setting up database schema: {e}")
-
-  except sqlite3.Error as e:
-    raise Exception(f"Error connecting to the database: {e}")
+  _deprecation_warning('connect_to_database', 'connection')
+  return _connect_to_database(kb)
 
 def migrate_for_bm25(kb: KnowledgeBase) -> bool:
   """
   Migrate existing database for BM25 support.
   Safely adds BM25 columns if they don't exist.
+  
+  DEPRECATED: Import from database.migrations instead.
   
   Args:
       kb: The KnowledgeBase instance.
@@ -573,60 +550,28 @@ def migrate_for_bm25(kb: KnowledgeBase) -> bool:
   Returns:
       True if migration successful, False otherwise.
   """
-  try:
-    cursor = kb.sql_cursor
-    cursor.execute("PRAGMA table_info(docs)")
-    columns = {row[1] for row in cursor.fetchall()}
-    
-    migrations = []
-    if 'bm25_tokens' not in columns:
-      migrations.append("ALTER TABLE docs ADD COLUMN bm25_tokens TEXT")
-    if 'doc_length' not in columns:
-      migrations.append("ALTER TABLE docs ADD COLUMN doc_length INTEGER DEFAULT 0")
-    
-    for migration in migrations:
-      cursor.execute(migration)
-      logger.info(f"Executed migration: {migration}")
-    
-    # Create index for BM25 processing if needed
-    cursor.execute("""
-      CREATE INDEX IF NOT EXISTS idx_keyphrase_processed 
-      ON docs(keyphrase_processed)
-    """)
-    
-    kb.sql_connection.commit()
-    
-    if migrations:
-      logger.info(f"BM25 migration completed: {len(migrations)} columns added")
-    else:
-      logger.debug("BM25 migration not needed: columns already exist")
-    
-    return True
-  except sqlite3.Error as e:
-    logger.error(f"BM25 migration failed: {e}")
-    return False
+  _deprecation_warning('migrate_for_bm25', 'migrations')
+  return _migrate_for_bm25(kb)
 
 def close_database(kb: KnowledgeBase) -> None:
   """
   Close the SQLite database connection.
+  
+  DEPRECATED: Import from database.connection instead.
 
   Args:
       kb: The KnowledgeBase instance.
   """
-  if kb.sql_connection:
-    try:
-      kb.sql_cursor.close()
-      kb.sql_cursor = None
-      kb.sql_connection.close()
-      kb.sql_connection = None
-    except Exception as e:
-      logger.error(f"Error closing database connection: {e}")
+  _deprecation_warning('close_database', 'connection')
+  return _close_database(kb)
 
 
 @contextmanager
 def database_connection(kb: KnowledgeBase):
   """
   Context manager for safe database connections.
+  
+  DEPRECATED: Import from database.connection instead.
   
   Ensures database connections are properly closed even if errors occur.
   
@@ -635,29 +580,18 @@ def database_connection(kb: KnowledgeBase):
       
   Yields:
       The KnowledgeBase instance with active database connection.
-      
-  Example:
-      >>> with database_connection(kb) as kb:
-      ...     kb.sql_cursor.execute("SELECT COUNT(*) FROM docs")
-      ...     count = kb.sql_cursor.fetchone()[0]
   """
-  # Save existing connection state
-  had_connection = hasattr(kb, 'sql_connection') and kb.sql_connection is not None
-  
-  try:
-    if not had_connection:
-      connect_to_database(kb)
+  _deprecation_warning('database_connection', 'connection')
+  with _database_connection(kb) as kb:
     yield kb
-  finally:
-    # Only close if we opened it
-    if not had_connection and hasattr(kb, 'sql_connection') and kb.sql_connection:
-      close_database(kb)
 
 
 @contextmanager
 def sqlite_connection(db_path: str):
   """
   Context manager for direct SQLite connections.
+  
+  DEPRECATED: Import from database.connection instead.
   
   Provides a safe way to work with SQLite databases ensuring proper cleanup.
   
@@ -666,23 +600,10 @@ def sqlite_connection(db_path: str):
       
   Yields:
       Tuple of (connection, cursor).
-      
-  Example:
-      >>> with sqlite_connection('mydb.db') as (conn, cursor):
-      ...     cursor.execute("SELECT COUNT(*) FROM mytable")
-      ...     count = cursor.fetchone()[0]
   """
-  conn = None
-  cursor = None
-  try:
-    conn = sqlite3.connect(db_path)
-    cursor = conn.cursor()
-    yield conn, cursor
-  finally:
-    if cursor:
-      cursor.close()
-    if conn:
-      conn.close()
+  _deprecation_warning('sqlite_connection', 'connection')
+  with _sqlite_connection(db_path) as result:
+    yield result
 
 def process_text_file(kb: KnowledgeBase, sourcefile: str, splitter: Any,
                      Stop_Words: set, language: str, file_type: str = 'text', 
@@ -718,7 +639,7 @@ def process_text_file(kb: KnowledgeBase, sourcefile: str, splitter: Any,
     logger.info(f"Skipping {sourcefile} (already in database, use --force to reprocess)")
     return False
     
-  from utils.logging_utils import log_file_operation, log_operation_error, OperationLogger
+  from utils.logging_config import log_file_operation, log_operation_error, OperationLogger
   
   # Log file processing start with enhanced context
   log_file_operation(logger, "processing_start", sourcefile, 

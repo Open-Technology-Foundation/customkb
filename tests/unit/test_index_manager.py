@@ -88,13 +88,23 @@ class TestIndexManager:
         # Create all expected indexes
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
+        # Create indexes using parameterized queries where possible
+        # Note: Index names and column names can't be parameterized in SQLite,
+        # but these come from our controlled EXPECTED_INDEXES constant
+        index_definitions = {
+            'idx_embedded': "CREATE INDEX idx_embedded ON docs(embedded)",
+            'idx_embedded_embedtext': "CREATE INDEX idx_embedded_embedtext ON docs(embedded, embedtext)",
+            'idx_keyphrase_processed': "CREATE INDEX idx_keyphrase_processed ON docs(keyphrase, processed)",
+            'idx_sourcedoc': "CREATE INDEX idx_sourcedoc ON docs(sourcedoc)",
+            'idx_sourcedoc_sid': "CREATE INDEX idx_sourcedoc_sid ON docs(sourcedoc, sid)",
+            'idx_id': "CREATE UNIQUE INDEX idx_id ON docs(id)",
+            'idx_language_embedded': "CREATE INDEX idx_language_embedded ON docs(language, embedded)",
+            'idx_metadata': "CREATE INDEX idx_metadata ON docs(metadata)",
+            'idx_sourcedoc_sid_covering': "CREATE INDEX idx_sourcedoc_sid_covering ON docs(sourcedoc, sid, id, originaltext, metadata)"
+        }
         for idx in EXPECTED_INDEXES:
-            if idx == 'idx_keyphrase_processed':
-                # For docs table with old schema
-                cursor.execute(f"CREATE INDEX {idx} ON docs(keyphrase, processed)")
-            else:
-                col = idx.replace('idx_', '').replace('_', ', ')
-                cursor.execute(f"CREATE INDEX {idx} ON docs({col})")
+            if idx in index_definitions:
+                cursor.execute(index_definitions[idx])
         conn.commit()
         conn.close()
         

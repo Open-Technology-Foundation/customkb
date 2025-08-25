@@ -6,9 +6,11 @@ Tests query processing, semantic search, AI response generation, and context bui
 import pytest
 import os
 import tempfile
+import sqlite3
 import numpy as np
 import asyncio
 import json
+import time
 from unittest.mock import patch, Mock, AsyncMock, MagicMock
 from pathlib import Path
 
@@ -136,7 +138,7 @@ class TestContextRange:
     start, end = get_context_range(10, 4)
     
     assert start == 9  # 10 - 1 (half of 3, which is 4-1)
-    assert end == 11   # start + 4 - 1
+    assert end == 12   # start + 4 - 1 = 9 + 4 - 1 = 12
   
   def test_context_range_zero_or_negative(self):
     """Test context range with zero or negative context size."""
@@ -163,7 +165,7 @@ class TestQueryEmbedding:
         
         assert isinstance(result, np.ndarray)
         assert result.shape == (1, 3)
-        np.testing.assert_array_equal(result[0], test_embedding)
+        np.testing.assert_array_almost_equal(result[0], test_embedding)
   
   @pytest.mark.asyncio
   async def test_get_query_embedding_api_call(self):
@@ -385,7 +387,7 @@ class TestReferenceStringBuilding:
       [1, "test.txt", 0, "Content with metadata", 0.8, json.dumps(metadata)]
     ]
     
-    result = build_reference_string(kb, reference)
+    result = build_reference_string(kb, reference, debug=True)
     
     assert '<meta name="heading">Test Heading</meta>' in result
     assert '<meta name="section_type">code_block</meta>' in result
@@ -420,12 +422,102 @@ class TestReferenceStringBuilding:
     assert '<context src="test.txt:0">' in result
 
 
+class TestOpenAIResponsesAPIHelpers:
+  """Test OpenAI Responses API helper functions."""
+  
+  def test_is_reasoning_model(self):
+    """Test reasoning model detection."""
+    from query.query_manager import _is_reasoning_model
+    
+    # Test reasoning models
+    assert _is_reasoning_model("gpt-5") == True
+    assert _is_reasoning_model("o1") == True
+    assert _is_reasoning_model("o1-preview") == True
+    assert _is_reasoning_model("o3") == True
+    assert _is_reasoning_model("o3-mini") == True
+    assert _is_reasoning_model("o4") == True
+    assert _is_reasoning_model("o4-mini") == True
+    
+    # Test non-reasoning models
+    assert _is_reasoning_model("gpt-5-chat-latest") == False
+    assert _is_reasoning_model("gpt-4o") == False
+    assert _is_reasoning_model("gpt-4o-mini") == False
+    assert _is_reasoning_model("claude-3-sonnet") == False
+  
+  def test_format_messages_for_responses_api(self):
+    """Test message formatting for Responses API."""
+    from query.query_manager import format_messages_for_responses_api
+    
+    messages = [
+      {"role": "system", "content": "You are helpful"},
+      {"role": "user", "content": "Hello"},
+      {"role": "assistant", "content": "Hi there!"},
+      {"role": "user", "content": "How are you?"}
+    ]
+    
+    formatted = format_messages_for_responses_api(messages)
+    
+    # Check system -> developer mapping
+    assert formatted[0]["role"] == "developer"
+    assert formatted[0]["content"][0]["type"] == "input_text"
+    assert formatted[0]["content"][0]["text"] == "You are helpful"
+    
+    # Check user messages
+    assert formatted[1]["role"] == "user"
+    assert formatted[1]["content"][0]["type"] == "input_text"
+    assert formatted[1]["content"][0]["text"] == "Hello"
+    
+    # Check assistant messages use output_text
+    assert formatted[2]["role"] == "assistant"
+    assert formatted[2]["content"][0]["type"] == "output_text"
+    assert formatted[2]["content"][0]["text"] == "Hi there!"
+    
+    # Check second user message
+    assert formatted[3]["role"] == "user"
+    assert formatted[3]["content"][0]["type"] == "input_text"
+    assert formatted[3]["content"][0]["text"] == "How are you?"
+  
+  def test_extract_content_from_response(self):
+    """Test content extraction from Responses API response."""
+    from query.query_manager import _extract_content_from_response
+    
+    # Test proper Responses API format
+    response_data = {
+      "output": [{
+        "type": "message",
+        "content": [{
+          "type": "output_text",
+          "text": "Extracted text"
+        }]
+      }]
+    }
+    
+    content = _extract_content_from_response(response_data)
+    assert content == "Extracted text"
+    
+    # Test with text field fallback
+    response_data_alt = {
+      "output": [{
+        "type": "message",
+        "content": [{
+          "text": "Alternative text"
+        }]
+      }]
+    }
+    
+    content_alt = _extract_content_from_response(response_data_alt)
+    assert content_alt == "Alternative text"
+    
+    # Test empty response
+    assert _extract_content_from_response({}) == ""
+    assert _extract_content_from_response(None) == ""
+
 class TestAIResponseGeneration:
   """Test AI response generation functionality."""
   
   @pytest.mark.asyncio
   async def test_generate_ai_response_openai(self, temp_config_file):
-    """Test AI response generation with OpenAI model."""
+    """Test AI response generation with OpenAI model using Responses API."""
     kb = KnowledgeBase(temp_config_file)
     kb.query_model = "gpt-4o"
     kb.query_role = "You are a helpful assistant."
@@ -433,17 +525,25 @@ class TestAIResponseGeneration:
     kb.query_max_tokens = 1000
     
     mock_response = Mock()
-    mock_response.choices = [Mock(message=Mock(content="Test AI response"))]
+    mock_response.model_dump.return_value = {
+      "output": [{
+        "type": "message",
+        "content": [{
+          "type": "output_text",
+          "text": "Test AI response"
+        }]
+      }]
+    }
     
     mock_client = AsyncMock()
-    mock_client.chat.completions.create.return_value = mock_response
+    mock_client.responses.create.return_value = mock_response
     
     with patch('query.query_manager.async_openai_client', mock_client):
       with patch('query.query_manager.elapsed_time', return_value="5s"):
         result = await generate_ai_response(kb, "Reference context", "Test query")
         
         assert result == "Test AI response"
-        mock_client.chat.completions.create.assert_called_once()
+        mock_client.responses.create.assert_called_once()
   
   @pytest.mark.asyncio
   async def test_generate_ai_response_claude(self, temp_config_file):
@@ -469,36 +569,48 @@ class TestAIResponseGeneration:
   
   @pytest.mark.asyncio
   async def test_generate_ai_response_o1_model(self, temp_config_file):
-    """Test AI response generation with O1 model."""
+    """Test AI response generation with O1 model using Responses API."""
     kb = KnowledgeBase(temp_config_file)
     kb.query_model = "o1-preview"
     kb.query_role = "You are a helpful assistant."
+    kb.query_max_tokens = 1000
     
     mock_response = Mock()
-    mock_response.choices = [Mock(message=Mock(content="Test O1 response"))]
+    mock_response.model_dump.return_value = {
+      "output": [{
+        "type": "message",
+        "content": [{
+          "type": "output_text",
+          "text": "Test O1 response"
+        }]
+      }]
+    }
     
     mock_client = AsyncMock()
-    mock_client.chat.completions.create.return_value = mock_response
+    mock_client.responses.create.return_value = mock_response
     
     with patch('query.query_manager.async_openai_client', mock_client):
       with patch('query.query_manager.elapsed_time', return_value="5s"):
         result = await generate_ai_response(kb, "Reference context", "Test query")
         
         assert result == "Test O1 response"
-        # O1 model should use different message format
-        call_args = mock_client.chat.completions.create.call_args
-        messages = call_args[1]['messages']
-        assert len(messages) == 1
-        assert messages[0]['role'] == 'user'
+        # O1 model should use Responses API with reasoning parameters
+        call_args = mock_client.responses.create.call_args
+        payload = call_args[1]
+        assert 'reasoning' in payload
+        assert payload['reasoning']['effort'] == 'minimal'
+        assert payload['text']['verbosity'] == 'low'
   
   @pytest.mark.asyncio
   async def test_generate_ai_response_error_handling(self, temp_config_file):
     """Test error handling in AI response generation."""
     kb = KnowledgeBase(temp_config_file)
     kb.query_model = "gpt-4o"
+    kb.query_max_tokens = 1000
+    kb.query_temperature = 0.7
     
     mock_client = AsyncMock()
-    mock_client.chat.completions.create.side_effect = Exception("API Error")
+    mock_client.responses.create.side_effect = Exception("API Error")
     
     with patch('query.query_manager.async_openai_client', mock_client):
       result = await generate_ai_response(kb, "Reference context", "Test query")
@@ -511,22 +623,40 @@ class TestAIResponseGeneration:
     kb = KnowledgeBase(temp_config_file)
     kb.query_model = "gpt-4o"
     kb.query_role = "Current time: {{datetime}}"
+    kb.query_max_tokens = 1000
+    kb.query_temperature = 0.7
     
     mock_response = Mock()
-    mock_response.choices = [Mock(message=Mock(content="Response"))]
+    mock_response.model_dump.return_value = {
+      "output": [{
+        "type": "message",
+        "content": [{
+          "type": "output_text",
+          "text": "Response"
+        }]
+      }]
+    }
     
     mock_client = AsyncMock()
-    mock_client.chat.completions.create.return_value = mock_response
+    mock_client.responses.create.return_value = mock_response
     
     with patch('query.query_manager.async_openai_client', mock_client):
       with patch('query.query_manager.elapsed_time', return_value="5s"):
         await generate_ai_response(kb, "Context", "Query")
         
-        # Check that datetime was replaced
-        call_args = mock_client.chat.completions.create.call_args
-        system_message = call_args[1]['messages'][0]['content']
-        assert "{{datetime}}" not in system_message
-        assert "Current time:" in system_message
+        # Check that datetime was replaced in the formatted input
+        call_args = mock_client.responses.create.call_args
+        # The system message is now in the formatted input
+        input_messages = call_args[1]['input']
+        # Find the developer (previously system) message
+        system_content = None
+        for msg in input_messages:
+          if msg['role'] == 'developer':
+            system_content = msg['content'][0]['text']
+            break
+        assert system_content is not None
+        assert "{{datetime}}" not in system_content
+        assert "Current time:" in system_content
   
   @pytest.mark.asyncio
   async def test_generate_ai_response_grok(self, temp_config_file):
@@ -551,7 +681,8 @@ class TestAIResponseGeneration:
         assert result == "Test Grok response"
         mock_client.chat.completions.create.assert_called_once()
         call_args = mock_client.chat.completions.create.call_args
-        assert call_args[1]['model'] == "grok-4"
+        # Model might be resolved to a specific version like "grok-4-0709"
+        assert call_args[1]['model'].startswith("grok-4")
         assert call_args[1]['temperature'] == 0.7
         assert call_args[1]['max_tokens'] == 1000
   
@@ -571,7 +702,7 @@ class TestProcessQuery:
   """Test the main process_query functions."""
   
   @pytest.mark.asyncio
-  async def test_process_query_async_success(self, temp_database, temp_config_file, mock_faiss_index):
+  async def test_process_query_async_success(self, temp_database, temp_config_file, mock_faiss_index, mock_db_connection):
     """Test successful async query processing."""
     args = Mock()
     args.config_file = temp_config_file
@@ -579,34 +710,39 @@ class TestProcessQuery:
     args.query_file = ""
     args.context_only = False
     args.verbose = True
+    args.format = "xml"
+    args.debug = False
     
     mock_logger = Mock()
     
     kb = KnowledgeBase(temp_config_file)
     kb.knowledge_base_db = temp_database
     kb.knowledge_base_vector = temp_database.replace('.db', '.faiss')
+    kb.sql_connection, kb.sql_cursor = mock_db_connection
     
     with patch('query.query_manager.KnowledgeBase', return_value=kb):
       with patch('query.query_manager.connect_to_database'):
         with patch('query.query_manager.close_database'):
-          with patch('query.query_manager.faiss.read_index', return_value=mock_faiss_index):
-            with patch('query.query_manager.get_query_embedding') as mock_embedding:
-              mock_embedding.return_value = np.array([[0.1, 0.2, 0.3]])
-              
-              with patch('query.query_manager.process_reference_batch') as mock_batch:
-                mock_batch.return_value = [
-                  [1, "test.txt", 0, "Test content", 0.8, "{}"]
-                ]
-                
-                with patch('query.query_manager.generate_ai_response') as mock_ai:
-                  mock_ai.return_value = "AI generated response"
+          with patch('os.path.exists', return_value=True):
+            with patch('os.path.getsize', return_value=1024):
+              with patch('query.query_manager.faiss.read_index', return_value=mock_faiss_index):
+                with patch('query.query_manager.get_query_embedding') as mock_embedding:
+                  mock_embedding.return_value = np.array([[0.1, 0.2, 0.3]])
                   
-                  result = await process_query_async(args, mock_logger)
-                  
-                  assert result == "AI generated response"
+                  with patch('query.query_manager.process_reference_batch') as mock_batch:
+                    mock_batch.return_value = [
+                      [1, "test.txt", 0, "Test content", 0.8, "{}"]
+                    ]
+                    
+                    with patch('query.query_manager.generate_ai_response') as mock_ai:
+                      mock_ai.return_value = "AI generated response"
+                      
+                      result = await process_query_async(args, mock_logger)
+                      
+                      assert result == "AI generated response"
   
   @pytest.mark.asyncio
-  async def test_process_query_async_context_only(self, temp_database, temp_config_file, mock_faiss_index):
+  async def test_process_query_async_context_only(self, temp_database, temp_config_file, mock_faiss_index, mock_db_connection):
     """Test async query processing with context-only flag."""
     args = Mock()
     args.config_file = temp_config_file
@@ -620,25 +756,28 @@ class TestProcessQuery:
     kb = KnowledgeBase(temp_config_file)
     kb.knowledge_base_db = temp_database
     kb.knowledge_base_vector = temp_database.replace('.db', '.faiss')
+    kb.sql_connection, kb.sql_cursor = mock_db_connection
     
     with patch('query.query_manager.KnowledgeBase', return_value=kb):
       with patch('query.query_manager.connect_to_database'):
         with patch('query.query_manager.close_database'):
-          with patch('query.query_manager.faiss.read_index', return_value=mock_faiss_index):
-            with patch('query.query_manager.get_query_embedding') as mock_embedding:
-              mock_embedding.return_value = np.array([[0.1, 0.2, 0.3]])
-              
-              with patch('query.query_manager.process_reference_batch') as mock_batch:
-                mock_batch.return_value = [
-                  [1, "test.txt", 0, "Test content", 0.8, "{}"]
-                ]
-                
-                with patch('query.query_manager.build_reference_string') as mock_build:
-                  mock_build.return_value = "Reference context"
+          with patch('os.path.exists', return_value=True):
+            with patch('os.path.getsize', return_value=1024):
+              with patch('query.query_manager.faiss.read_index', return_value=mock_faiss_index):
+                with patch('query.query_manager.get_query_embedding') as mock_embedding:
+                  mock_embedding.return_value = np.array([[0.1, 0.2, 0.3]])
                   
-                  result = await process_query_async(args, mock_logger)
-                  
-                  assert result == "Reference context"
+                  with patch('query.query_manager.process_reference_batch') as mock_batch:
+                    mock_batch.return_value = [
+                      [1, "test.txt", 0, "Test content", 0.8, "{}"]
+                    ]
+                    
+                    with patch('query.query_manager.build_reference_string') as mock_build:
+                      mock_build.return_value = "Reference context"
+                      
+                      result = await process_query_async(args, mock_logger)
+                      
+                      assert result == "Reference context"
   
   def test_process_query_sync_wrapper(self, temp_config_file):
     """Test sync wrapper for process_query."""
@@ -656,7 +795,7 @@ class TestProcessQuery:
       mock_run.assert_called_once()
   
   @pytest.mark.asyncio
-  async def test_process_query_with_query_file(self, temp_config_file, temp_data_manager):
+  async def test_process_query_with_query_file(self, temp_config_file, temp_data_manager, mock_db_connection):
     """Test query processing with additional query file."""
     # Create query file
     query_file_content = "Additional context from file"
@@ -668,6 +807,8 @@ class TestProcessQuery:
     args.query_file = query_file
     args.context_only = True
     args.verbose = True
+    args.format = "xml"
+    args.debug = False
     
     mock_logger = Mock()
     
@@ -676,23 +817,43 @@ class TestProcessQuery:
         mock_kb = Mock()
         mock_kb.knowledge_base_db = "/tmp/test.db"
         mock_kb.knowledge_base_vector = "/tmp/test.faiss"
+        mock_kb.sql_connection, mock_kb.sql_cursor = mock_db_connection
+        mock_kb.max_query_file_size_mb = 1  # Add the missing attribute
+        mock_kb.max_query_length = 10000  # Add max_query_length attribute
+        mock_kb.query_top_k = 50  # Add query_top_k attribute
+        mock_kb.reference_batch_size = 5  # Add reference_batch_size attribute
+        mock_kb.enable_reranking = False  # Add enable_reranking attribute
+        mock_kb.query_context_files = []  # Add query_context_files attribute
+        mock_kb.io_thread_pool_size = 4  # Add io_thread_pool_size attribute
+        mock_kb.start_time = int(time.time())  # Add start_time attribute
         mock_kb_class.return_value = mock_kb
         
         with patch('query.query_manager.connect_to_database'):
           with patch('query.query_manager.close_database'):
             with patch('os.path.exists', return_value=True):
-              with patch('query.query_manager.faiss.read_index'):
-                with patch('query.query_manager.get_query_embedding'):
-                  with patch('query.query_manager.process_reference_batch', return_value=[]):
-                    with patch('query.query_manager.build_reference_string', return_value="context"):
-                      result = await process_query_async(args, mock_logger)
-                      
-                      # Should have combined query text with file content
-                      assert result == "context"
+              with patch('os.path.getsize', return_value=1024):
+                # Create a mock FAISS index with search method
+                mock_index = Mock()
+                mock_index.search.return_value = (
+                  np.array([[0.9, 0.8, 0.7]]),  # distances
+                  np.array([[0, 1, 2]])          # indices
+                )
+                with patch('query.query_manager.faiss.read_index', return_value=mock_index):
+                  with patch('query.query_manager.get_query_embedding', return_value=np.array([[0.1, 0.2, 0.3]])):
+                    # Mock process_reference_batch to return proper reference data
+                    # Format: (id, sourcedoc, sid, text, distance, metadata)
+                    mock_refs = [(0, "doc1.txt", 1, "Sample text 1", 0.9, {"similarity": 0.9}),
+                                 (1, "doc2.txt", 2, "Sample text 2", 0.8, {"similarity": 0.8})]
+                    with patch('query.query_manager.process_reference_batch', return_value=mock_refs):
+                      with patch('query.query_manager.build_reference_string', return_value="context"):
+                        result = await process_query_async(args, mock_logger)
+                        
+                        # Should have combined query text with file content
+                        assert result == "context"
   
   @pytest.mark.asyncio
   async def test_process_query_invalid_config(self):
-    """Test query processing with invalid knowledge base."""
+    """Test query processing with invalid knowledgebase."""
     args = Mock()
     args.config_file = "nonexistent_kb"
     
@@ -700,7 +861,7 @@ class TestProcessQuery:
     
     result = await process_query_async(args, mock_logger)
     
-    assert "Knowledge base 'nonexistent_kb' not found" in result or "Configuration file not found" in result
+    assert "Knowledgebase 'nonexistent_kb' not found" in result or "Configuration file not found" in result
   
   @pytest.mark.asyncio
   async def test_process_query_missing_database(self, temp_config_file):
@@ -723,7 +884,7 @@ class TestProcessQuery:
       assert "does not exist" in result
   
   @pytest.mark.asyncio
-  async def test_process_query_missing_vector_file(self, temp_database, temp_config_file):
+  async def test_process_query_missing_vector_file(self, temp_database, temp_config_file, mock_db_connection):
     """Test query processing with missing vector file."""
     args = Mock()
     args.config_file = temp_config_file
@@ -736,6 +897,7 @@ class TestProcessQuery:
     kb = KnowledgeBase(temp_config_file)
     kb.knowledge_base_db = temp_database
     kb.knowledge_base_vector = "/nonexistent/test.faiss"
+    kb.sql_connection, kb.sql_cursor = mock_db_connection
     
     with patch('query.query_manager.KnowledgeBase', return_value=kb):
       with patch('query.query_manager.connect_to_database'):

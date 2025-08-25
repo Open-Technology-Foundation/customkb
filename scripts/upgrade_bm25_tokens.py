@@ -14,14 +14,14 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from config.config_manager import KnowledgeBase, get_fq_cfg_filename
 from utils.text_utils import tokenize_for_bm25
-from utils.logging_utils import get_logger
+from utils.logging_config import get_logger
 
 def upgrade_database_bm25(kb_config: str, batch_size: int = 1000) -> bool:
     """
     Upgrade existing database to include BM25 tokens.
     
     Args:
-        kb_config: Path to knowledge base configuration
+        kb_config: Path to knowledgebase configuration
         batch_size: Number of records to process in each batch
         
     Returns:
@@ -137,7 +137,7 @@ def main():
     )
     parser.add_argument(
         'config',
-        help='Knowledge base configuration file or name'
+        help='Knowledgebase configuration file or name'
     )
     parser.add_argument(
         '--batch-size',

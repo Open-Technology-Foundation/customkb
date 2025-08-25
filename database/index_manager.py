@@ -9,7 +9,7 @@ import sqlite3
 from typing import List, Tuple, Dict, Optional
 from pathlib import Path
 
-from utils.logging_utils import get_logger
+from utils.logging_config import get_logger
 from config.config_manager import KnowledgeBase
 from database.db_manager import sqlite_connection
 
@@ -134,32 +134,60 @@ def create_missing_indexes(db_path: str, dry_run: bool = False) -> List[str]:
   table_name = get_table_name(db_path)
   logger.debug(f"Database uses table: {table_name}")
   
+  # Validate table name to prevent SQL injection
+  if table_name not in ['docs', 'chunks']:
+    logger.error(f"Invalid table name for index creation: {table_name}")
+    return []
+  
   # Check if we have keyphrase column (newer schema) or just keyphrase_processed (older schema)
   with sqlite_connection(db_path) as (conn, cursor):
-    cursor.execute(f"PRAGMA table_info({table_name})")
+    # PRAGMA is safe but we validate table_name anyway for consistency
+    if table_name == 'docs':
+      cursor.execute("PRAGMA table_info(docs)")
+    else:
+      cursor.execute("PRAGMA table_info(chunks)")
     columns = [row[1] for row in cursor.fetchall()]
     has_keyphrase = 'keyphrase' in columns
     has_processed = 'processed' in columns
   
-  # Index creation SQL statements
-  index_sql = {
-    'idx_embedded': f'CREATE INDEX idx_embedded ON {table_name}(embedded)',
-    'idx_embedded_embedtext': f'CREATE INDEX idx_embedded_embedtext ON {table_name}(embedded, embedtext)',
-    'idx_sourcedoc': f'CREATE INDEX idx_sourcedoc ON {table_name}(sourcedoc)',
-    'idx_sourcedoc_sid': f'CREATE INDEX idx_sourcedoc_sid ON {table_name}(sourcedoc, sid)',
-    'idx_id': f'CREATE UNIQUE INDEX idx_id ON {table_name}(id)',
-    'idx_language_embedded': f'CREATE INDEX idx_language_embedded ON {table_name}(language, embedded)',
-    'idx_metadata': f'CREATE INDEX idx_metadata ON {table_name}(metadata)',
-    'idx_sourcedoc_sid_covering': f'CREATE INDEX idx_sourcedoc_sid_covering ON {table_name}(sourcedoc, sid, id, originaltext, metadata)'
-  }
+  # Index creation SQL statements - using validated table name
+  index_sql = {}
+  if table_name == 'docs':
+    index_sql = {
+      'idx_embedded': 'CREATE INDEX idx_embedded ON docs(embedded)',
+      'idx_embedded_embedtext': 'CREATE INDEX idx_embedded_embedtext ON docs(embedded, embedtext)',
+      'idx_sourcedoc': 'CREATE INDEX idx_sourcedoc ON docs(sourcedoc)',
+      'idx_sourcedoc_sid': 'CREATE INDEX idx_sourcedoc_sid ON docs(sourcedoc, sid)',
+      'idx_id': 'CREATE UNIQUE INDEX idx_id ON docs(id)',
+      'idx_language_embedded': 'CREATE INDEX idx_language_embedded ON docs(language, embedded)',
+      'idx_metadata': 'CREATE INDEX idx_metadata ON docs(metadata)',
+      'idx_sourcedoc_sid_covering': 'CREATE INDEX idx_sourcedoc_sid_covering ON docs(sourcedoc, sid, id, originaltext, metadata)'
+    }
+  else:  # table_name == 'chunks'
+    index_sql = {
+      'idx_embedded': 'CREATE INDEX idx_embedded ON chunks(embedded)',
+      'idx_embedded_embedtext': 'CREATE INDEX idx_embedded_embedtext ON chunks(embedded, embedtext)',
+      'idx_sourcedoc': 'CREATE INDEX idx_sourcedoc ON chunks(sourcedoc)',
+      'idx_sourcedoc_sid': 'CREATE INDEX idx_sourcedoc_sid ON chunks(sourcedoc, sid)',
+      'idx_id': 'CREATE UNIQUE INDEX idx_id ON chunks(id)',
+      'idx_language_embedded': 'CREATE INDEX idx_language_embedded ON chunks(language, embedded)',
+      'idx_metadata': 'CREATE INDEX idx_metadata ON chunks(metadata)',
+      'idx_sourcedoc_sid_covering': 'CREATE INDEX idx_sourcedoc_sid_covering ON chunks(sourcedoc, sid, id, originaltext, metadata)'
+    }
   
   # Add keyphrase index based on schema
   if has_keyphrase and has_processed:
     # Newer schema with both columns
-    index_sql['idx_keyphrase_processed'] = f'CREATE INDEX idx_keyphrase_processed ON {table_name}(keyphrase, processed)'
+    if table_name == 'docs':
+      index_sql['idx_keyphrase_processed'] = 'CREATE INDEX idx_keyphrase_processed ON docs(keyphrase, processed)'
+    else:
+      index_sql['idx_keyphrase_processed'] = 'CREATE INDEX idx_keyphrase_processed ON chunks(keyphrase, processed)'
   elif 'keyphrase_processed' in columns:
     # Older schema with combined column - create index on the single column
-    index_sql['idx_keyphrase_processed'] = f'CREATE INDEX idx_keyphrase_processed ON {table_name}(keyphrase_processed)'
+    if table_name == 'docs':
+      index_sql['idx_keyphrase_processed'] = 'CREATE INDEX idx_keyphrase_processed ON docs(keyphrase_processed)'
+    else:
+      index_sql['idx_keyphrase_processed'] = 'CREATE INDEX idx_keyphrase_processed ON chunks(keyphrase_processed)'
   # else: no keyphrase-related columns, skip this index
   
   created = []
@@ -184,7 +212,7 @@ def process_verify_indexes(args, logger) -> str:
   Process the verify-indexes command to check database index health.
   
   This command verifies that all expected performance indexes exist in the
-  knowledge base SQLite database. Missing indexes can significantly impact
+  knowledgebase SQLite database. Missing indexes can significantly impact
   query performance, especially for large databases.
   
   Expected indexes:
@@ -196,7 +224,7 @@ def process_verify_indexes(args, logger) -> str:
   
   Args:
       args: Command line arguments containing:
-          - config_file: Path to knowledge base configuration
+          - config_file: Path to knowledgebase configuration
       logger: Logger instance
       
   Returns:

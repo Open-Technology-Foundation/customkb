@@ -9,7 +9,6 @@ import psutil
 import os
 import sys
 import sqlite3
-import faiss
 import numpy as np
 from typing import Dict, List, Tuple, Optional
 import argparse
@@ -18,6 +17,10 @@ import asyncio
 from config.config_manager import KnowledgeBase, get_fq_cfg_filename
 from database.db_manager import connect_to_database, close_database
 from utils.logging_utils import setup_logging, get_logger
+
+# Load FAISS with proper GPU initialization
+from utils.faiss_loader import get_faiss
+faiss, FAISS_GPU_AVAILABLE = get_faiss()
 
 logger = get_logger(__name__)
 

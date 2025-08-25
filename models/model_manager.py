@@ -8,7 +8,7 @@ import os
 import json
 from typing import Dict, Any, Optional
 
-from utils.logging_utils import get_logger
+from utils.logging_config import get_logger
 
 # Add this module-level variable for test compatibility
 models_file = os.path.join(os.path.dirname(__file__), "..", "Models.json")

@@ -1,0 +1,89 @@
+#!/bin/bash
+# Bash completion for gen-citations.sh and append-citations.sh
+# Source this file or place in /etc/bash_completion.d/
+
+_gen_citations_completion() {
+  local cur prev opts
+  COMPREPLY=()
+  cur="${COMP_WORDS[COMP_CWORD]}"
+  prev="${COMP_WORDS[COMP_CWORD-1]}"
+
+  # Options for gen-citations.sh
+  opts="-d --database -f --force -r --reprocess-blank -n --dry-run -m --model -C --chunk-size -M --max-tokens -t --temperature -c --context -x --exclude -q --quiet -v --verbose -D --debug -h --help -p --parallel --no-parallel --sequential"
+
+  # Handle option arguments
+  case "${prev}" in
+    -d|--database)
+      COMPREPLY=( $(compgen -f -X '!*.db' -- "${cur}") )
+      return 0
+      ;;
+    -m|--model)
+      COMPREPLY=( $(compgen -W "gpt-4o-mini gpt-4o gpt-4 gpt-3.5-turbo" -- "${cur}") )
+      return 0
+      ;;
+    -C|--chunk-size)
+      COMPREPLY=( $(compgen -W "1000 2000 5000 7420 10000" -- "${cur}") )
+      return 0
+      ;;
+    -M|--max-tokens)
+      COMPREPLY=( $(compgen -W "64 128 256 512" -- "${cur}") )
+      return 0
+      ;;
+    -t|--temperature)
+      COMPREPLY=( $(compgen -W "0 0.1 0.2 0.5 0.7 1.0" -- "${cur}") )
+      return 0
+      ;;
+    -p|--parallel)
+      COMPREPLY=( $(compgen -W "1 2 3 4 5 8 10 15 20" -- "${cur}") )
+      return 0
+      ;;
+    -c|--context|-x|--exclude)
+      # Don't complete these, let user type freely
+      return 0
+      ;;
+  esac
+
+  # Complete options or directories
+  if [[ ${cur} == -* ]]; then
+    COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+  else
+    # Complete directories
+    COMPREPLY=( $(compgen -d -- "${cur}") )
+  fi
+}
+
+_append_citations_completion() {
+  local cur prev opts
+  COMPREPLY=()
+  cur="${COMP_WORDS[COMP_CWORD]}"
+  prev="${COMP_WORDS[COMP_CWORD-1]}"
+
+  # Options for append-citations.sh
+  opts="-d --database -c --context -n --dry-run -b --no-backup -f --force -q --quiet -v --verbose -D --debug -h --help"
+
+  # Handle option arguments
+  case "${prev}" in
+    -d|--database)
+      COMPREPLY=( $(compgen -f -X '!*.db' -- "${cur}") )
+      return 0
+      ;;
+    -c|--context)
+      # Don't complete this, let user type freely
+      return 0
+      ;;
+  esac
+
+  # Complete options or directories
+  if [[ ${cur} == -* ]]; then
+    COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+  else
+    # Complete directories
+    COMPREPLY=( $(compgen -d -- "${cur}") )
+  fi
+}
+
+# Register completion functions
+complete -F _gen_citations_completion gen-citations.sh gen-citations
+complete -F _append_citations_completion append-citations.sh append-citations
+
+#fin

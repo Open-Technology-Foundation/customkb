@@ -184,7 +184,7 @@ ENVIRONMENT VARIABLES:
   CITATION_TEMPERATURE    Override temperature (0=deterministic, 1=creative)
   CITATION_BROAD_CONTEXT  Override broad context domains (comma-delimited)
   CITATION_EXCLUDES       Space-separated list of exclude patterns
-  VECTORDBS               Base directory for knowledge bases
+  VECTORDBS               Base directory for knowledgebases
 
 DATABASE SCHEMA:
   The SQLite database contains:

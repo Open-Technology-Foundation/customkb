@@ -12,7 +12,7 @@ import sys
 from pathlib import Path
 from typing import Optional, List, Dict, Any
 
-from utils.logging_utils import get_logger
+from utils.logging_config import get_logger
 
 logger = get_logger(__name__)
 
@@ -51,7 +51,7 @@ def validate_file_path(filepath: str, allowed_extensions: List[str] = None,
     '/tmp/' in clean_path and 'test' in clean_path.lower()
   )
   
-  # Allow VECTORDBS directory for knowledge base operations
+  # Allow VECTORDBS directory for knowledgebase operations
   vectordbs_dir = os.getenv('VECTORDBS', '/var/lib/vectordbs')
   is_vectordbs_path = clean_path.startswith(vectordbs_dir + '/')
   
@@ -116,6 +116,39 @@ def validate_safe_path(filepath: str, base_dir: str) -> bool:
     return abs_path.startswith(abs_base)
   except (OSError, ValueError):
     return False
+
+def validate_table_name(table_name: str) -> bool:
+  """
+  Validate SQLite table name for security.
+  
+  Args:
+      table_name: The table name to validate
+      
+  Returns:
+      True if table name is valid and safe
+  """
+  if not table_name:
+    return False
+  
+  # Allow only alphanumeric characters, underscores, and some common names
+  if not re.match(r'^[a-zA-Z_][a-zA-Z0-9_]*$', table_name):
+    return False
+  
+  # Block SQL keywords and dangerous names
+  dangerous_names = {
+    'sqlite_master', 'sqlite_temp_master', 'sqlite_sequence',
+    'information_schema', 'pg_', 'sys', 'master', 'msdb', 'tempdb'
+  }
+  
+  table_lower = table_name.lower()
+  if any(table_lower.startswith(danger) for danger in dangerous_names):
+    return False
+  
+  # Length check
+  if len(table_name) > 64:  # Reasonable limit
+    return False
+  
+  return True
 
 def validate_api_key(api_key: str, prefix: str = None, min_length: int = 20) -> bool:
   """

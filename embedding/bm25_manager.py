@@ -12,7 +12,7 @@ import sqlite3
 from typing import List, Tuple, Optional, Dict, Any
 from rank_bm25 import BM25Okapi
 
-from utils.logging_utils import get_logger
+from utils.logging_config import get_logger
 from utils.text_utils import tokenize_for_bm25
 
 logger = get_logger(__name__)

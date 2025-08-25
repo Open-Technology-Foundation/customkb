@@ -39,7 +39,8 @@ def check_system_state():
         try:
             if proc.info['status'] == psutil.STATUS_ZOMBIE:
                 zombies.append(proc.info)
-        except:
+        except (psutil.NoSuchProcess, psutil.AccessDenied, AttributeError):
+            # Process terminated or inaccessible
             pass
     if zombies:
         print(f"WARNING: {len(zombies)} zombie processes found!")
@@ -152,7 +153,8 @@ def check_system_limits():
                 result = subprocess.run(['ulimit', flag], 
                                       capture_output=True, text=True, shell=True)
                 print(f"{name}: {result.stdout.strip()}")
-            except:
+            except (psutil.NoSuchProcess, psutil.AccessDenied, AttributeError):
+                # Process terminated or inaccessible
                 pass
                 
     except Exception as e:
@@ -217,7 +219,8 @@ def check_for_crash_logs():
                             if keyword.lower() in line.lower():
                                 print(f"Found in dmesg: {line[:120]}...")
                                 break
-            except:
+            except (psutil.NoSuchProcess, psutil.AccessDenied, AttributeError):
+                # Process terminated or inaccessible
                 pass
         elif os.path.exists(log):
             try:
@@ -229,7 +232,8 @@ def check_for_crash_logs():
                             if keyword.lower() in line.lower():
                                 print(f"Found in {log}: {line[:120]}...")
                                 break
-            except:
+            except (psutil.NoSuchProcess, psutil.AccessDenied, AttributeError):
+                # Process terminated or inaccessible
                 pass
     print()
 

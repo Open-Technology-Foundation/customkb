@@ -9,7 +9,7 @@ import os
 import subprocess
 import re
 from typing import Optional, Tuple
-from utils.logging_utils import get_logger
+from utils.logging_config import get_logger
 
 logger = get_logger(__name__)
 
@@ -146,7 +146,7 @@ def should_use_gpu_for_index(index_size_mb: float, kb_config: Optional[object] =
   # Check if GPU is explicitly disabled for this KB
   if kb_config and hasattr(kb_config, 'disable_gpu_faiss'):
     if kb_config.disable_gpu_faiss:
-      return False, "GPU disabled in knowledge base configuration"
+      return False, "GPU disabled in knowledgebase configuration"
   
   return True, f"Index fits in GPU memory ({index_size_mb:.1f} MB < {safe_limit_mb} MB limit)"
 

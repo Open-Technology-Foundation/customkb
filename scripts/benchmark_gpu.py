@@ -45,7 +45,7 @@ def run_query(config_file, query, device='cuda'):
 
 def main():
     parser = argparse.ArgumentParser(description='Benchmark GPU vs CPU reranking')
-    parser.add_argument('config_file', help='Knowledge base configuration')
+    parser.add_argument('config_file', help='Knowledgebase configuration')
     parser.add_argument('--query', default='What is dharma in the secular context?', 
                        help='Query to benchmark')
     parser.add_argument('--iterations', type=int, default=3, 

@@ -17,7 +17,7 @@ from config.config_manager import KnowledgeBase
 from query.query_manager import process_query_async
 from database.db_manager import connect_to_database, close_database
 from tests.fixtures.mock_data import create_mock_knowledge_base
-from utils.logging_utils import get_logger
+from utils.logging_config import get_logger
 
 logger = get_logger(__name__)
 

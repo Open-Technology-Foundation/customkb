@@ -98,7 +98,7 @@ The batch runner divides tests into these categories:
 
 ### 1. Reduce Cache Limits
 
-Edit your knowledge base configuration:
+Edit your knowledgebase configuration:
 
 ```ini
 [LIMITS]

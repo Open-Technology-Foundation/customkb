@@ -15,7 +15,7 @@ from typing import List, Tuple, Optional, Dict, Any
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 
-from utils.logging_utils import get_logger
+from utils.logging_config import get_logger
 
 logger = get_logger(__name__)
 

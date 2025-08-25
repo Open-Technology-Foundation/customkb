@@ -3,6 +3,7 @@
 *$py.class
 AUDIT-EVALUATE*
 AUDIT-EVALUATE.md
+*.backup
 *.bak
 build/
 .cache
@@ -14,6 +15,7 @@ CLAUDE*
 CLAUDE.md
 *.cover
 cover/
+*.coverage
 .coverage
 .coverage.*
 coverage_html/
@@ -91,10 +93,12 @@ pip-log.txt
 profile_default/
 PURPOSE-FUNCTIONALITY-USAGE.md
 .pybuilder/
+*.pyc
 __pycache__
 __pycache__/
 *.py[cod]
 *.py,cover
+*.pyo
 __pypackages__/
 .pyre/
 .pytest_cache/
@@ -128,6 +132,8 @@ target/
 .temp/
 temp
 temp/
+test_*.db
+test_kb.db
 t.htm*
 Thumbs.db
 .tmp

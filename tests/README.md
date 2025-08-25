@@ -157,7 +157,7 @@ python run_tests.py ci
 - **Database Fixtures**: Pre-populated test databases
 
 ### Real Data Integration
-- **wayang.net Dataset**: Integration tests with real knowledge base
+- **wayang.net Dataset**: Integration tests with real knowledgebase
   - Location: `$VECTORDBS/wayang.net/`
   - Requires: wayang.net.cfg, wayang.net.db, wayang.net.faiss
   - Usage: `pytest -m requires_data`

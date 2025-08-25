@@ -348,6 +348,18 @@ customkb bm25 oldproject
 customkb optimize oldproject
 ```
 
+### Deployment
+```bash
+# Deploy to production (from development server)
+yes | ./push-to-okusi 3 -N
+
+## Production Server Access Using `ok3` (from Development Server Only)
+  - ok3:
+    ok3 [OPTIONS] COMMAND...  # Execute command on remote server okusi3
+      -r, --root        Connect as root user (shortcut for -u root)
+      -u, --user USER   Connect as specified user (default: $USER)
+      -d, --dir         Preserve current working directory on remote server
+
 ### Container/VM Deployment
 
 When running in containers with memory limits:
@@ -637,7 +649,7 @@ QUERY_MODEL         # Override query model
 - `[API]`: Rate limiting and concurrency
 - `[LIMITS]`: Resource constraints
 - `[PERFORMANCE]`: Optimization parameters
-- `[ALGORITHMS]`: Processing thresholds and BM25 settings
+- `[ALGORITHMS]`: Processing thresholds, BM25 settings, and categorization
 
 ### Prompt Templates
 
@@ -701,6 +713,43 @@ Please provide a structured analysis:
 2. Environment variable (`QUERY_PROMPT_TEMPLATE`)
 3. Config file (`query_prompt_template`)
 4. Default value (`default`)
+
+### Context Files (Reference Documents)
+
+CustomKB can include additional context files in queries to provide supplementary information to the LLM:
+
+```bash
+# Configure context files in config file
+[DEFAULT]
+query_context_files = /path/to/context1.txt, /path/to/context2.md
+
+# Or provide via CLI
+customkb query myproject "query text" --context-files doc1.txt doc2.txt
+```
+
+Context files appear as `<reference src="filename">` tags in XML format, before the search results.
+
+### Category Filtering
+
+CustomKB supports filtering search results by categories when documents have been categorized:
+
+```bash
+# First, categorize your knowledgebase
+customkb categorize myproject --import
+
+# Enable categorization in config
+[ALGORITHMS]
+enable_categorization = true
+
+# Query with category filters
+customkb query myproject "query text" --category "Technical"
+customkb query myproject "query text" --categories "Technical,Legal,Finance"
+```
+
+**Requirements:**
+- Run `customkb categorize --import` to add category columns to database
+- Set `enable_categorization = true` in config file
+- Categories must exist in the `primary_category` or `categories` columns
 
 ### Reference Output Formats
 

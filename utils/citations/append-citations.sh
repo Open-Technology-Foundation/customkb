@@ -111,7 +111,7 @@ OPTIONS:
 
 ENVIRONMENT VARIABLES:
   CITATION_DATABASE       Override default database path
-  VECTORDBS              Base directory for knowledge bases
+  VECTORDBS              Base directory for knowledgebases
   BROAD_CONTEXT          Default broad context domains (comma-delimited)
 
 EXAMPLES:

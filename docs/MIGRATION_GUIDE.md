@@ -1,8 +1,8 @@
-# CustomKB Migration Guide: New Knowledge Base Resolution System
+# CustomKB Migration Guide: New Knowledgebase Resolution System
 
 ## Overview
 
-CustomKB has changed how knowledge bases are resolved and accessed. This guide helps you migrate from the old flexible path system to the new standardized approach.
+CustomKB has changed how knowledgebases are resolved and accessed. This guide helps you migrate from the old flexible path system to the new standardized approach.
 
 ## What Changed?
 
@@ -13,16 +13,16 @@ CustomKB has changed how knowledge bases are resolved and accessed. This guide h
 - Searched current directory first, then VECTORDBS
 
 ### New System (Now)
-- Only accepts knowledge base names
+- Only accepts knowledgebase names
 - All KBs must be in VECTORDBS directory
 - Automatically strips paths and `.cfg` extensions
 - Configuration must be at: `VECTORDBS/<kb_name>/<kb_name>.cfg`
 
 ## Migration Steps
 
-### Step 1: Identify Your Knowledge Bases
+### Step 1: Identify Your Knowledgebases
 
-List all your existing knowledge base configuration files:
+List all your existing knowledgebase configuration files:
 ```bash
 # Find all .cfg files
 find / -name "*.cfg" -type f 2>/dev/null | grep -E "(customkb|knowledgebase|vectordb)"
@@ -39,9 +39,9 @@ sudo mkdir -p $VECTORDBS
 sudo chown $USER:$USER $VECTORDBS
 ```
 
-### Step 3: Move Knowledge Bases
+### Step 3: Move Knowledgebases
 
-For each knowledge base, create a subdirectory and move all files:
+For each knowledgebase, create a subdirectory and move all files:
 
 ```bash
 # Example: Moving a KB from /home/user/projects/docs/
@@ -154,7 +154,7 @@ Domain-style names work without changes:
 # After: $VECTORDBS/example.com/example.com.cfg
 ```
 
-### Scenario 3: Shared Knowledge Bases
+### Scenario 3: Shared Knowledgebases
 
 For teams sharing KBs:
 ```bash
@@ -164,7 +164,7 @@ echo 'export VECTORDBS="/shared/vectordbs"' >> /etc/profile.d/customkb.sh
 
 ## Troubleshooting
 
-### Error: "Knowledge base 'name' not found"
+### Error: "Knowledgebase 'name' not found"
 
 **Cause:** KB doesn't exist in VECTORDBS directory
 

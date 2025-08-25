@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-Rebuild BM25 index with filtering for specific knowledge base content.
+Rebuild BM25 index with filtering for specific knowledgebase content.
 This creates a focused BM25 index while using symlinked db/faiss files.
 """
 
@@ -18,7 +18,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from config.config_manager import KnowledgeBase, get_fq_cfg_filename
 from database.db_manager import connect_to_database, close_database
-from utils.logging_utils import get_logger
+from utils.logging_config import get_logger
 
 logger = get_logger(__name__)
 

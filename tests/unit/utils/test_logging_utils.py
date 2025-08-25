@@ -29,7 +29,7 @@ from utils.logging_utils import (
 
 
 class TestGetKbInfoFromConfig:
-  """Test knowledge base info extraction from config files."""
+  """Test knowledgebase info extraction from config files."""
   
   def test_basic_config_path(self):
     """Test extracting info from basic config path."""

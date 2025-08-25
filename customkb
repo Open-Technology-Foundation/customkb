@@ -36,6 +36,9 @@ fi
 # Activate .venv
 source "$PRGDIR/.venv/bin/activate"
 
+# Add cuDNN library path for reranking model
+export LD_LIBRARY_PATH="$PRGDIR/.venv/lib/python3.12/site-packages/nvidia/cudnn/lib:${LD_LIBRARY_PATH:-}"
+
 export  ANTHROPIC_API_KEY \
         EDITOR \
         GOOGLE_API_KEY \

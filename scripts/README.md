@@ -44,7 +44,7 @@ This directory contains utility scripts for managing and optimizing CustomKB ins
 
 ## Quick Start
 
-1. **Optimize a knowledge base:**
+1. **Optimize a knowledgebase:**
    ```bash
    python scripts/optimize_kb_performance.py myproject
    ```

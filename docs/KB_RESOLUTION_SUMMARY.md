@@ -1,4 +1,4 @@
-# Knowledge Base Resolution Changes - Implementation Summary
+# Knowledgebase Resolution Changes - Implementation Summary
 
 ## Changes Implemented
 
@@ -19,12 +19,12 @@
 ### 2. Command Line Interface (`customkb.py`)
 
 **Updated all help text:**
-- Changed from "Knowledge base configuration file" to "Knowledge base name"
+- Changed from "Knowledgebase configuration file" to "Knowledgebase name"
 - Updated examples to show KB names instead of paths
 
 **Updated error messages:**
-- Now shows "Knowledge base 'name' not found in /var/lib/vectordbs"
-- Lists available knowledge bases on error
+- Now shows "Knowledgebase 'name' not found in /var/lib/vectordbs"
+- Lists available knowledgebases on error
 
 ### 3. Error Messages (Multiple Files)
 
@@ -38,7 +38,7 @@ All now show specific KB not found errors with VECTORDBS path.
 ### 4. Documentation Updates
 
 **CLAUDE.md:**
-- Replaced "Knowledge Base Configuration Paths" section with "Knowledge Base Resolution System"
+- Replaced "Knowledgebase Configuration Paths" section with "Knowledgebase Resolution System"
 - Added clear examples of the new resolution behavior
 - Updated migration guide section
 

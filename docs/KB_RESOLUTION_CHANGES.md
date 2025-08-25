@@ -1,8 +1,8 @@
-# Knowledge Base Resolution Changes
+# Knowledgebase Resolution Changes
 
 ## Overview
 
-The knowledge base parameter resolution system has been changed to require that all knowledge bases exist as subdirectories within the VECTORDBS directory (`/var/lib/vectordbs` by default).
+The knowledgebase parameter resolution system has been changed to require that all knowledgebases exist as subdirectories within the VECTORDBS directory (`/var/lib/vectordbs` by default).
 
 ## Breaking Changes
 
@@ -13,9 +13,9 @@ The knowledge base parameter resolution system has been changed to require that 
 - Allowed configuration files anywhere on the filesystem
 
 ### New Behavior
-- Only accepts knowledge base names
+- Only accepts knowledgebase names
 - Automatically strips paths and `.cfg` extensions
-- Requires knowledge base to exist as a subdirectory in VECTORDBS
+- Requires knowledgebase to exist as a subdirectory in VECTORDBS
 - Configuration file must be at: `VECTORDBS/<kb_name>/<kb_name>.cfg`
 
 ## Examples
@@ -37,14 +37,14 @@ customkb query /path/to/okusimail.cfg "test"
 Error: Configuration file not found.
 
 # New error:
-Error: Knowledge base 'myproject' not found in /var/lib/vectordbs
-Available knowledge bases: okusimail, okusiassociates, jakartapost
+Error: Knowledgebase 'myproject' not found in /var/lib/vectordbs
+Available knowledgebases: okusimail, okusiassociates, jakartapost
 ```
 
 ## Migration Guide
 
 ### For Users
-1. Move all knowledge bases to VECTORDBS directory
+1. Move all knowledgebases to VECTORDBS directory
 2. Ensure each KB has its own subdirectory
 3. Update scripts to use KB names instead of paths
 

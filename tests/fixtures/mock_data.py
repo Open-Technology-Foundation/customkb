@@ -25,7 +25,7 @@ class MockDataGenerator:
     Create a sample configuration file content.
     
     Args:
-        kb_name: Knowledge base name
+        kb_name: Knowledgebase name
         vector_model: Embedding model to use
         vector_dimensions: Vector dimensions
         include_new_sections: Whether to include new config sections
@@ -124,7 +124,7 @@ additional_stopword_languages = {kwargs.get('additional_stopword_languages', 'fr
       
       "The quick brown fox jumps over the lazy dog. This sentence contains every letter of the English alphabet at least once.",
       
-      "Knowledge bases are structured repositories of information that can be searched and queried to retrieve relevant context for various applications.",
+      "Knowledgebases are structured repositories of information that can be searched and queried to retrieve relevant context for various applications.",
       
       "FAISS (Facebook AI Similarity Search) is a library for efficient similarity search and clustering of dense vectors, optimized for large-scale applications.",
       

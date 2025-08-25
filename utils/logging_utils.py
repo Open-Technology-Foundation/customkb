@@ -19,7 +19,7 @@ from typing import Optional, Dict, Any, Union, Tuple
 
 def get_kb_info_from_config(config_file: str) -> Tuple[str, str]:
   """
-  Extract knowledge base directory and name from config file path.
+  Extract knowledgebase directory and name from config file path.
   
   Args:
       config_file: Path to config file (e.g., "/path/to/mycompany.cfg")
@@ -46,8 +46,8 @@ def get_log_file_path(config_log_file: str, kb_directory: str, kb_name: str) -> 
   
   Args:
       config_log_file: Log file setting from config ('auto', relative, or absolute path)
-      kb_directory: Knowledge base directory
-      kb_name: Knowledge base name
+      kb_directory: Knowledgebase directory
+      kb_name: Knowledgebase name
       
   Returns:
       Fully resolved log file path
@@ -78,7 +78,7 @@ def load_logging_config(config_file: Optional[str] = None,
   
   Args:
       config_file: Path to configuration file (optional).
-      kb_directory: Knowledge base directory for relative path resolution (optional).
+      kb_directory: Knowledgebase directory for relative path resolution (optional).
       
   Returns:
       Dictionary containing logging configuration.
@@ -319,8 +319,8 @@ def setup_logging(verbose: bool, debug: bool = False,
       log_file: Optional path to log file. If None, uses config or auto-generates.
       log_to_file: Whether to enable file logging (default: True).
       config_file: Optional path to configuration file for logging settings.
-      kb_directory: Knowledge base directory for per-KB logging.
-      kb_name: Knowledge base name for per-KB logging.
+      kb_directory: Knowledgebase directory for per-KB logging.
+      kb_name: Knowledgebase name for per-KB logging.
 
   Returns:
       The configured root logger instance, or None for commands that don't need logging.

@@ -7,7 +7,7 @@ import pytest
 from unittest.mock import Mock, patch, MagicMock
 import numpy as np
 
-from embedding.embed_manager import process_embedding_batch_async, process_embedding_batch
+from embedding.embed_manager import process_embedding_batch_async
 from query.query_manager import get_query_embedding
 
 
@@ -57,24 +57,8 @@ class TestGoogleEmbeddingIntegration:
     assert len(result) == 3
     assert all(len(emb) == 1536 for emb in result)
   
-  def test_process_embedding_batch_google(self, mock_kb_google, mock_google_client):
-    """Test sync batch embedding with Google AI."""
-    chunks = ["test chunk 1", "test chunk 2"]
-    
-    with patch('embedding.embed_manager.google_client', mock_google_client):
-      with patch('embedding.embed_manager.get_cached_embedding', return_value=None):
-        with patch('embedding.embed_manager.save_embedding_to_cache'):
-          result = process_embedding_batch(chunks, mock_kb_google)
-    
-    # Verify Google client was called
-    mock_google_client.models.embed_content.assert_called_with(
-      model="gemini-embedding-001",
-      contents=chunks
-    )
-    
-    # Check result
-    assert len(result) == 2
-    assert all(len(emb) == 1536 for emb in result)
+  # Note: Synchronous process_embedding_batch is not implemented
+  # Use process_embedding_batch_async for batch processing
   
   @pytest.mark.asyncio
   async def test_get_query_embedding_google(self, mock_kb_google, mock_google_client):
@@ -96,13 +80,14 @@ class TestGoogleEmbeddingIntegration:
     assert result.shape == (1, 1536)
     assert isinstance(result, np.ndarray)
   
-  def test_google_client_not_initialized_error(self, mock_kb_google):
+  @pytest.mark.asyncio
+  async def test_google_client_not_initialized_error(self, mock_kb_google):
     """Test error when Google client is not initialized."""
     chunks = ["test chunk"]
     
     with patch('embedding.embed_manager.google_client', None):
       with pytest.raises(ValueError, match="Google AI client not initialized"):
-        process_embedding_batch(chunks, mock_kb_google)
+        await process_embedding_batch_async(mock_kb_google, chunks)
   
   def test_model_limits_include_google(self):
     """Test that model limits include Google models."""

@@ -209,7 +209,7 @@ broad_context: "optional,domains"
 | `CITATION_MAX_TOKENS` | Max response tokens | 128 |
 | `CITATION_TEMPERATURE` | AI temperature (0-1) | 0.1 |
 | `CITATION_EXCLUDES` | Space-separated exclude patterns | None |
-| `VECTORDBS` | Base directory for knowledge bases | None |
+| `VECTORDBS` | Base directory for knowledgebases | None |
 | `BROAD_CONTEXT` | Default context domains | None |
 
 ## Architecture

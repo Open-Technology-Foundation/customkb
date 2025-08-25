@@ -2,7 +2,7 @@
 Optimization manager for CustomKB performance tuning.
 
 This module provides functionality to analyze and optimize CustomKB configurations
-based on system resources and knowledge base characteristics.
+based on system resources and knowledgebase characteristics.
 """
 
 import os
@@ -12,7 +12,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
-from utils.logging_utils import get_logger
+from utils.logging_config import get_logger
 from config.config_manager import get_fq_cfg_filename, KnowledgeBase
 from database.index_manager import verify_indexes, create_missing_indexes
 
@@ -24,15 +24,17 @@ def get_system_memory_gb() -> float:
   try:
     import psutil
     return psutil.virtual_memory().total / (1024**3)
-  except:
-    # Fallback to reading /proc/meminfo
+  except (ImportError, AttributeError) as e:
+    # Fallback to reading /proc/meminfo if psutil is not available
+    logger.debug(f"psutil not available, falling back to /proc/meminfo: {e}")
     try:
       with open('/proc/meminfo', 'r') as f:
         for line in f:
           if line.startswith('MemTotal:'):
             kb = int(line.split()[1])
             return kb / (1024**2)
-    except:
+    except (FileNotFoundError, IOError, ValueError) as e:
+      logger.warning(f"Could not determine system memory: {e}")
       return 16  # Safe default
 
 
@@ -198,7 +200,7 @@ def get_gpu_batch_size(gpu_memory_mb: int, batch_factor: float) -> int:
 
 
 def find_kb_configs(vectordbs_dir: str) -> List[str]:
-  """Find all knowledge base configuration files in VECTORDBS."""
+  """Find all knowledgebase configuration files in VECTORDBS."""
   configs = []
   
   for root, dirs, files in os.walk(vectordbs_dir):
@@ -326,7 +328,7 @@ def optimize_config(config_path: str, dry_run: bool = False, memory_gb: float = 
 
 
 def analyze_kb_size(config_path: str) -> Dict:
-  """Analyze the size of a knowledge base."""
+  """Analyze the size of a knowledgebase."""
   kb_dir = os.path.dirname(config_path)
   stats = {
     'config_path': config_path,
@@ -509,11 +511,11 @@ def process_optimize(args, logger) -> str:
     configs = find_kb_configs(vectordbs_dir)
   
   if not configs:
-    logger.warning(f"No knowledge base configurations found in {vectordbs_dir}")
-    return f"No knowledge base configurations found in {vectordbs_dir}"
+    logger.warning(f"No knowledgebase configurations found in {vectordbs_dir}")
+    return f"No knowledgebase configurations found in {vectordbs_dir}"
   
   # Build output
-  output = [f"Found {len(configs)} knowledge base configuration(s)"]
+  output = [f"Found {len(configs)} knowledgebase configuration(s)"]
   
   # Show system memory info
   memory_gb = args.memory_gb if hasattr(args, 'memory_gb') and args.memory_gb else get_system_memory_gb()
@@ -551,7 +553,7 @@ def process_optimize(args, logger) -> str:
     kb_stats.sort(key=lambda x: x['total_size_mb'], reverse=True)
     
     output.extend([
-      "\nKnowledge Base Analysis:",
+      "\nKnowledgebase Analysis:",
       "-" * 80,
       f"{'KB Name':<30} {'DB (MB)':<10} {'Vector (MB)':<12} {'Total (MB)':<10}",
       "-" * 80

@@ -1,0 +1,203 @@
+#!/bin/bash
+# Bash completion for customkb command
+# Source this file or place in /etc/bash_completion.d/
+
+_customkb_complete() {
+    local cur prev opts base
+    COMPREPLY=()
+    cur="${COMP_WORDS[COMP_CWORD]}"
+    prev="${COMP_WORDS[COMP_CWORD-1]}"
+
+    # Available commands
+    local commands="database embed query edit optimize verify-indexes bm25 categorize help version"
+    
+    # Available options based on command
+    local global_opts="-q --quiet -v --verbose -d --debug"
+    local query_opts="-Q --query_file -c --context --context-only -R --role -m --model -k --top-k -s --context-scope -t --temperature -M --max-tokens -f --format -p --prompt-template --category --categories --context-files"
+    local database_opts="-l --language --detect-language -f --force"
+    local embed_opts="-r --reset-database"
+    local optimize_opts="-n --dry-run -a --analyze -s --show-tiers -m --memory-gb"
+    local bm25_opts="--force"
+    local categorize_opts="-S --sample -f --full --resume --import --list -m --model -s --sampling -M --max-concurrent -c --confidence-threshold -D --no-dedup --dedup-threshold --fixed-categories"
+    local version_opts="--build"
+    
+    # Models for --model option
+    local models="gpt-4.1 gpt-4.1-mini gpt-4o gpt-4o-mini o3 o3-mini claude-4-0-opus claude-4-0-sonnet claude-3-5-sonnet claude-3-5-haiku gemini-2.5-flash gemini-2.0-flash grok-4.0 llama3.1 text-embedding-3-small text-embedding-3-large gemini-embedding-001"
+    
+    # Formats for --format option
+    local formats="xml json markdown plain"
+    
+    # Prompt templates for --prompt-template option
+    local templates="default instructive scholarly concise analytical conversational technical"
+    
+    # Languages for --language option
+    local languages="en english fr french de german es spanish it italian pt portuguese zh chinese ja japanese ko korean ar arabic ru russian"
+    
+    # Get available knowledge bases from VECTORDBS directory
+    local vectordbs_dir="${VECTORDBS:-/var/lib/vectordbs}"
+    local kbs=""
+    if [[ -d "$vectordbs_dir" ]]; then
+        kbs=$(find "$vectordbs_dir" -maxdepth 1 -type d -exec basename {} \; | grep -v "^$(basename "$vectordbs_dir")$" | sort)
+    fi
+
+    case ${COMP_CWORD} in
+        1)
+            # Complete command names
+            COMPREPLY=($(compgen -W "${commands}" -- ${cur}))
+            return 0
+            ;;
+        2)
+            # Complete knowledge base names for commands that need them
+            case "${COMP_WORDS[1]}" in
+                database|embed|query|edit|bm25|verify-indexes|categorize)
+                    COMPREPLY=($(compgen -W "${kbs}" -- ${cur}))
+                    return 0
+                    ;;
+                optimize)
+                    # optimize can work without KB (all KBs) or with specific KB
+                    local all_opts="--dry-run --analyze --show-tiers --memory-gb ${kbs}"
+                    COMPREPLY=($(compgen -W "${all_opts}" -- ${cur}))
+                    return 0
+                    ;;
+                version)
+                    COMPREPLY=($(compgen -W "${version_opts}" -- ${cur}))
+                    return 0
+                    ;;
+                help)
+                    return 0
+                    ;;
+            esac
+            ;;
+        *)
+            # Complete options and arguments for specific commands
+            case "${COMP_WORDS[1]}" in
+                query)
+                    case "${prev}" in
+                        -m|--model)
+                            COMPREPLY=($(compgen -W "${models}" -- ${cur}))
+                            return 0
+                            ;;
+                        -f|--format)
+                            COMPREPLY=($(compgen -W "${formats}" -- ${cur}))
+                            return 0
+                            ;;
+                        -p|--prompt-template)
+                            COMPREPLY=($(compgen -W "${templates}" -- ${cur}))
+                            return 0
+                            ;;
+                        -Q|--query_file|--context-files)
+                            COMPREPLY=($(compgen -f -- ${cur}))
+                            return 0
+                            ;;
+                        -k|--top-k|-s|--context-scope|-M|--max-tokens)
+                            # Numeric arguments - no completion
+                            return 0
+                            ;;
+                        -t|--temperature)
+                            COMPREPLY=($(compgen -W "0.0 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1.0 1.1 1.2 1.3 1.4 1.5" -- ${cur}))
+                            return 0
+                            ;;
+                        -R|--role|--category|--categories)
+                            # Text arguments - no completion
+                            return 0
+                            ;;
+                        *)
+                            if [[ ${cur} == -* ]]; then
+                                COMPREPLY=($(compgen -W "${query_opts} ${global_opts}" -- ${cur}))
+                            fi
+                            return 0
+                            ;;
+                    esac
+                    ;;
+                database)
+                    case "${prev}" in
+                        -l|--language)
+                            COMPREPLY=($(compgen -W "${languages}" -- ${cur}))
+                            return 0
+                            ;;
+                        *)
+                            if [[ ${cur} == -* ]]; then
+                                COMPREPLY=($(compgen -W "${database_opts} ${global_opts}" -- ${cur}))
+                            else
+                                # Complete file/directory names for file arguments
+                                COMPREPLY=($(compgen -f -- ${cur}))
+                            fi
+                            return 0
+                            ;;
+                    esac
+                    ;;
+                embed)
+                    if [[ ${cur} == -* ]]; then
+                        COMPREPLY=($(compgen -W "${embed_opts} ${global_opts}" -- ${cur}))
+                    fi
+                    return 0
+                    ;;
+                edit)
+                    if [[ ${cur} == -* ]]; then
+                        COMPREPLY=($(compgen -W "${global_opts}" -- ${cur}))
+                    fi
+                    return 0
+                    ;;
+                optimize)
+                    case "${prev}" in
+                        -m|--memory-gb)
+                            # Numeric argument - suggest common values
+                            COMPREPLY=($(compgen -W "4 8 16 32 64 128 256" -- ${cur}))
+                            return 0
+                            ;;
+                        *)
+                            if [[ ${cur} == -* ]]; then
+                                COMPREPLY=($(compgen -W "${optimize_opts} ${global_opts}" -- ${cur}))
+                            elif [[ ${COMP_CWORD} == 2 ]] || [[ "${COMP_WORDS[2]}" == -* ]]; then
+                                # Still completing KB name or first option
+                                COMPREPLY=($(compgen -W "${optimize_opts} ${kbs}" -- ${cur}))
+                            fi
+                            return 0
+                            ;;
+                    esac
+                    ;;
+                verify-indexes)
+                    if [[ ${cur} == -* ]]; then
+                        COMPREPLY=($(compgen -W "${global_opts}" -- ${cur}))
+                    fi
+                    return 0
+                    ;;
+                bm25)
+                    if [[ ${cur} == -* ]]; then
+                        COMPREPLY=($(compgen -W "${bm25_opts}" -- ${cur}))
+                    fi
+                    return 0
+                    ;;
+                categorize)
+                    case "${prev}" in
+                        -m|--model)
+                            COMPREPLY=($(compgen -W "${models}" -- ${cur}))
+                            return 0
+                            ;;
+                        -S|--sample|-M|--max-concurrent)
+                            # Numeric arguments - no completion
+                            return 0
+                            ;;
+                        -c|--confidence-threshold|--dedup-threshold)
+                            COMPREPLY=($(compgen -W "0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9" -- ${cur}))
+                            return 0
+                            ;;
+                        -s|--sampling)
+                            COMPREPLY=($(compgen -W "3-5-3 5-10-5 2-8-2 10-20-10" -- ${cur}))
+                            return 0
+                            ;;
+                        *)
+                            if [[ ${cur} == -* ]]; then
+                                COMPREPLY=($(compgen -W "${categorize_opts} ${global_opts}" -- ${cur}))
+                            fi
+                            return 0
+                            ;;
+                    esac
+                    ;;
+            esac
+            ;;
+    esac
+}
+
+# Register the completion function
+complete -F _customkb_complete customkb
