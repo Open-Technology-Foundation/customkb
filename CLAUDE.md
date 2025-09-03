@@ -2,9 +2,11 @@
 
 This document provides specific instructions and context for AI assistants (like Claude) working with the CustomKB codebase.
 
+Note: Use term "knowledgebase" (one word) in docs; never "knowledge base"
+
 ## Project Overview
 
-CustomKB is a production-ready AI-powered knowledge base system that:
+CustomKB is a production-ready AI-powered knowledgebase system that:
 - Processes documents into searchable vector databases
 - Generates embeddings using OpenAI/Google AI models
 - Performs semantic search with context-aware AI responses
@@ -214,7 +216,7 @@ from utils.security_utils import validate_file_path, validate_api_key
 # File path validation (default - strict security)
 safe_path = validate_file_path(user_input, allowed_extensions=['.cfg'])
 
-# Knowledge base config validation (allows absolute paths and relative traversal)
+# Knowledgebase config validation (allows absolute paths and relative traversal)
 kb_config_path = validate_file_path(config_input, ['.cfg'], 
                                    allow_absolute=True, 
                                    allow_relative_traversal=True)
@@ -240,13 +242,13 @@ except sqlite3.DatabaseError as e:
   raise DatabaseError(f"Failed to process chunk: {e}") from e
 ```
 
-## Knowledge Base Resolution System
+## Knowledgebase Resolution System
 
-CustomKB uses a standardized resolution system where all knowledge bases MUST exist as subdirectories within the VECTORDBS directory (`/var/lib/vectordbs` by default).
+CustomKB uses a standardized resolution system where all knowledgebases MUST exist as subdirectories within the VECTORDBS directory (`/var/lib/vectordbs` by default).
 
 ### How It Works
 
-1. **Knowledge Base Name**: You specify only the KB name
+1. **Knowledgebase Name**: You specify only the KB name
 2. **Automatic Path Stripping**: Any paths or `.cfg` extensions are automatically removed
 3. **Directory Validation**: The system verifies `VECTORDBS/<kb_name>/` exists
 4. **Config File Location**: Always expects `VECTORDBS/<kb_name>/<kb_name>.cfg`
@@ -271,8 +273,8 @@ When a KB isn't found, the system provides helpful feedback:
 Error: Configuration file not found.
 
 # New error:
-Error: Knowledge base 'myproject' not found in /var/lib/vectordbs
-Available knowledge bases: okusimail, okusiassociates, jakartapost
+Error: Knowledgebase 'myproject' not found in /var/lib/vectordbs
+Available knowledgebases: okusimail, okusiassociates, jakartapost, ...
 ```
 
 ### Required Directory Structure
@@ -308,9 +310,9 @@ For existing installations:
 
 ## Common Optimization Scenarios
 
-### Optimizing a Large Knowledge Base
+### Optimizing a Large Knowledgebase
 
-For knowledge bases over 1GB:
+For knowledgebases over 1GB:
 
 ```bash
 # First analyze the current state
@@ -405,7 +407,7 @@ To prevent memory exhaustion from large BM25 result sets:
 bm25_max_results = 1000
 ```
 
-This parameter limits the number of BM25 search results to prevent crashes when processing large knowledge bases. The limiting is applied efficiently using heap-based selection to maintain the highest-scoring results.
+This parameter limits the number of BM25 search results to prevent crashes when processing large knowledgebases. The limiting is applied efficiently using heap-based selection to maintain the highest-scoring results.
 
 ### Cache Thread Pool Configuration
 
@@ -427,7 +429,7 @@ memory_cache_size = 10000   # Maximum number of embeddings in memory cache
 - Lazy initialization: ThreadPoolExecutor created only when needed
 - Proper lifecycle: Automatic cleanup on process exit using `atexit`
 - Resource safety: Single shared executor prevents resource leaks
-- Configuration: Thread pool size configurable per knowledge base
+- Configuration: Thread pool size configurable per knowledgebase
 
 **Cache Performance:**
 - Thread-safe LRU eviction with optimal performance
@@ -445,7 +447,7 @@ new_parser = subparsers.add_parser(
   description=textwrap.dedent(process_new.__doc__),
   formatter_class=argparse.RawDescriptionHelpFormatter,
 )
-new_parser.add_argument('config_file', help='Knowledge base configuration')
+new_parser.add_argument('config_file', help='Knowledgebase configuration')
 ```
 
 2. Add command handling:
