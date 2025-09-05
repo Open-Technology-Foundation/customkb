@@ -352,15 +352,45 @@ Return ONLY a JSON object like:
         response_format={"type": "json_object"}
       )
       
-      result = json.loads(response.choices[0].message.content)
+      # Get response content
+      response_content = response.choices[0].message.content
       
-      # Parse categories
+      # Try to parse JSON with better error handling
+      try:
+        result = json.loads(response_content)
+      except json.JSONDecodeError as json_err:
+        # Log the actual response for debugging
+        self.logger.debug(f"Invalid JSON response: {response_content[:500]}")
+        
+        # Try to clean up common JSON issues
+        cleaned_content = response_content.strip()
+        
+        # Remove any trailing commas before closing brackets/braces
+        cleaned_content = re.sub(r',(\s*[}\]])', r'\1', cleaned_content)
+        
+        # Try parsing again with cleaned content
+        try:
+          result = json.loads(cleaned_content)
+        except json.JSONDecodeError:
+          # If still fails, create a fallback response
+          self.logger.warning(f"Could not parse JSON for {article_path}, using fallback")
+          result = {
+            "categories": [],
+            "suggested_new": []
+          }
+      
+      # Parse categories with validation
       categories = []
       for cat in result.get('categories', []):
-        categories.append(CategoryResult(
-          name=cat['name'],
-          confidence=cat['confidence']
-        ))
+        if isinstance(cat, dict) and 'name' in cat and 'confidence' in cat:
+          try:
+            categories.append(CategoryResult(
+              name=str(cat['name']),
+              confidence=float(cat['confidence'])
+            ))
+          except (ValueError, TypeError) as e:
+            self.logger.debug(f"Invalid category data: {cat}, error: {e}")
+            continue
       
       # Add suggested categories to dynamic set
       suggested = result.get('suggested_new', [])

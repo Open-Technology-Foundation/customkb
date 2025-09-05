@@ -408,7 +408,7 @@ def format_references(references: List[Tuple], format_type: str = 'xml',
   # Format each reference with intelligent grouping
   for ref in references:
     # Unpack reference tuple from process_reference_batch
-    # Structure: [rid, rsrc, rsid, originaltext, distance, metadata]
+    # Structure: [rid, rsrc, rsid, originaltext, distance, metadata, primary_category, categories]
     if len(ref) >= 4:
       doc_id = ref[0]
       source = ref[1]  # source document path
@@ -419,6 +419,10 @@ def format_references(references: List[Tuple], format_type: str = 'xml',
       distance = ref[4] if len(ref) > 4 else 0.0
       metadata_str = ref[5] if len(ref) > 5 else None
       
+      # Get category fields (indices 6 and 7)
+      primary_category = ref[6] if len(ref) > 6 else None
+      categories = ref[7] if len(ref) > 7 else None
+      
       # Parse metadata
       metadata_elems = []
       if metadata_str:
@@ -426,17 +430,33 @@ def format_references(references: List[Tuple], format_type: str = 'xml',
         try:
           import json
           metadata_dict = json.loads(metadata_str)
+          
+          # Add category fields to metadata if they exist
+          if primary_category:
+            metadata_dict['primary_category'] = primary_category
+          if categories:
+            metadata_dict['categories'] = categories
+          
           # Format metadata as XML meta tags (filtered by debug mode)
           for key, value in metadata_dict.items():
             if value:
-              # In debug mode, show all metadata; otherwise just heading and section_type
-              if debug or key in ['heading', 'section_type']:
+              # In debug mode, show all metadata; otherwise show heading, section_type, and categories
+              if debug or key in ['heading', 'section_type', 'primary_category', 'categories']:
                 safe_value = xml.sax.saxutils.escape(str(value))
                 metadata_elems.append(f'<meta name="{key}">{safe_value}</meta>')
         except (json.JSONDecodeError, TypeError):
           # If not JSON, treat as plain text
           if metadata_str:
             metadata_elems = [str(metadata_str)]
+      else:
+        # No existing metadata, but we might have categories
+        if primary_category or categories:
+          if primary_category:
+            safe_value = xml.sax.saxutils.escape(str(primary_category))
+            metadata_elems.append(f'<meta name="primary_category">{safe_value}</meta>')
+          if categories:
+            safe_value = xml.sax.saxutils.escape(str(categories))
+            metadata_elems.append(f'<meta name="categories">{safe_value}</meta>')
       
       # Calculate similarity from distance (1 - normalized distance)
       similarity_str = ''

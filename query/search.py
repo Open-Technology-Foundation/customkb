@@ -403,6 +403,19 @@ async def process_reference_batch(kb: Any, batch: List[Tuple[int, float]]) -> Li
     raise DatabaseError(f"Invalid table name: {table_name}")
   
   try:
+    # Check if category columns exist
+    kb.sql_cursor.execute(f"PRAGMA table_info({table_name})")
+    columns = {col[1] for col in kb.sql_cursor.fetchall()}
+    has_primary_category = 'primary_category' in columns
+    has_categories = 'categories' in columns
+    
+    # Build query with optional category columns
+    select_fields = ["id", "sid", "sourcedoc", "originaltext", "metadata"]
+    if has_primary_category:
+      select_fields.append("primary_category")
+    if has_categories:
+      select_fields.append("categories")
+    
     for doc_id, distance in batch:
       # Adjust context scope based on similarity (configurable thresholds)
       similarity_threshold = getattr(kb, 'similarity_threshold', 0.6)
@@ -422,7 +435,7 @@ async def process_reference_batch(kb: Any, batch: List[Tuple[int, float]]) -> Li
       
       # Fetch all documents in the context range
       query = f"""
-        SELECT id, sid, sourcedoc, originaltext, metadata 
+        SELECT {', '.join(select_fields)}
         FROM {table_name}
         WHERE sourcedoc=? AND sid>=? AND sid<=? 
         ORDER BY sid 
@@ -434,9 +447,21 @@ async def process_reference_batch(kb: Any, batch: List[Tuple[int, float]]) -> Li
       
       if refrows:
         for r in refrows:
-          rid, rsid, rsrc, originaltext, metadata = r
-          # Structure: [rid, rsrc, rsid, originaltext, distance, metadata]
-          references.append([rid, rsrc, rsid, originaltext, distance, metadata])
+          # Extract base fields
+          rid, rsid, rsrc, originaltext, metadata = r[:5]
+          
+          # Extract category fields if they exist
+          primary_category = None
+          categories = None
+          idx = 5
+          if has_primary_category:
+            primary_category = r[idx] if idx < len(r) else None
+            idx += 1
+          if has_categories:
+            categories = r[idx] if idx < len(r) else None
+          
+          # Structure: [rid, rsrc, rsid, originaltext, distance, metadata, primary_category, categories]
+          references.append([rid, rsrc, rsid, originaltext, distance, metadata, primary_category, categories])
           logger.debug(f"Context doc: id={rid}, sid={rsid}, src={rsrc}, distance={distance}")
         logger.debug('---')
       else:

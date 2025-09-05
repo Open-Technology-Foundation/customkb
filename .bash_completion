@@ -1,183 +1,247 @@
 #!/bin/bash
-# Bash completion for customkb command
+# Bash completion for customkb
+# Copy this file to ~/.local/share/bash-completion/completions/customkb
+# or source it in your ~/.bashrc
 
-_customkb_complete() {
-    local cur prev words cword
-    _init_completion || return
+_customkb() {
+    local cur prev opts
+    COMPREPLY=()
+    cur="${COMP_WORDS[COMP_CWORD]}"
+    prev="${COMP_WORDS[COMP_CWORD-1]}"
 
-    # Available commands
-    local commands="database embed query edit optimize verify-indexes bm25 categorize version help"
+    # Main commands
+    local commands="database embed query edit optimize verify-indexes bm25 version help categorize"
     
-    # Available knowledge bases (from VECTORDBS directory)
-    local vectordbs_dir="${VECTORDBS:-/var/lib/vectordbs}"
-    local knowledge_bases=""
-    if [[ -d "$vectordbs_dir" ]]; then
-        knowledge_bases=$(find "$vectordbs_dir" -maxdepth 1 -type d -exec basename {} \; | grep -v '^\.' | sort)
-    fi
+    # Global options
+    local global_opts="-h --help"
     
-    # Available models
-    local embed_models="text-embedding-ada-002 text-embedding-3-small text-embedding-3-large gemini-embedding-001"
-    local llm_models="gpt-4o gpt-4o-mini claude-3-5-sonnet claude-3-haiku claude-4-0-sonnet claude-4-0-opus gemini-2.0-flash gemini-2.5-pro gemini-2.5-flash grok-4.0 llama3.3 mistral qwen2.5 deepseek-r1"
+    # Command specific options
+    local query_opts="-Q --query_file -c --context --context-only -R --role -m --model -k --top-k -s --context-scope -t --temperature -M --max-tokens -f --format -p --prompt-template --category --categories --context-files -q --quiet -v --verbose -d --debug"
+    local database_opts="-l --language --detect-language -f --force -q --quiet -v --verbose -d --debug"
+    local embed_opts="-r --reset-database -q --quiet -v --verbose -d --debug"
+    local edit_opts="-q --quiet -v --verbose -d --debug"
+    local bm25_opts="--force"
+    local optimize_opts="-n --dry-run -a --analyze -s --show-tiers -m --memory-gb -q --quiet -v --verbose -d --debug"
+    local verify_opts="-q --quiet -v --verbose -d --debug"
+    local categorize_opts="-S --sample -f --full --resume --import --list -m --model -s --sampling -M --max-concurrent -c --confidence-threshold -D --no-dedup --dedup-threshold --fixed-categories -v --verbose -q --quiet -d --debug"
+    local version_opts="--build"
     
-    # Available formats
+    # Models for --model option
+    local models="gpt-4o gpt-4o-mini gpt-4-turbo claude-3-5-sonnet-20241022 claude-3-5-haiku-20241022 claude-3-opus-20240229 gemini-1.5-pro gemini-1.5-flash text-embedding-3-small text-embedding-3-large text-embedding-ada-002 gemini-embedding-001"
+    
+    # Formats for --format option
     local formats="xml json markdown plain"
     
-    # Available prompt templates
-    local prompt_templates="default instructive scholarly concise analytical conversational technical"
+    # Prompt templates for --prompt-template option
+    local templates="default instructive scholarly concise analytical conversational technical"
     
-    # Available languages
-    local languages="en fr de es it pt nl da sv no fi ru ar zh ja ko"
+    # Languages for --language option
+    local languages="en fr de es it pt zh ja ko ru ar hi bn"
 
-    case $cword in
-        1)
-            # First argument: command
-            COMPREPLY=($(compgen -W "$commands" -- "$cur"))
+    # Get knowledgebases from VECTORDBS directory
+    local vectordbs_dir="${VECTORDBS:-/var/lib/vectordbs}"
+    local kbs=""
+    if [[ -d "$vectordbs_dir" ]]; then
+        kbs=$(find "$vectordbs_dir" -maxdepth 1 -type d -not -path "$vectordbs_dir" -exec basename {} \; 2>/dev/null | sort)
+    fi
+
+    case $prev in
+        customkb)
+            COMPREPLY=( $(compgen -W "$commands" -- $cur) )
             return 0
             ;;
-        2)
-            # Second argument: knowledge base name (for most commands)
-            case "$prev" in
-                database|embed|query|edit|bm25|verify-indexes|categorize)
-                    COMPREPLY=($(compgen -W "$knowledge_bases" -- "$cur"))
-                    return 0
-                    ;;
-                optimize)
-                    # optimize can take a knowledge base or no argument
-                    COMPREPLY=($(compgen -W "$knowledge_bases" -- "$cur"))
-                    return 0
-                    ;;
-                version|help)
-                    # These commands don't take knowledge base names
-                    return 0
-                    ;;
-            esac
+        -m|--model)
+            COMPREPLY=( $(compgen -W "$models" -- $cur) )
+            return 0
             ;;
-        *)
-            # Handle options for different commands
-            local command="${words[1]}"
-            case "$command" in
-                query)
-                    case "$prev" in
-                        -m|--model)
-                            COMPREPLY=($(compgen -W "$llm_models" -- "$cur"))
-                            return 0
-                            ;;
-                        -f|--format)
-                            COMPREPLY=($(compgen -W "$formats" -- "$cur"))
-                            return 0
-                            ;;
-                        -p|--prompt-template)
-                            COMPREPLY=($(compgen -W "$prompt_templates" -- "$cur"))
-                            return 0
-                            ;;
-                        -k|--top-k|-s|--context-scope|-t|--temperature|-M|--max-tokens)
-                            # These expect numeric values
-                            return 0
-                            ;;
-                        -R|--role|--category|--categories)
-                            # These expect string values
-                            return 0
-                            ;;
-                        --context-files)
-                            # Complete file paths
-                            COMPREPLY=($(compgen -f -- "$cur"))
-                            return 0
-                            ;;
-                        *)
-                            # If third argument and no option flag, it's the query text
-                            if [[ $cword -eq 3 && "$prev" != -* ]]; then
-                                return 0
-                            fi
-                            # Complete query options
-                            COMPREPLY=($(compgen -W "-c --context --context-only -R --role -m --model -k --top-k -s --context-scope -t --temperature -M --max-tokens -f --format -p --prompt-template --category --categories --context-files -q --quiet -v --verbose -d --debug" -- "$cur"))
-                            return 0
-                            ;;
-                    esac
-                    ;;
-                database)
-                    case "$prev" in
-                        -l|--language)
-                            COMPREPLY=($(compgen -W "$languages" -- "$cur"))
-                            return 0
-                            ;;
-                        *)
-                            # If third argument and no option flag, complete file paths
-                            if [[ $cword -gt 2 && "$prev" != -* ]]; then
-                                COMPREPLY=($(compgen -f -- "$cur"))
-                                return 0
-                            fi
-                            # Complete database options
-                            COMPREPLY=($(compgen -W "-l --language --detect-language -f --force -q --quiet -v --verbose -d --debug" -- "$cur"))
-                            return 0
-                            ;;
-                    esac
-                    ;;
-                embed)
-                    COMPREPLY=($(compgen -W "-r --reset-database -q --quiet -v --verbose -d --debug" -- "$cur"))
-                    return 0
-                    ;;
-                edit)
-                    COMPREPLY=($(compgen -W "-q --quiet -v --verbose -d --debug" -- "$cur"))
-                    return 0
-                    ;;
-                bm25)
-                    COMPREPLY=($(compgen -W "--force" -- "$cur"))
-                    return 0
-                    ;;
-                optimize)
-                    case "$prev" in
-                        -m|--memory-gb)
-                            # Numeric value expected
-                            return 0
-                            ;;
-                        *)
-                            COMPREPLY=($(compgen -W "-n --dry-run -a --analyze -s --show-tiers -m --memory-gb -q --quiet -v --verbose -d --debug" -- "$cur"))
-                            return 0
-                            ;;
-                    esac
-                    ;;
-                verify-indexes)
-                    COMPREPLY=($(compgen -W "-q --quiet -v --verbose -d --debug" -- "$cur"))
-                    return 0
-                    ;;
-                categorize)
-                    case "$prev" in
-                        -S|--sample|-M|--max-concurrent)
-                            # Numeric values expected
-                            return 0
-                            ;;
-                        -m|--model)
-                            COMPREPLY=($(compgen -W "$llm_models" -- "$cur"))
-                            return 0
-                            ;;
-                        -s|--sampling)
-                            # Pattern like "5-10-5"
-                            return 0
-                            ;;
-                        -c|--confidence-threshold|--dedup-threshold)
-                            # Float values expected
-                            return 0
-                            ;;
-                        *)
-                            COMPREPLY=($(compgen -W "-S --sample -f --full --resume --import --list -m --model -s --sampling -M --max-concurrent -c --confidence-threshold -D --no-dedup --dedup-threshold --fixed-categories -v --verbose -q --quiet -d --debug" -- "$cur"))
-                            return 0
-                            ;;
-                    esac
-                    ;;
-                version)
-                    COMPREPLY=($(compgen -W "--build" -- "$cur"))
-                    return 0
-                    ;;
-                help)
-                    # No additional options for help
-                    return 0
-                    ;;
-            esac
+        -f|--format)
+            COMPREPLY=( $(compgen -W "$formats" -- $cur) )
+            return 0
+            ;;
+        -p|--prompt-template)
+            COMPREPLY=( $(compgen -W "$templates" -- $cur) )
+            return 0
+            ;;
+        -l|--language)
+            COMPREPLY=( $(compgen -W "$languages" -- $cur) )
+            return 0
+            ;;
+        -Q|--query_file|--context-files)
+            COMPREPLY=( $(compgen -f -- $cur) )
+            return 0
+            ;;
+        -k|--top-k|-s|--context-scope|-M|--max-tokens|-S|--sample|-M|--max-concurrent|-c|--confidence-threshold|--dedup-threshold|-m|--memory-gb)
+            # Numeric arguments - no completion
+            return 0
+            ;;
+        -t|--temperature)
+            COMPREPLY=( $(compgen -W "0.0 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1.0 1.1 1.2 1.3 1.4 1.5 1.6 1.7 1.8 1.9 2.0" -- $cur) )
+            return 0
+            ;;
+        --category|--categories)
+            # Categories would need to be extracted from database - just provide basic completion
+            return 0
+            ;;
+        --sampling)
+            COMPREPLY=( $(compgen -W "5-10-5 3-7-3 10-20-10" -- $cur) )
+            return 0
             ;;
     esac
 
-    return 0
+    # Check if we're after a command
+    local command=""
+    for (( i=1; i < ${#COMP_WORDS[@]}-1; i++ )); do
+        if [[ " $commands " =~ " ${COMP_WORDS[i]} " ]]; then
+            command="${COMP_WORDS[i]}"
+            break
+        fi
+    done
+
+    case $command in
+        database)
+            # First positional arg is config_file (knowledgebase), rest are files
+            local pos_args=()
+            local in_options=false
+            for (( i=2; i < ${#COMP_WORDS[@]}-1; i++ )); do
+                if [[ "${COMP_WORDS[i]}" =~ ^- ]]; then
+                    in_options=true
+                    # Skip next word if it's an option that takes an argument
+                    if [[ "${COMP_WORDS[i]}" =~ ^(-l|--language)$ ]]; then
+                        ((i++))
+                    fi
+                elif [[ ! $in_options ]]; then
+                    pos_args+=("${COMP_WORDS[i]}")
+                else
+                    in_options=false
+                fi
+            done
+            
+            if [[ ${#pos_args[@]} -eq 0 ]]; then
+                # Complete knowledgebase names
+                COMPREPLY=( $(compgen -W "$kbs" -- $cur) )
+            else
+                # Complete file patterns
+                COMPREPLY=( $(compgen -f -- $cur) )
+            fi
+            
+            # Also add options if current word starts with dash
+            if [[ $cur =~ ^- ]]; then
+                COMPREPLY+=( $(compgen -W "$database_opts" -- $cur) )
+            fi
+            ;;
+        embed|edit|verify-indexes|bm25)
+            # These commands take only knowledgebase name as positional arg
+            local pos_args=()
+            for (( i=2; i < ${#COMP_WORDS[@]}-1; i++ )); do
+                if [[ ! "${COMP_WORDS[i]}" =~ ^- ]]; then
+                    pos_args+=("${COMP_WORDS[i]}")
+                fi
+            done
+            
+            if [[ ${#pos_args[@]} -eq 0 ]]; then
+                COMPREPLY=( $(compgen -W "$kbs" -- $cur) )
+            fi
+            
+            # Add command-specific options
+            if [[ $cur =~ ^- ]]; then
+                case $command in
+                    embed) COMPREPLY+=( $(compgen -W "$embed_opts" -- $cur) ) ;;
+                    edit) COMPREPLY+=( $(compgen -W "$edit_opts" -- $cur) ) ;;
+                    verify-indexes) COMPREPLY+=( $(compgen -W "$verify_opts" -- $cur) ) ;;
+                    bm25) COMPREPLY+=( $(compgen -W "$bm25_opts" -- $cur) ) ;;
+                esac
+            fi
+            ;;
+        query)
+            # Query takes knowledgebase and query text
+            local pos_args=()
+            local skip_next=false
+            for (( i=2; i < ${#COMP_WORDS[@]}-1; i++ )); do
+                if [[ $skip_next == true ]]; then
+                    skip_next=false
+                    continue
+                fi
+                if [[ "${COMP_WORDS[i]}" =~ ^- ]]; then
+                    # Skip options that take arguments
+                    if [[ "${COMP_WORDS[i]}" =~ ^(-Q|--query_file|-R|--role|-m|--model|-k|--top-k|-s|--context-scope|-t|--temperature|-M|--max-tokens|-f|--format|-p|--prompt-template|--category|--categories|--context-files)$ ]]; then
+                        skip_next=true
+                    fi
+                else
+                    pos_args+=("${COMP_WORDS[i]}")
+                fi
+            done
+            
+            if [[ ${#pos_args[@]} -eq 0 ]]; then
+                # Complete knowledgebase names
+                COMPREPLY=( $(compgen -W "$kbs" -- $cur) )
+            elif [[ ${#pos_args[@]} -eq 1 && ! $cur =~ ^- ]]; then
+                # Second positional arg is query text - no completion
+                return 0
+            fi
+            
+            # Add query options if current word starts with dash
+            if [[ $cur =~ ^- ]]; then
+                COMPREPLY+=( $(compgen -W "$query_opts" -- $cur) )
+            fi
+            ;;
+        optimize)
+            # Optimize can take optional knowledgebase name
+            local pos_args=()
+            for (( i=2; i < ${#COMP_WORDS[@]}-1; i++ )); do
+                if [[ ! "${COMP_WORDS[i]}" =~ ^- ]]; then
+                    pos_args+=("${COMP_WORDS[i]}")
+                fi
+            done
+            
+            if [[ ${#pos_args[@]} -eq 0 ]]; then
+                COMPREPLY=( $(compgen -W "$kbs" -- $cur) )
+            fi
+            
+            if [[ $cur =~ ^- ]]; then
+                COMPREPLY+=( $(compgen -W "$optimize_opts" -- $cur) )
+            fi
+            ;;
+        categorize)
+            # Categorize takes knowledgebase name
+            local pos_args=()
+            local skip_next=false
+            for (( i=2; i < ${#COMP_WORDS[@]}-1; i++ )); do
+                if [[ $skip_next == true ]]; then
+                    skip_next=false
+                    continue
+                fi
+                if [[ "${COMP_WORDS[i]}" =~ ^- ]]; then
+                    # Skip options that take arguments
+                    if [[ "${COMP_WORDS[i]}" =~ ^(-S|--sample|-m|--model|-s|--sampling|-M|--max-concurrent|-c|--confidence-threshold|--dedup-threshold)$ ]]; then
+                        skip_next=true
+                    fi
+                else
+                    pos_args+=("${COMP_WORDS[i]}")
+                fi
+            done
+            
+            if [[ ${#pos_args[@]} -eq 0 ]]; then
+                COMPREPLY=( $(compgen -W "$kbs" -- $cur) )
+            fi
+            
+            if [[ $cur =~ ^- ]]; then
+                COMPREPLY+=( $(compgen -W "$categorize_opts" -- $cur) )
+            fi
+            ;;
+        version)
+            if [[ $cur =~ ^- ]]; then
+                COMPREPLY=( $(compgen -W "$version_opts" -- $cur) )
+            fi
+            ;;
+        help)
+            # Help command has no additional arguments
+            return 0
+            ;;
+        *)
+            # No command recognized yet, suggest commands
+            COMPREPLY=( $(compgen -W "$commands" -- $cur) )
+            ;;
+    esac
 }
 
-# Register the completion function
-complete -F _customkb_complete customkb
+complete -F _customkb customkb
