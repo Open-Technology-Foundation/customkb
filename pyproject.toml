@@ -28,7 +28,7 @@ dependencies = [
     "anthropic>=0.64.0",
     "beautifulsoup4>=4.13.4",
     "colorlog==6.9.0",
-    "faiss-gpu-cu12==1.11.0",
+    "faiss-gpu-cu12==1.12.0",
     "langchain_text_splitters==0.3.7",
     "nltk==3.9.1",
     "numpy==1.26.4",
