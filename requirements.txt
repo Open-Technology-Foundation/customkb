@@ -1,27 +1,31 @@
-psutil
-anthropic>=0.64.0
-beautifulsoup4>=4.13.4
+psutil>=7.0.0
+anthropic>=0.66.0
+httpx>=0.28.0,<1.0
+httpcore>=1.0.0,<2.0
+h11>=0.14.0,<1.0
+beautifulsoup4>=4.13.5
 colorlog==6.9.0
 faiss-gpu-cu12==1.12.0
-nvidia-cudnn-cu12==9.13.0.50
+nvidia-cudnn-cu12==9.13.0.50 # NVIDIA GeForce RTX 4070
+#nvidia-cudnn-cu12==9.1.0.70 # NVIDIA L4
 nvidia-ml-py==13.580.65
 langchain_text_splitters==0.3.11
 nltk==3.9.1
 numpy==1.26.4
-openai>=1.67.0
+openai>=1.106.1
 rank-bm25==0.2.2
-sentence-transformers>=2.7.0
+sentence-transformers>=5.1.0
 spacy==3.7.5
 tokenizers==0.22.0
 langdetect==1.0.9
-google-genai>=1.31.0
+google-genai>=1.33.0
 
 # Security-critical dependencies (explicit versions) - Updated 2025-08-21
 certifi>=2025.8.3
-cryptography>=45.0.6
+cryptography>=45.0.7
 
 # Categorization dependencies
-pandas>=2.0.0
-pyyaml>=6.0.1
-rapidfuzz>=3.0.0
-tqdm>=4.66.0
+pandas>=2.3.2
+pyyaml>=6.0.2
+rapidfuzz>=3.14.0
+tqdm>=4.67.1
