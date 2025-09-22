@@ -36,7 +36,7 @@ dependencies = [
     "rank-bm25==0.2.2",
     "sentence-transformers>=2.7.0",
     "spacy==3.7.5",
-    "tokenizers==0.21.1",
+    "tokenizers==0.22.1",
     "langdetect==1.0.9",
     "google-genai>=1.31.0",
     "certifi>=2025.8.3",
