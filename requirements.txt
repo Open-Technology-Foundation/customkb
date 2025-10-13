@@ -3,7 +3,7 @@ anthropic>=0.64.0
 beautifulsoup4>=4.13.4
 colorlog==6.9.0
 faiss-gpu-cu12==1.8.0
-nvidia-cudnn-cu12==9.1.0.70
+nvidia-cudnn-cu12==9.14.0.64
 nvidia-ml-py==13.580.65
 langchain_text_splitters==0.3.11
 nltk==3.9.1
