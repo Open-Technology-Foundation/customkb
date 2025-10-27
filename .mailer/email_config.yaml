@@ -1,0 +1,198 @@
+# Email Processor Configuration
+# ============================
+# Configuration file for the Okusi Associates Email Auto-Reply System
+
+# System Directories and Paths
+directories:
+  base_dir: "/home/vmail/okusi.dev/contact"
+  drafts_dir: ".Drafts/cur"
+  temp_dir: "/tmp"
+  timestamp_file: ".last_check"
+
+# Email Processing Settings
+email:
+  # Maildir file patterns
+  unreplied_pattern: "*:2,S"
+  ticket_pattern: "\\[#:[a-zA-Z0-9]+\\]"
+  
+  # Content processing limits
+  body_limit: 2000
+  analysis_limit: 1000
+  
+  # System settings
+  hostname: "okusi0"
+  file_permissions: "644"
+  process_delay: 0.5
+
+# AI Model Configuration
+models:
+  openai:
+    spam_detection: "gpt-4o-mini"
+    max_tokens: 10
+    temperature: 0.1
+  
+  anthropic:
+    spam_detection: "claude-3-5-haiku-20241022"
+    max_tokens: 10
+    temperature: 0.1
+  
+  customkb:
+    knowledge_base: "okusimail"
+    role: "You are a professional legal services consultant at Okusi Associates, an Indonesian corporate law firm."
+    timeout: 120
+
+# API and System Timeouts
+timeouts:
+  customkb_query: 120
+  find_command: 30
+
+# Consultant Assignment Database
+consultants:
+  company:
+    name: "Reni Debora S.Pd"
+    email: "renidebora@okusi.id"
+    title: "Head of Compliance and Permits"
+    phone: "+6281366225007"
+  
+  pma:
+    name: "Reni Debora S.Pd"
+    email: "renidebora@okusi.id"
+    title: "Head of Compliance and Permits"
+    phone: "+6281366225007"
+  
+  tax:
+    name: "Sigit Erdianto Sunarno CPA"
+    email: "sunarno@okusi.id"
+    title: "Registered Public Accountant"
+    phone: "+628118162000"
+  
+  accounting:
+    name: "Sigit Erdianto Sunarno CPA"
+    email: "sunarno@okusi.id"
+    title: "Registered Public Accountant"
+    phone: "+628118162000"
+  
+  visa:
+    name: "Sri Mulyati"
+    email: "cici@okusi.id"
+    title: "Client compliance senior for Visas and Work Permit"
+    phone: "+6287886542192"
+  
+  work_permit:
+    name: "Sri Mulyati"
+    email: "cici@okusi.id"
+    title: "Client compliance senior for Visas and Work Permit"
+    phone: "+6287886542192"
+  
+  kitas:
+    name: "Sri Mulyati"
+    email: "cici@okusi.id"
+    title: "Client compliance senior for Visas and Work Permit"
+    phone: "+6287886542192"
+  
+  director:
+    name: "Reni Debora S.Pd"
+    email: "renidebora@okusi.id"
+    title: "Head of Compliance and Permits"
+    phone: "+6281366225007"
+  
+  default:
+    name: "Lina Munir M.Si"
+    email: "linamunir@okusi.id"
+    title: "Director Of Okusi Associates"
+    phone: "+62817277780"
+
+# Email Classification Keywords
+keywords:
+  company: ["company", "pma", "corporation", "incorporate", "establishment"]
+  tax: ["tax", "taxation", "accounting", "bookkeeping", "audit"]
+  visa: ["visa", "work permit", "kitas", "immigration", "residency"]
+  director: ["director", "secretary", "corporate secretary"]
+
+# Country Code Mappings
+countries:
+  au: "Australia"
+  us: "United States"
+  uk: "United Kingdom"
+  sg: "Singapore"
+  my: "Malaysia"
+  th: "Thailand"
+  vn: "Vietnam"
+  ph: "Philippines"
+  jp: "Japan"
+  kr: "South Korea"
+  cn: "China"
+  hk: "Hong Kong"
+  id: "Indonesia"
+  nl: "Netherlands"
+  de: "Germany"
+  fr: "France"
+  it: "Italy"
+  es: "Spain"
+  ca: "Canada"
+  nz: "New Zealand"
+  in: "India"
+
+# Prompt Templates
+prompts:
+  spam_detection: |
+    This email was sent to contact@okusi.id, an Indonesian legal services firm specializing in business formation, work permits, and visas.
+
+    Email to analyze:
+    {content_for_analysis}
+
+    Common SPAM patterns we receive:
+    - Job seekers from developing countries looking for employment/sponsorship
+    - Companies promoting AI services, SEO services, marketing services
+    - Cold outreach for business partnerships or investment opportunities
+    - Generic promotional emails about software/services
+
+    LEGITIMATE business inquiries include:
+    - Questions about setting up companies in Indonesia (PMA, PT, etc.)
+    - Work permit and visa inquiries for foreign workers
+    - Legal services requests for existing businesses
+    - Specific questions about Indonesian business law and regulations
+    - Inquiries about business licenses or regulatory compliance
+
+    Analyze the email content and intent. Is this a genuine inquiry about legal/business services in Indonesia, or is it spam/promotional content?
+
+    Respond with only: LEGITIMATE or SPAM
+
+  customkb_query: |
+    Please generate a professional email reply to this business inquiry about Indonesian legal services. 
+
+    SENDER CONTEXT: This inquiry is from a potential client. {sender_context}
+
+    The reply should:
+    1. Be written in a professional, helpful tone appropriate for international clients
+    2. Address the specific questions asked in the original email
+    3. Provide relevant information about Okusi Associates services with specific pricing where appropriate
+    4. Include appropriate next steps or call-to-action
+    5. Be concise but comprehensive
+    6. Consider the sender's location for any location-specific advice
+    7. Use proper business email format
+
+    {original_email}
+
+    Generate an appropriate email reply that addresses this inquiry professionally and considers the sender's context.
+
+  email_signature: |
+    Best regards,
+
+    {consultant_name}
+    {consultant_title}
+    Okusi Associates
+
+    Phone: {consultant_phone}
+    Email: {consultant_email}
+    Website: https://okusiassociates.com
+
+# Maildir Flags
+maildir:
+  seen: "S"
+  replied: "R"
+  draft: "D"
+  flagged: "F"
+  trashed: "T"
+
+#fin

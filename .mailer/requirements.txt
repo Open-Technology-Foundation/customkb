@@ -1,0 +1,81 @@
+# Production Requirements for Okusi Associates Email Auto-Reply System
+# ====================================================================
+# 
+# This file specifies the exact versions of dependencies required for
+# production deployment of the email processing system.
+#
+# Installation:
+#   pip install -r requirements.txt
+#
+# For development (includes testing tools):
+#   pip install -r requirements-dev.txt
+
+# Core Dependencies
+# -----------------
+
+# YAML configuration file parsing and management
+PyYAML==6.0.2
+
+# AI API clients for spam detection and content analysis
+# OpenAI GPT-4o-mini for primary spam detection
+openai==1.86.0
+
+# Anthropic Claude Haiku for fallback spam detection
+anthropic==0.54.0
+
+# Standard Library Dependencies (included with Python 3.8+)
+# ----------------------------------------------------------
+# The following modules are part of Python's standard library
+# and do not need to be installed separately:
+#
+# - os              # Operating system interface
+# - sys             # System-specific parameters
+# - re              # Regular expressions  
+# - json            # JSON encoder/decoder
+# - email           # Email handling (RFC 2822)
+# - time            # Time-related functions
+# - glob            # Unix shell-style pathname expansion
+# - argparse        # Command-line argument parsing
+# - tempfile        # Generate temporary files and directories
+# - subprocess      # Subprocess management
+# - datetime        # Date and time handling
+# - pathlib         # Object-oriented filesystem paths
+# - logging         # Logging facility
+
+# System Dependencies
+# -------------------
+# The following system-level dependencies are required:
+#
+# - CustomKB        # Knowledge base system (external installation)
+# - find            # Unix find command (standard on Linux/macOS)
+# - Python 3.8+    # Minimum Python version
+
+# Environment Variables Required
+# ------------------------------
+# The following environment variables must be set:
+#
+# OPENAI_API_KEY       # OpenAI API key for GPT models
+# ANTHROPIC_API_KEY    # Anthropic API key for Claude models  
+# VECTORDBS            # Optional: CustomKB base directory (default: /var/lib/vectordbs)
+
+# Optional Dependencies
+# ---------------------
+# These packages may be useful for enhanced functionality but are not required:
+#
+# python-dotenv>=1.0.0     # For .env file support
+# requests>=2.31.0         # For HTTP requests (if extending API functionality)
+# psutil>=5.9.0            # For system monitoring and process management
+
+# Version Compatibility Notes
+# ----------------------------
+# - Python 3.8+: Required for modern typing features and pathlib
+# - PyYAML 6.0+: Required for safe_load security and modern YAML features  
+# - OpenAI 1.0+: Required for new client interface (post-v1 breaking changes)
+# - Anthropic 0.54+: Required for latest Claude model support
+
+# Security Notes
+# --------------
+# - All API keys should be stored in environment variables, never in code
+# - PyYAML uses safe_load() to prevent code injection
+# - No packages with known security vulnerabilities
+# - Regular dependency updates recommended for security patches

@@ -11,6 +11,7 @@ from datetime import datetime
 
 from utils.logging_config import get_logger
 from utils.exceptions import DatabaseError
+from utils.security_utils import validate_table_name
 
 logger = get_logger(__name__)
 
@@ -101,48 +102,60 @@ def record_migration(kb: Any, version: int, name: str, description: str = "") ->
 
 def migrate_for_bm25(kb: Any) -> bool:
   """
-  Add BM25 token column for hybrid search support.
-  
+  Add BM25 columns (bm25_tokens and doc_length) for hybrid search support.
+
   Args:
       kb: KnowledgeBase instance with database connection
-      
+
   Returns:
       True if migration was applied, False if already exists
   """
   try:
     table_name = getattr(kb, 'table_name', 'docs')
-    
+
+    # Validate table name to prevent SQL injection
+    if not validate_table_name(table_name):
+      raise ValueError(f"Invalid table name: {table_name}")
+
     # Check if bm25_tokens column exists
     kb.sql_cursor.execute(f"PRAGMA table_info({table_name})")
     columns = [row[1] for row in kb.sql_cursor.fetchall()]
-    
-    if 'bm25_tokens' in columns:
-      logger.debug("BM25 tokens column already exists")
+
+    if 'bm25_tokens' in columns and 'doc_length' in columns:
+      logger.debug("BM25 columns already exist")
       return False
-    
-    logger.info("Adding bm25_tokens column for hybrid search...")
-    
-    # Add the column
-    kb.sql_cursor.execute(f"""
-      ALTER TABLE {table_name} 
-      ADD COLUMN bm25_tokens TEXT
-    """)
-    
-    # Create index for better performance
-    kb.sql_cursor.execute(f"""
-      CREATE INDEX IF NOT EXISTS idx_bm25_tokens 
-      ON {table_name}(bm25_tokens)
-    """)
-    
+
+    logger.info("Adding BM25 columns for hybrid search...")
+
+    # Add bm25_tokens column if missing
+    if 'bm25_tokens' not in columns:
+      kb.sql_cursor.execute(f"""
+        ALTER TABLE {table_name}
+        ADD COLUMN bm25_tokens TEXT
+      """)
+
+      # Create index for better performance
+      kb.sql_cursor.execute(f"""
+        CREATE INDEX IF NOT EXISTS idx_bm25_tokens
+        ON {table_name}(bm25_tokens)
+      """)
+
+    # Add doc_length column if missing
+    if 'doc_length' not in columns:
+      kb.sql_cursor.execute(f"""
+        ALTER TABLE {table_name}
+        ADD COLUMN doc_length INTEGER DEFAULT 0
+      """)
+
     kb.sql_connection.commit()
-    
+
     # Record migration
     create_migration_table(kb)
-    record_migration(kb, 1, "add_bm25_tokens", "Added BM25 tokens column for hybrid search")
-    
+    record_migration(kb, 1, "add_bm25_columns", "Added BM25 tokens and doc_length columns for hybrid search")
+
     logger.info("BM25 migration completed successfully")
     return True
-    
+
   except sqlite3.Error as e:
     logger.error(f"BM25 migration failed: {e}")
     kb.sql_connection.rollback()
@@ -161,11 +174,15 @@ def migrate_add_categories(kb: Any) -> bool:
   """
   try:
     table_name = getattr(kb, 'table_name', 'docs')
-    
+
+    # Validate table name to prevent SQL injection
+    if not validate_table_name(table_name):
+      raise ValueError(f"Invalid table name: {table_name}")
+
     # Check if category columns exist
     kb.sql_cursor.execute(f"PRAGMA table_info({table_name})")
     columns = [row[1] for row in kb.sql_cursor.fetchall()]
-    
+
     if 'primary_category' in columns:
       logger.debug("Category columns already exist")
       return False
@@ -216,11 +233,15 @@ def migrate_add_timestamps(kb: Any) -> bool:
   """
   try:
     table_name = getattr(kb, 'table_name', 'docs')
-    
+
+    # Validate table name to prevent SQL injection
+    if not validate_table_name(table_name):
+      raise ValueError(f"Invalid table name: {table_name}")
+
     # Check if timestamp columns exist
     kb.sql_cursor.execute(f"PRAGMA table_info({table_name})")
     columns = [row[1] for row in kb.sql_cursor.fetchall()]
-    
+
     if 'created_at' in columns:
       logger.debug("Timestamp columns already exist")
       return False

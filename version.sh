@@ -1,4 +1,5 @@
 #!/bin/bash
+#shellcheck disable=SC2155
 set -euo pipefail
 
 # CustomKB version management script
@@ -29,7 +30,7 @@ bump_version() {
       patch=$((patch + 1))
       ;;
     *)
-      echo "Invalid version type. Use major, minor, or patch."
+      >&2 echo "Invalid version type. Use major, minor, or patch."
       exit 1
       ;;
   esac
@@ -63,7 +64,7 @@ bump_build() {
 }
 
 # Main logic
-if [[ $# -eq 0 ]]; then
+if (($#==0)) || [[ $* == *"-h"*  ]]; then
   echo "Usage: $0 [major|minor|patch|build]"
   echo "  major  - Bump major version (X.0.0), resets minor and patch"
   echo "  minor  - Bump minor version (x.X.0), resets patch"
@@ -74,7 +75,7 @@ fi
 
 # Ensure version.py exists
 if [[ ! -f "$VERSION_FILE" ]]; then
-  echo "Error: $VERSION_FILE not found"
+  >&2 echo "Error: $VERSION_FILE not found"
   exit 1
 fi
 
@@ -86,9 +87,12 @@ case "$1" in
   major|minor|patch)
     bump_version "$1"
     ;;
+  version|-V|--version)
+    grep '^VERSION_[MMPB]?*' "$VERSION_FILE" 
+    ;;
   *)
-    echo "Invalid argument: $1"
-    echo "Usage: $0 [major|minor|patch|build]"
+    >&2 echo "Invalid argument: $1"
+    >&2 echo "Usage: $0 [major|minor|patch|build]"
     exit 1
     ;;
 esac

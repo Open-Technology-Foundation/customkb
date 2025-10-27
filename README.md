@@ -2,9 +2,12 @@
 
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
-[![Version](https://img.shields.io/badge/version-0.8.0-green.svg)](https://github.com/Open-Technology-Foundation/customkb)
+[![Version](https://img.shields.io/badge/version-0.9.0-green.svg)](https://github.com/Open-Technology-Foundation/customkb)
+[![Security](https://img.shields.io/badge/security-hardened-brightgreen.svg)](CHANGELOG.md#security)
 
 CustomKB transforms your documents into AI-powered, searchable knowledgebases with state-of-the-art embedding models, vector search, and language models to deliver contextually relevant answers from your data.
+
+**Latest:** Version 0.9.0 includes critical security fixes eliminating pickle deserialization vulnerabilities and SQL injection risks. See [CHANGELOG.md](CHANGELOG.md) for details.
 
 ## Key Features
 
@@ -15,7 +18,7 @@ CustomKB transforms your documents into AI-powered, searchable knowledgebases wi
 - **27+ Language Support**: Multi-language processing with automatic detection
 - **Hybrid Search**: Combines vector similarity with BM25 keyword matching
 - **Cross-Encoder Reranking**: Boosts accuracy by 20-40% with advanced models
-- **Enterprise Security**: Input validation, path protection, API key security
+- **Enterprise Security**: Hardened against injection attacks, safe serialization (no pickle), input validation, path protection
 
 ### Performance & Scale
 - **Memory-Optimized Tiers**: Automatically adapts from 4GB to 128GB+ systems
@@ -47,12 +50,26 @@ source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-### 3. Install NLTK Data
+### 3. Install FAISS
+```bash
+# Automatic installation (detects GPU and CUDA version)
+./setup/install_faiss.sh
+
+# Or manual installation:
+# CPU-only: pip install -r requirements-faiss-cpu.txt
+# GPU (CUDA 12): pip install -r requirements-faiss-gpu-cu12.txt
+# GPU (CUDA 11): pip install -r requirements-faiss-gpu-cu11.txt
+
+# Force specific variant:
+# FAISS_VARIANT=cpu ./setup/install_faiss.sh
+```
+
+### 4. Install NLTK Data
 ```bash
 sudo ./setup/nltk_setup.py download cleanup
 ```
 
-### 4. Configure API Keys
+### 5. Configure API Keys
 ```bash
 export OPENAI_API_KEY="your-openai-key"
 export ANTHROPIC_API_KEY="your-anthropic-key"
@@ -489,6 +506,57 @@ NLTK_DATA            # NLTK data location
 - Configure GPU acceleration when available
 - Monitor cache hit rates in logs
 - Run optimize after major changes
+
+## Security
+
+CustomKB implements enterprise-grade security measures to protect your data and systems:
+
+### Current Security Features (v0.9.0)
+
+**Safe Serialization**
+- ✓ Zero pickle deserialization vulnerabilities
+- ✓ JSON format for reranking cache (human-readable, secure)
+- ✓ JSON format for categorization checkpoints
+- ✓ NPZ + JSON hybrid for BM25 indexes (efficient + secure)
+- ✓ Automatic migration from legacy pickle formats
+
+**Injection Prevention**
+- ✓ SQL injection protection via table name validation
+- ✓ Path traversal protection in file operations
+- ✓ Input validation for all user-provided parameters
+- ✓ Parameterized queries for database operations
+
+**API Security**
+- ✓ API key validation and secure storage
+- ✓ Environment variable-based configuration
+- ✓ No API keys in logs or error messages
+- ✓ Secure credential handling
+
+**Data Protection**
+- ✓ Database integrity checks
+- ✓ Atomic operations with rollback support
+- ✓ Backup support for critical operations
+- ✓ File permission validation
+
+### Security Best Practices
+
+When deploying CustomKB in production:
+
+1. **API Keys**: Store in environment variables, never in code or config files
+2. **File Permissions**: Restrict knowledgebase directories to application user only
+3. **Network Access**: Run on localhost or behind authentication proxy
+4. **Updates**: Regularly check [CHANGELOG.md](CHANGELOG.md) for security patches
+5. **Backups**: Enable automatic backups before migrations
+
+### Reporting Security Issues
+
+If you discover a security vulnerability, please:
+1. **Do not** create a public GitHub issue
+2. Email security concerns to the maintainers
+3. Include steps to reproduce and potential impact
+4. Allow time for patching before public disclosure
+
+See [CHANGELOG.md](CHANGELOG.md) for detailed security update history.
 
 ## License
 

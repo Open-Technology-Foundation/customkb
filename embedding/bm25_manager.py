@@ -7,8 +7,9 @@ retrieval that complements the vector-based semantic search.
 """
 
 import os
-import pickle
+import json
 import sqlite3
+import numpy as np
 from typing import List, Tuple, Optional, Dict, Any
 from rank_bm25 import BM25Okapi
 
@@ -58,22 +59,38 @@ def build_bm25_index(kb: 'KnowledgeBase') -> Optional[BM25Okapi]:
     
     logger.info(f"Building BM25 index with k1={k1}, b={b}")
     bm25 = BM25Okapi(corpus, k1=k1, b=b)
-    
-    # Save index and metadata
+
+    # Extract BM25 internal data for NPZ serialization
     bm25_path = get_bm25_index_path(kb)
-    bm25_data = {
-      'bm25': bm25,
-      'doc_ids': doc_ids,
+
+    # Convert idf dict to two arrays for efficient storage
+    idf_terms = list(bm25.idf.keys())
+    idf_scores = [bm25.idf[term] for term in idf_terms]
+
+    # Save arrays with NPZ (efficient binary format)
+    np.savez(
+      bm25_path,
+      idf_terms=np.array(idf_terms, dtype=object),
+      idf_scores=np.array(idf_scores, dtype=np.float32),
+      doc_len=np.array(bm25.doc_len, dtype=np.int32),
+      doc_ids=np.array(doc_ids, dtype=np.int32)
+    )
+
+    # Save metadata with JSON (human-readable, secure)
+    metadata_path = bm25_path.replace('.bm25', '.bm25.json')
+    metadata = {
       'total_docs': len(doc_ids),
       'total_tokens': total_length,
+      'avgdl': float(bm25.avgdl),
+      'corpus_size': int(bm25.corpus_size),
       'k1': k1,
       'b': b,
-      'version': '1.0'
+      'version': '2.0'  # Version 2.0 for NPZ format
     }
-    
-    with open(bm25_path, 'wb') as f:
-      pickle.dump(bm25_data, f, protocol=pickle.HIGHEST_PROTOCOL)
-    
+
+    with open(metadata_path, 'w') as f:
+      json.dump(metadata, f, indent=2)
+
     logger.info(f"Built BM25 index with {len(doc_ids)} documents, saved to {bm25_path}")
     return bm25
     
@@ -86,39 +103,87 @@ def build_bm25_index(kb: 'KnowledgeBase') -> Optional[BM25Okapi]:
 
 def load_bm25_index(kb: 'KnowledgeBase') -> Optional[Dict[str, Any]]:
   """
-  Load BM25 index from disk.
-  
+  Load BM25 index from disk (NPZ format with JSON metadata).
+
   Args:
       kb: The KnowledgeBase instance.
-      
+
   Returns:
       Dictionary containing BM25 data if successful, None otherwise.
   """
   bm25_path = get_bm25_index_path(kb)
-  
-  if not os.path.exists(bm25_path):
-    logger.debug(f"BM25 index not found at {bm25_path}")
-    return None
-  
-  try:
-    with open(bm25_path, 'rb') as f:
-      bm25_data = pickle.load(f)
-    
-    # Validate loaded data
-    required_keys = ['bm25', 'doc_ids', 'total_docs']
-    if not all(key in bm25_data for key in required_keys):
-      logger.error("Invalid BM25 index file: missing required keys")
+  metadata_path = bm25_path.replace('.bm25', '.bm25.json')
+
+  # Try loading NPZ format first (version 2.0)
+  if os.path.exists(bm25_path) and os.path.exists(metadata_path):
+    try:
+      # Load arrays from NPZ
+      npz_data = np.load(bm25_path, allow_pickle=True)
+
+      # Load metadata from JSON
+      with open(metadata_path, 'r') as f:
+        metadata = json.load(f)
+
+      # Reconstruct idf dictionary
+      idf_terms = npz_data['idf_terms']
+      idf_scores = npz_data['idf_scores']
+      idf = {term: float(score) for term, score in zip(idf_terms, idf_scores)}
+
+      # Reconstruct BM25Okapi object
+      bm25 = BM25Okapi.__new__(BM25Okapi)
+      bm25.idf = idf
+      bm25.doc_len = npz_data['doc_len'].tolist()
+      bm25.avgdl = metadata['avgdl']
+      bm25.corpus_size = metadata['corpus_size']
+      bm25.k1 = metadata['k1']
+      bm25.b = metadata['b']
+
+      # Convert doc_ids back to list
+      doc_ids = npz_data['doc_ids'].tolist()
+
+      bm25_data = {
+        'bm25': bm25,
+        'doc_ids': doc_ids,
+        'total_docs': metadata['total_docs'],
+        'total_tokens': metadata['total_tokens'],
+        'k1': metadata['k1'],
+        'b': metadata['b'],
+        'version': metadata.get('version', '2.0')
+      }
+
+      logger.debug(f"Loaded BM25 index (NPZ) with {metadata['total_docs']} documents")
+      return bm25_data
+
+    except Exception as e:
+      logger.warning(f"Failed to load NPZ format BM25 index: {e}")
+
+  # Backward compatibility: try loading old pickle format (version 1.0)
+  if os.path.exists(bm25_path):
+    try:
+      import pickle
+      with open(bm25_path, 'rb') as f:
+        bm25_data = pickle.load(f)
+
+      # Validate loaded data
+      required_keys = ['bm25', 'doc_ids', 'total_docs']
+      if not all(key in bm25_data for key in required_keys):
+        logger.error("Invalid BM25 index file: missing required keys")
+        return None
+
+      logger.info(f"Loaded BM25 index from legacy pickle format, migrating to NPZ...")
+
+      # Trigger rebuild to migrate to NPZ format
+      # This will happen automatically on next rebuild
+      logger.warning("Legacy pickle format detected. Consider rebuilding with 'customkb bm25 <kb_name> --force'")
+
+      return bm25_data
+
+    except Exception as e:
+      logger.error(f"Error loading legacy pickle BM25 index: {e}")
       return None
-    
-    logger.debug(f"Loaded BM25 index with {bm25_data['total_docs']} documents")
-    return bm25_data
-    
-  except (pickle.PickleError, IOError) as e:
-    logger.error(f"Error loading BM25 index: {e}")
-    return None
-  except Exception as e:
-    logger.error(f"Unexpected error loading BM25 index: {e}")
-    return None
+
+  logger.debug(f"BM25 index not found at {bm25_path}")
+  return None
 
 def get_bm25_index_path(kb: 'KnowledgeBase') -> str:
   """

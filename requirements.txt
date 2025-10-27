@@ -1,27 +1,28 @@
-psutil
-anthropic>=0.64.0
-beautifulsoup4>=4.13.4
-colorlog==6.9.0
-faiss-gpu-cu12==1.8.0
-nvidia-cudnn-cu12==9.1.0.70
-nvidia-ml-py==13.580.65
-langchain_text_splitters==0.3.11
-nltk==3.9.1
-numpy==1.26.4
-openai>=1.67.0
-rank-bm25==0.2.2
-sentence-transformers>=2.7.0
-spacy==3.7.5
-tokenizers==0.22.0
+anthropic==0.71.0
+colorlog==6.10.1
+# FAISS is installed separately based on your hardware configuration
+# Run: ./setup/install_faiss.sh (auto-detect)
+# Or install manually:
+#   CPU-only: pip install -r requirements-faiss-cpu.txt
+#   GPU (CUDA 12): pip install -r requirements-faiss-gpu-cu12.txt
+#   GPU (CUDA 11): pip install -r requirements-faiss-gpu-cu11.txt
+httpx==0.28.1
+langchain_text_splitters==1.0.0
 langdetect==1.0.9
-google-genai>=1.31.0
-
-# Security-critical dependencies (explicit versions) - Updated 2025-08-21
-certifi>=2025.8.3
-cryptography>=45.0.6
-
-# Categorization dependencies
-pandas>=2.0.0
-pyyaml>=6.0.1
-rapidfuzz>=3.0.0
-tqdm>=4.66.0
+matplotlib==3.10.7
+nltk==3.9.2
+numpy==2.3.4
+openai==2.6.1
+pandas==2.3.3
+protobuf==6.33.0
+psutil==7.1.2
+pynvml==13.0.1
+pytest==8.4.2
+PyYAML==6.0.3
+rank_bm25==0.2.2
+rapidfuzz==3.14.1
+sentence_transformers==5.1.2
+spacy==3.8.7
+textblob==0.19.0
+torch==2.9.0
+tqdm==4.67.1

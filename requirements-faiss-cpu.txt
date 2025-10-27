@@ -1,0 +1,5 @@
+# FAISS CPU-only requirements
+# For systems without NVIDIA GPU or when GPU acceleration is not needed
+# Install with: pip install -r requirements-faiss-cpu.txt
+
+faiss-cpu==1.12.0

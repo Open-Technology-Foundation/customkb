@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+set -euo pipefail
+PRG0="$(readlink -en -- "$0")"; readonly PRG0
+PRGDIR="${PRG0%/*}"; readonly PRGDIR
+xcleanup() { exit "${1:-0}"; }
+trap 'xcleanup $?' SIGINT EXIT
+
+cd "$PRGDIR"
+
+cln -Nq
+
+version=''
+
+git add .
+git commit -m "${1:-update ${version}}"
+
+# Check if remote is configured before pushing
+if git remote -v | grep -q origin; then
+  git push
+else
+  echo "Warning: No git remote configured. Skipping push."
+  echo "To push manually, set up remote with: git remote add origin <url>"
+  echo "Then run: git push -u origin main"
+fi
+

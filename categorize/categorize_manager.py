@@ -17,7 +17,6 @@ from typing import List, Dict, Any, Tuple, Optional, Set
 from dataclasses import dataclass, asdict, field
 from datetime import datetime
 import signal
-import pickle
 import re
 
 from openai import AsyncOpenAI, OpenAI
@@ -484,29 +483,59 @@ Return ONLY a JSON object like:
     return results
   
   def _save_checkpoint(self, results: List[ArticleCategories]):
-    """Save checkpoint for resume capability"""
+    """Save checkpoint for resume capability (JSON format)"""
     if not self.checkpoint_file:
       cats_dir = Path(self.kb.knowledge_base_db).parent / "cats"
-      self.checkpoint_file = cats_dir / "checkpoint.pkl"
-    
+      self.checkpoint_file = cats_dir / "checkpoint.json"
+
+    # Convert ArticleCategories dataclasses to dictionaries
     checkpoint_data = {
-      'results': results,
+      'results': [asdict(r) for r in results],
       'dynamic_categories': list(self.dynamic_categories),
-      'timestamp': datetime.now().isoformat()
+      'timestamp': datetime.now().isoformat(),
+      'version': '1.0'
     }
-    
-    with open(self.checkpoint_file, 'wb') as f:
-      pickle.dump(checkpoint_data, f)
-    
+
+    with open(self.checkpoint_file, 'w') as f:
+      json.dump(checkpoint_data, f, indent=2)
+
     self.logger.debug(f"Checkpoint saved: {len(results)} articles processed")
   
   def load_checkpoint(self) -> Optional[List[ArticleCategories]]:
-    """Load checkpoint if exists"""
-    if self.checkpoint_file and Path(self.checkpoint_file).exists():
-      with open(self.checkpoint_file, 'rb') as f:
-        data = pickle.load(f)
-        self.dynamic_categories = set(data.get('dynamic_categories', []))
-        return data.get('results', [])
+    """Load checkpoint if exists (supports JSON and legacy pickle formats)"""
+    # Try JSON format first
+    json_checkpoint = self.checkpoint_file or (Path(self.kb.knowledge_base_db).parent / "cats" / "checkpoint.json")
+    if Path(json_checkpoint).exists():
+      try:
+        with open(json_checkpoint, 'r') as f:
+          data = json.load(f)
+          self.dynamic_categories = set(data.get('dynamic_categories', []))
+          # Convert dictionaries back to ArticleCategories dataclasses
+          results_data = data.get('results', [])
+          results = [ArticleCategories(**r) if isinstance(r, dict) else r for r in results_data]
+          self.logger.info(f"Loaded checkpoint: {len(results)} articles from JSON")
+          return results
+      except Exception as e:
+        self.logger.warning(f"Failed to load JSON checkpoint: {e}")
+
+    # Backward compatibility: try old pickle format
+    pkl_checkpoint = Path(self.kb.knowledge_base_db).parent / "cats" / "checkpoint.pkl"
+    if pkl_checkpoint.exists():
+      try:
+        import pickle
+        with open(pkl_checkpoint, 'rb') as f:
+          data = pickle.load(f)
+          self.dynamic_categories = set(data.get('dynamic_categories', []))
+          results = data.get('results', [])
+          # Migrate to JSON format
+          self._save_checkpoint(results)
+          # Remove old pickle file
+          pkl_checkpoint.unlink()
+          self.logger.info(f"Migrated checkpoint from pickle to JSON: {len(results)} articles")
+          return results
+      except Exception as e:
+        self.logger.warning(f"Failed to load/migrate pickle checkpoint: {e}")
+
     return None
 
 def process_categorize(args: argparse.Namespace, logger) -> str:

@@ -13,6 +13,7 @@ from pathlib import Path
 
 from utils.logging_config import get_logger
 from utils.exceptions import ConnectionError as CustomConnectionError, DatabaseError
+from utils.security_utils import validate_table_name
 
 logger = get_logger(__name__)
 
@@ -84,7 +85,11 @@ def create_tables(kb: Any) -> None:
   try:
     # Determine table name
     table_name = getattr(kb, 'table_name', 'docs')
-    
+
+    # Validate table name to prevent SQL injection
+    if not validate_table_name(table_name):
+      raise ValueError(f"Invalid table name: {table_name}")
+
     # Main documents table
     kb.sql_cursor.execute(f'''
       CREATE TABLE IF NOT EXISTS {table_name} (
@@ -302,8 +307,12 @@ def get_connection_info(kb: Any) -> dict:
       
       # Get row count from main table
       table_name = getattr(kb, 'table_name', 'docs')
-      kb.sql_cursor.execute(f"SELECT COUNT(*) FROM {table_name}")
-      info['row_count'] = kb.sql_cursor.fetchone()[0]
+      if validate_table_name(table_name):
+        kb.sql_cursor.execute(f"SELECT COUNT(*) FROM {table_name}")
+        info['row_count'] = kb.sql_cursor.fetchone()[0]
+      else:
+        logger.warning(f"Invalid table name in connection info: {table_name}")
+        info['row_count'] = 0
       
     except sqlite3.Error as e:
       logger.warning(f"Error getting connection info: {e}")

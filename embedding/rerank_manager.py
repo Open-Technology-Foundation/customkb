@@ -8,7 +8,6 @@ from sentence-transformers, implementing caching and batch processing for effici
 import hashlib
 import json
 import os
-import pickle
 import time
 from collections import OrderedDict
 from typing import List, Tuple, Optional, Dict, Any
@@ -67,18 +66,38 @@ def get_cached_score(query: str, document: str) -> Optional[float]:
     _memory_cache.move_to_end(cache_key)
     return _memory_cache[cache_key]
   
-  # Check disk cache
-  cache_file = os.path.join(CACHE_DIR, f"{cache_key}.pkl")
+  # Check disk cache (JSON format)
+  cache_file = os.path.join(CACHE_DIR, f"{cache_key}.json")
   if os.path.exists(cache_file):
     try:
-      with open(cache_file, 'rb') as f:
-        score = pickle.load(f)
+      with open(cache_file, 'r') as f:
+        data = json.load(f)
+        score = data.get('score') if isinstance(data, dict) else data
       # Promote to memory cache
       _memory_cache[cache_key] = score
       _enforce_memory_cache_size()
       return score
     except Exception as e:
-      logger.warning(f"Failed to load cached score: {e}")
+      logger.warning(f"Failed to load cached score from JSON: {e}")
+
+  # Backward compatibility: check for old pickle format
+  old_cache_file = os.path.join(CACHE_DIR, f"{cache_key}.pkl")
+  if os.path.exists(old_cache_file):
+    try:
+      import pickle
+      with open(old_cache_file, 'rb') as f:
+        score = pickle.load(f)
+      # Migrate to JSON format
+      cache_score(query='', document='', score=score)  # Will save as JSON
+      # Remove old pickle file
+      os.remove(old_cache_file)
+      logger.info(f"Migrated rerank cache from pickle to JSON: {cache_key}")
+      # Promote to memory cache
+      _memory_cache[cache_key] = score
+      _enforce_memory_cache_size()
+      return score
+    except Exception as e:
+      logger.warning(f"Failed to migrate cached score from pickle: {e}")
   
   return None
 
@@ -97,12 +116,12 @@ def cache_score(query: str, document: str, score: float):
   # Add to memory cache
   _memory_cache[cache_key] = score
   _enforce_memory_cache_size()
-  
-  # Save to disk cache
-  cache_file = os.path.join(CACHE_DIR, f"{cache_key}.pkl")
+
+  # Save to disk cache (JSON format)
+  cache_file = os.path.join(CACHE_DIR, f"{cache_key}.json")
   try:
-    with open(cache_file, 'wb') as f:
-      pickle.dump(score, f)
+    with open(cache_file, 'w') as f:
+      json.dump({'score': score, 'version': '1.0'}, f)
   except Exception as e:
     logger.warning(f"Failed to save score to disk cache: {e}")
 

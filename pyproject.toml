@@ -35,6 +35,7 @@ dependencies = [
     "openai>=1.67.0",
     "rank-bm25==0.2.2",
     "sentence-transformers>=2.7.0",
+    "torch==2.5.1",
     "spacy==3.7.5",
     "tokenizers==0.21.1",
     "langdetect==1.0.9",
@@ -83,6 +84,7 @@ Repository = "https://github.com/okusi/customkb.git"
 Issues = "https://github.com/okusi/customkb/issues"
 
 [tool.setuptools]
+py-modules = ["customkb"]
 packages = ["config", "database", "embedding", "query", "models", "utils", "categorize"]
 
 [tool.setuptools.package-data]

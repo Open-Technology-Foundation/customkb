@@ -4,6 +4,55 @@
 
 CustomKB supports GPU acceleration for the reranking step using CUDA-compatible GPUs. This feature can improve query performance when reranking large numbers of documents.
 
+## FAISS Installation
+
+CustomKB uses FAISS (Facebook AI Similarity Search) for vector operations. The installation varies based on your hardware:
+
+### Automatic Installation (Recommended)
+
+```bash
+# Auto-detects GPU and CUDA version
+./setup/install_faiss.sh
+
+# Show what would be installed without installing
+./setup/install_faiss.sh --dry-run
+```
+
+### Manual Installation
+
+**CPU-only systems:**
+```bash
+pip install -r requirements-faiss-cpu.txt
+```
+
+**GPU systems with CUDA 12.x (NVIDIA Driver >= R530):**
+```bash
+pip install -r requirements-faiss-gpu-cu12.txt
+```
+
+**GPU systems with CUDA 11.8 (NVIDIA Driver >= R520):**
+```bash
+pip install -r requirements-faiss-gpu-cu11.txt
+```
+
+### Force Specific Variant
+
+Override auto-detection using the `FAISS_VARIANT` environment variable:
+
+```bash
+# Force CPU-only even if GPU is present
+FAISS_VARIANT=cpu ./setup/install_faiss.sh
+
+# Force specific CUDA version
+FAISS_VARIANT=gpu-cu12 ./setup/install_faiss.sh
+```
+
+### Verify Installation
+
+```bash
+python -c "import faiss; print(f'FAISS version: {faiss.__version__}')"
+```
+
 ## Configuration
 
 To enable GPU acceleration, set the following in your knowledgebase configuration:

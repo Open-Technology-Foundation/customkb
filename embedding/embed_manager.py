@@ -39,6 +39,9 @@ except ImportError:
   GOOGLE_AI_AVAILABLE = False
 from utils.security_utils import validate_api_key, safe_log_error
 
+# Import cache manager from cache module
+from embedding.cache import CacheThreadManager, cache_manager
+
 def load_and_validate_openai_key():
   """Load and validate OpenAI API key securely."""
   openai_key = os.getenv('OPENAI_API_KEY')
@@ -86,145 +89,6 @@ CACHE_DIR = os.path.join(os.getenv('VECTORDBS', '/var/lib/vectordbs'), '.embeddi
 os.makedirs(CACHE_DIR, exist_ok=True)
 
 # Configuration constants - these are now loaded from KnowledgeBase config
-
-# Thread-safe cache manager
-class CacheThreadManager:
-  """Manages thread pool and cache operations for embedding storage."""
-  
-  def __init__(self, max_workers: int = 4):
-    self._executor = None
-    self._max_workers = max_workers
-    self._lock = threading.RLock()
-    self._memory_cache = {}
-    self._memory_cache_keys = []
-    self._memory_cache_size = 10000  # Default size
-    self._max_memory_mb = 500  # Default 500MB limit for cache
-    self._embedding_size_bytes = {}  # Track size of each embedding
-    
-    # Performance monitoring
-    self._metrics = {
-      'cache_hits': 0,
-      'cache_misses': 0,
-      'cache_adds': 0,
-      'cache_evictions': 0,
-      'thread_pool_tasks': 0,
-      'memory_usage_mb': 0.0
-    }
-    
-  def _ensure_executor(self):
-    """Ensure thread pool executor is initialized."""
-    if self._executor is None:
-      self._executor = ThreadPoolExecutor(max_workers=self._max_workers)
-      atexit.register(self._cleanup)
-  
-  def _cleanup(self):
-    """Clean up thread pool executor."""
-    if self._executor is not None:
-      self._executor.shutdown(wait=True)
-      self._executor = None
-  
-  def submit_cache_task(self, func, *args, **kwargs):
-    """Submit a cache task to the thread pool."""
-    with self._lock:
-      self._ensure_executor()
-      self._metrics['thread_pool_tasks'] += 1
-      return self._executor.submit(func, *args, **kwargs)
-  
-  def get_from_memory_cache(self, cache_key: str) -> Optional[List[float]]:
-    """Thread-safe retrieval from memory cache."""
-    with self._lock:
-      if cache_key in self._memory_cache:
-        # Move to end for LRU
-        self._memory_cache_keys.remove(cache_key)
-        self._memory_cache_keys.append(cache_key)
-        self._metrics['cache_hits'] += 1
-        return self._memory_cache[cache_key]
-      else:
-        self._metrics['cache_misses'] += 1
-    return None
-  
-  def add_to_memory_cache(self, cache_key: str, embedding: List[float], kb=None):
-    """Thread-safe addition to memory cache with LRU eviction based on memory usage."""
-    with self._lock:
-      # Configure cache size from KB config if available
-      cache_size = getattr(kb, 'memory_cache_size', self._memory_cache_size) if kb else self._memory_cache_size
-      memory_limit_mb = getattr(kb, 'cache_memory_limit_mb', self._max_memory_mb) if kb else self._max_memory_mb
-      
-      # Calculate embedding size (4 bytes per float)
-      embedding_size = len(embedding) * 4
-      self._embedding_size_bytes[cache_key] = embedding_size
-      
-      # Calculate current memory usage
-      current_memory_bytes = sum(self._embedding_size_bytes.get(k, 0) 
-                                for k in self._memory_cache.keys())
-      current_memory_mb = current_memory_bytes / (1024 * 1024)
-      
-      # Evict based on memory limit first, then count limit
-      evictions = 0
-      while (current_memory_mb + (embedding_size / 1024 / 1024) > memory_limit_mb or 
-             len(self._memory_cache_keys) >= cache_size):
-        if not self._memory_cache_keys:
-          break
-        oldest_key = self._memory_cache_keys.pop(0)
-        if oldest_key in self._memory_cache:
-          del self._memory_cache[oldest_key]
-          if oldest_key in self._embedding_size_bytes:
-            current_memory_bytes -= self._embedding_size_bytes[oldest_key]
-            del self._embedding_size_bytes[oldest_key]
-          current_memory_mb = current_memory_bytes / (1024 * 1024)
-          evictions += 1
-      
-      # Track metrics
-      self._metrics['cache_adds'] += 1
-      self._metrics['cache_evictions'] += evictions
-      self._metrics['memory_usage_mb'] = current_memory_mb + (embedding_size / 1024 / 1024)
-      
-      # Add to memory cache
-      self._memory_cache[cache_key] = embedding
-      self._memory_cache_keys.append(cache_key)
-  
-  def configure(self, max_workers: int = None, memory_cache_size: int = None, 
-                memory_limit_mb: int = None):
-    """Configure the cache manager."""
-    with self._lock:
-      if max_workers is not None and max_workers != self._max_workers:
-        # Recreate executor with new size
-        if self._executor is not None:
-          self._executor.shutdown(wait=True)
-          self._executor = None
-        self._max_workers = max_workers
-      
-      if memory_cache_size is not None:
-        self._memory_cache_size = memory_cache_size
-      
-      if memory_limit_mb is not None:
-        self._max_memory_mb = memory_limit_mb
-  
-  def get_metrics(self) -> Dict[str, Any]:
-    """Get performance metrics for the cache manager."""
-    with self._lock:
-      metrics = self._metrics.copy()
-      # Calculate derived metrics
-      total_requests = metrics['cache_hits'] + metrics['cache_misses']
-      metrics['cache_hit_ratio'] = metrics['cache_hits'] / total_requests if total_requests > 0 else 0.0
-      metrics['cache_size'] = len(self._memory_cache)
-      metrics['max_cache_size'] = self._memory_cache_size
-      metrics['thread_pool_size'] = self._max_workers
-      return metrics
-  
-  def reset_metrics(self):
-    """Reset performance metrics (for testing or periodic monitoring)."""
-    with self._lock:
-      self._metrics = {
-        'cache_hits': 0,
-        'cache_misses': 0,
-        'cache_adds': 0,
-        'cache_evictions': 0,
-        'thread_pool_tasks': 0
-      }
-
-# Global cache manager instance
-cache_manager = CacheThreadManager()
 
 # Thread-safe backward compatibility proxies
 class ThreadSafeCacheProxy:

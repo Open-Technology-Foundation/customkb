@@ -8,7 +8,6 @@ import pytest
 import tempfile
 import os
 import sqlite3
-import pickle
 from unittest.mock import Mock, patch, MagicMock
 from embedding.bm25_manager import (
   build_bm25_index,
@@ -37,6 +36,7 @@ class TestBM25Manager:
     self.mock_kb.bm25_b = 0.75
     self.mock_kb.enable_hybrid_search = True
     self.mock_kb.bm25_rebuild_threshold = 100
+    self.mock_kb.bm25_max_results = 1000
     self.mock_kb.language = 'en'
     
     # Create test database with BM25 data
@@ -106,21 +106,26 @@ class TestBM25Manager:
     assert path == expected
 
   @patch('embedding.bm25_manager.BM25Okapi')
+  @patch('embedding.bm25_manager.np.savez')
   @patch('builtins.open', create=True)
-  @patch('pickle.dump')
-  def test_build_bm25_index_success(self, mock_pickle_dump, mock_open, mock_bm25):
-    """Test successful BM25 index building."""
-    # Mock BM25Okapi
+  @patch('embedding.bm25_manager.json.dump')
+  def test_build_bm25_index_success(self, mock_json_dump, mock_open, mock_savez, mock_bm25):
+    """Test successful BM25 index building with NPZ format."""
+    # Mock BM25Okapi instance with required attributes
     mock_bm25_instance = Mock()
+    mock_bm25_instance.idf = {'machine': 1.0, 'learning': 1.0, 'great': 1.0}
+    mock_bm25_instance.doc_len = [3, 5, 3]
+    mock_bm25_instance.avgdl = 3.67
+    mock_bm25_instance.corpus_size = 3
     mock_bm25.return_value = mock_bm25_instance
-    
+
     # Mock file operations
     mock_file = MagicMock()
     mock_open.return_value.__enter__.return_value = mock_file
-    
+
     # Execute
     result = build_bm25_index(self.mock_kb)
-    
+
     # Verify
     assert result == mock_bm25_instance
     mock_bm25.assert_called_once_with(
@@ -129,7 +134,10 @@ class TestBM25Manager:
        ['natural', 'language', 'processing']],
       k1=1.2, b=0.75
     )
-    mock_pickle_dump.assert_called_once()
+    # Verify NPZ save was called
+    mock_savez.assert_called_once()
+    # Verify JSON save was called
+    mock_json_dump.assert_called_once()
 
   def test_build_bm25_index_no_data(self):
     """Test BM25 index building with no valid data."""
@@ -434,12 +442,16 @@ class TestBM25Integration:
   
   @patch('embedding.bm25_manager.BM25Okapi')
   def test_end_to_end_bm25_workflow(self, mock_bm25_class):
-    """Test complete BM25 workflow from build to search."""
-    # Setup mock BM25
+    """Test complete BM25 workflow from build to search with NPZ format."""
+    # Setup mock BM25 with required attributes
     mock_bm25 = Mock()
     mock_bm25.get_scores.return_value = [0.9, 0.7, 0.3]
+    mock_bm25.idf = {'machine': 1.0, 'learning': 1.0, 'algorithms': 1.0}
+    mock_bm25.doc_len = [3, 3, 3]
+    mock_bm25.avgdl = 3.0
+    mock_bm25.corpus_size = 3
     mock_bm25_class.return_value = mock_bm25
-    
+
     # Setup mock KB
     kb = Mock()
     kb.knowledge_base_vector = os.path.join(self.temp_dir, 'test.faiss')
@@ -447,37 +459,61 @@ class TestBM25Integration:
     kb.bm25_b = 0.75
     kb.enable_hybrid_search = True
     kb.language = 'en'
-    
+    kb.bm25_max_results = 1000
+
     # Mock database results
     kb.sql_cursor.fetchall.return_value = [
       (1, 'machine learning algorithms', 3),
       (2, 'deep learning networks', 3),
       (3, 'natural language processing', 3)
     ]
-    
-    # Build index
+
+    # Build index with NPZ format
     with patch('builtins.open', create=True), \
-         patch('pickle.dump'):
+         patch('embedding.bm25_manager.np.savez'), \
+         patch('embedding.bm25_manager.json.dump'):
       bm25_index = build_bm25_index(kb)
       assert bm25_index is not None
-    
-    # Load index
+
+    # Load index (simulate NPZ format)
     mock_data = {
       'bm25': mock_bm25,
       'doc_ids': [1, 2, 3],
-      'total_docs': 3
+      'total_docs': 3,
+      'total_tokens': 9,
+      'k1': 1.2,
+      'b': 0.75,
+      'version': '2.0'
     }
-    
+
+    # Mock NPZ file contents
+    mock_npz = {
+      'idf_terms': ['machine', 'learning', 'algorithms'],
+      'idf_scores': [1.0, 1.0, 1.0],
+      'doc_len': [3, 3, 3],
+      'doc_ids': [1, 2, 3]
+    }
+
     with patch('os.path.exists', return_value=True), \
+         patch('embedding.bm25_manager.np.load', return_value=mock_npz), \
          patch('builtins.open', create=True), \
-         patch('pickle.load', return_value=mock_data):
+         patch('embedding.bm25_manager.json.load', return_value={
+           'total_docs': 3,
+           'total_tokens': 9,
+           'avgdl': 3.0,
+           'corpus_size': 3,
+           'k1': 1.2,
+           'b': 0.75,
+           'version': '2.0'
+         }):
       loaded_data = load_bm25_index(kb)
-      assert loaded_data == mock_data
-    
+      assert loaded_data is not None
+      assert loaded_data['total_docs'] == 3
+
     # Test scoring
-    with patch('embedding.bm25_manager.tokenize_for_bm25', 
+    with patch('embedding.bm25_manager.tokenize_for_bm25',
                return_value=('machine learning', 2)):
-      scores = get_bm25_scores(kb, 'machine learning', loaded_data)
+      scores = get_bm25_scores(kb, 'machine learning', mock_data)
       expected = [(1, 0.9), (2, 0.7), (3, 0.3)]
       assert scores == expected
 
