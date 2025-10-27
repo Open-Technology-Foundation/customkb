@@ -1,43 +1,37 @@
 #!/bin/bash
-#shellcheck disable=SC2155,SC1091,SC2034
-#
+#shellcheck disable=SC2155,SC1091,SC2034,SC2015
 # customkb bootstrap
-#
+
 set -euo pipefail
 
-readonly -- PRG0="$(readlink -en -- "$0")"
-readonly -- PRGDIR="${PRG0%/*}" PRG="${PRG0##*/}"
-readonly -- VERSION=$(python3 -c "import sys; sys.path.insert(0, '$PRGDIR'); from version import VERSION; print(VERSION)")
-readonly -- VERSION_FULL=$(python3 -c "import sys; sys.path.insert(0, '$PRGDIR'); from version import VERSION_FULL; print(VERSION_FULL)")
+readonly -- SCRIPT_PATH="$(realpath -e -- "$0")"
+readonly -- SCRIPT_DIR="${SCRIPT_PATH%/*}" SCRIPT_NAME="${SCRIPT_PATH##*/}"
+readonly -- VERSION=$(python3 -c "import sys; sys.path.insert(0, '$SCRIPT_DIR'); from version import VERSION; print(VERSION)")
+readonly -- VERSION_FULL=$(python3 -c "import sys; sys.path.insert(0, '$SCRIPT_DIR'); from version import VERSION_FULL; print(VERSION_FULL)")
 
-#if [[ $HOSTNAME == okusi3 ]]; then
-  # GPU Environment Configuration for CustomKB
-  # Source this file before running CustomKB for optimal GPU performance
-  # Force GPU 0 (L4)
-  export CUDA_VISIBLE_DEVICES=0
-  # L4 compute capability
-  export TORCH_CUDA_ARCH_LIST="8.9"
-  # Optimize CUDA memory allocation
-  export PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:512
-  # Enable TF32 for better performance on newer GPUs
-  export TORCH_ALLOW_TF32_ON_CUDA=1
-  export TORCH_ALLOW_TF32_ON_CUDNN=1
-  # FAISS GPU memory settings
-  export FAISS_GPU_USE_FLOAT16=1
-#  >&2 echo "GPU environment configured for CustomKB"
-#  >&2 echo "CUDA Device: $CUDA_VISIBLE_DEVICES"
-#  >&2 echo "Compute capability: $TORCH_CUDA_ARCH_LIST"
-#fi
+# GPU Environment Configuration for CustomKB
+# Source this file before running CustomKB for optimal GPU performance
+# Force GPU 0 (L4)
+export CUDA_VISIBLE_DEVICES=0
+# L4 compute capability
+export TORCH_CUDA_ARCH_LIST="8.9"
+# Optimize CUDA memory allocation
+export PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:512
+# Enable TF32 for better performance on newer GPUs
+export TORCH_ALLOW_TF32_ON_CUDA=1
+export TORCH_ALLOW_TF32_ON_CUDNN=1
+# FAISS GPU memory settings
+export FAISS_GPU_USE_FLOAT16=1
 
-if [[ ! -d "$PRGDIR/.venv" ]]; then
-  >&2 echo "Error: Virtual environment not found at $PRGDIR/.venv"
+if [[ ! -d "$SCRIPT_DIR"/.venv ]]; then
+  >&2 echo "$SCRIPT_NAME: error: Virtual environment not found at $SCRIPT_DIR/.venv"
   exit 1
 fi
 # Activate .venv
-source "$PRGDIR/.venv/bin/activate"
+source "$SCRIPT_DIR"/.venv/bin/activate
 
 # Add cuDNN library path for reranking model
-export LD_LIBRARY_PATH="$PRGDIR/.venv/lib/python3.12/site-packages/nvidia/cudnn/lib:${LD_LIBRARY_PATH:-}"
+export LD_LIBRARY_PATH="$SCRIPT_DIR"/.venv/lib/python3.12/site-packages/nvidia/cudnn/lib:"${LD_LIBRARY_PATH:-}"
 
 export  ANTHROPIC_API_KEY \
         EDITOR \
@@ -49,14 +43,14 @@ export  ANTHROPIC_API_KEY \
         OPENAI_ORGANIZATION_ID \
         VECTORDBS
 
-[[ -f /etc/environment ]] && source /etc/environment
+[[ -f /etc/environment ]] && source /etc/environment || :
 
 # Source envvars from .env if exists
-[[ -f "$PRGDIR/.env" ]] && source "$PRGDIR/.env"
+[[ -f "$SCRIPT_DIR"/.env ]] && source "$SCRIPT_DIR"/.env || :
 
 # CUDA check removed - now handled in Python with proper initialization
 
 # Execute Python script with all passed arguments
-"$PRGDIR/.venv/bin/python3" "$PRGDIR/$PRG.py" "$@"
+"$SCRIPT_DIR"/.venv/bin/python3 "$SCRIPT_DIR"/"$SCRIPT_NAME".py "$@"
 
 #fin
