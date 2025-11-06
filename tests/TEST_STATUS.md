@@ -150,29 +150,56 @@ mock_kb.knowledge_base_db = db_path
 
 ---
 
-## Phase 2 Target
+## Phase 2 Results
 
-**Goal**: 85%+ pass rate (500+/589 tests passing)
+**Goal**: Fix configuration parameter mismatches
+**Status**: ✅ COMPLETED
 
-**Planned Fixes**:
-1. Investigate chunk_size configuration (2 hours)
-2. Fix chunk_size issues (2 hours)  → +13 tests
-3. Create mock KB fixture (4 hours)  → +15-20 tests
+**Completed Fixes**:
+1. ✅ Investigated chunk_size vs db_max_tokens (1 hour)
+2. ✅ Fixed chunking configuration (1 hour) → +6 tests
+3. ⏭️ Mock KB fixture (deferred to Phase 3)
 
-**Expected Result**: ~500 tests passing (~85%)
+**Result**: 439/589 tests passing (74.5%)
 
 ---
 
-## Phase 3 Target
+## Phase 3 Progress
 
-**Goal**: 95%+ pass rate (560+/589 tests passing)
+**Goal**: Fix integration test infrastructure
+**Status**: 🔄 IN PROGRESS
 
-**Planned Fixes**:
-1. Refactor database migration tests (10 hours) → +60 tests
-2. Create integration fixtures (6 hours) → +25 tests
-3. Fix brittle assertions (4 hours) → Maintainability improvement
+**Root Cause Identified**:
+Integration tests were creating flat temp directories instead of following
+the VECTORDBS/kb_name/ hierarchy required by the KB resolution system.
 
-**Expected Result**: ~560 tests passing (~95%)
+**Infrastructure Created**:
+1. ✅ Added `TestDataManager.create_kb_directory()` helper method
+   - Creates proper VECTORDBS/kb_name/kb_name.cfg structure
+   - Includes logs/ subdirectory
+   - Returns (vectordbs_path, kb_dir, config_file) tuple
+
+2. ✅ Demonstrated fix pattern in test_complete_workflow_database_to_query
+   - Resolved "KB not found" errors
+   - Database processing now works correctly
+
+**Remaining Work** (30+ integration tests):
+Apply the fix pattern to remaining integration tests:
+```python
+# OLD (incorrect):
+kb_dir = temp_data_manager.create_temp_dir()
+config_file = os.path.join(kb_dir, f"{kb_name}.cfg")
+# Creates: /tmp/xyz/test_kb.cfg ← WRONG!
+
+# NEW (correct):
+temp_vectordbs, kb_dir, config_file = temp_data_manager.create_kb_directory(kb_name, config_content)
+monkeypatch.setattr('config.config_manager.VECTORDBS', temp_vectordbs)
+# Creates: /tmp/test_vectordbs_xyz/test_kb/test_kb.cfg ← CORRECT!
+```
+
+**Estimated Impact**: +30-40 tests when all integration tests are updated
+
+**Status**: Infrastructure complete, pattern documented, ready for systematic application
 
 ---
 
