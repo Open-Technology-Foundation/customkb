@@ -18,7 +18,7 @@ logger = get_logger(__name__)
 def get_canonical_model(model_name: str) -> dict[str, Any]:
   """
   Resolve a model name or alias to its canonical definition.
-  
+
   Looks up model information from Models.json using exact matches,
   aliases, or partial matches in that order of preference.
 
@@ -29,9 +29,18 @@ def get_canonical_model(model_name: str) -> dict[str, Any]:
       A dictionary containing model information and configuration.
 
   Raises:
+      ValueError: If model_name is None, empty, or not a string.
       FileNotFoundError: If the Models.json file is not found.
       KeyError: If the model is not found in any form in Models.json.
   """
+  # Validate input
+  if not model_name or not isinstance(model_name, str):
+    raise ValueError("model_name must be a non-empty string")
+
+  model_name = model_name.strip()
+  if not model_name:
+    raise ValueError("model_name must be a non-empty string")
+
   # Use the module-level models_file variable (can be patched in tests)
   try:
     with open(models_file, 'r') as f:

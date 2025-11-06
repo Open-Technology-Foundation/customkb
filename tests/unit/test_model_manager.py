@@ -405,18 +405,18 @@ class TestErrorHandling:
     """Test handling of None model name."""
     models_data = {"gpt-4": {"model": "gpt-4"}}
     models_file = self._create_models_file(temp_data_manager, models_data)
-    
+
     with patch('models.model_manager.models_file', models_file):
-      with pytest.raises((KeyError, TypeError)):
+      with pytest.raises(ValueError, match="non-empty string"):
         get_canonical_model(None)
   
   def test_empty_model_name(self, temp_data_manager):
     """Test handling of empty model name."""
     models_data = {"gpt-4": {"model": "gpt-4"}}
     models_file = self._create_models_file(temp_data_manager, models_data)
-    
+
     with patch('models.model_manager.models_file', models_file):
-      with pytest.raises(KeyError, match="not found"):
+      with pytest.raises(ValueError, match="non-empty string"):
         get_canonical_model("")
   
   def _create_models_file(self, temp_data_manager, models_data):
