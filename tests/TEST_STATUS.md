@@ -1,9 +1,9 @@
 # CustomKB Test Suite Status
 
-**Last Updated**: 2025-11-06
+**Last Updated**: 2025-11-07
 **Branch**: main
 **Total Tests**: 589
-**Pass Rate**: 73.5% (433/589)
+**Pass Rate**: 74.5% (439/589)
 
 ---
 
@@ -11,19 +11,19 @@
 
 | Metric | Count | Percentage |
 |--------|-------|------------|
-| **Passing** | 433 | 73.5% |
-| **Failing** | 154 | 26.1% |
+| **Passing** | 439 | 74.5% |
+| **Failing** | 148 | 25.1% |
 | **Skipped** | 2 | 0.3% |
 | **Warnings** | 224 | - |
 
 ---
 
-## Recent Improvements (Phase 1)
+## Recent Improvements (Phases 1-2)
 
 ### Completed Fixes
 
 **Phase 1.1: Cache Manager Parameters** (Commit: `291435d`)
-- Fixed `memory_limit_mb` → `max_memory_mb` parameter mismatch
+- Fixed `memory_limit_mb` → `max_memory_mb` parameter mismatch in embedding cache
 - **Impact**: 9 additional tests passing in TestCacheThreadManager
 
 **Phase 1.2: Model Manager Validation** (Commit: `39fb348`)
@@ -32,11 +32,19 @@
 
 **Phase 1 Net Improvement**: +11 tests passing (430 → 433)
 
+**Phase 2.2: Chunk Size Configuration** (Commit: `b1774a5`)
+- Standardized chunk_size → db_max_tokens parameter across all text splitters
+- Fixed chunk_overlap calculation using max_chunk_overlap and db_min_tokens
+- Updated init_text_splitter() and get_language_specific_splitter()
+- **Impact**: +6 additional tests passing, all TestInitTextSplitter tests now pass (5/5)
+
+**Phase 2 Net Improvement**: +6 tests passing (433 → 439)
+
 ---
 
 ## Failure Categories
 
-### Category 1: Integration Tests (83 failures, 53.9%)
+### Category 1: Integration Tests (80 failures, 54.1%)
 
 **Root Cause**: Mock objects missing required attributes
 
@@ -58,12 +66,12 @@ mock_kb.knowledge_base_db = db_path
 
 ---
 
-### Category 2: Unit Test Issues (47 failures, 30.5%)
+### Category 2: Unit Test Issues (44 failures, 29.7%)
 
-**Subcategory A: Configuration Mismatches** (13 failures)
-- Text splitter tests expect `db_max_tokens` but code uses `chunk_size`
+**Subcategory A: Configuration Mismatches** (0 failures - FIXED!)
+- ✅ Fixed in Phase 2.2 - standardized chunk_size → db_max_tokens
 - Files: `tests/unit/test_db_manager.py::TestInitTextSplitter`
-- **Solution**: Phase 2.2 - standardize configuration
+- All 5 tests now passing
 
 **Subcategory B: Cache Test Remaining Issues** (4 failures)
 - Some cache threading tests still failing
@@ -201,8 +209,14 @@ pytest tests/unit/test_embed_manager.py::TestCacheThreadManager::test_configure_
 ### After Modernization + Phase 1 Fixes
 - **Pass Rate**: 73.5% (433/589)
 - **Failures**: 154
-- **Date**: 2025-11-06 (current)
+- **Date**: 2025-11-06
 - **Improvement**: +3 tests passing, -3 failures
+
+### After Phase 2 Fixes
+- **Pass Rate**: 74.5% (439/589)
+- **Failures**: 148
+- **Date**: 2025-11-07 (current)
+- **Improvement**: +9 tests passing from baseline, -9 failures
 
 ---
 
