@@ -418,7 +418,7 @@ def show_optimization_tiers() -> str:
   return '\n'.join(output)
 
 
-def format_changes(config_path: str, changes: Dict) -> str:
+def format_changes(config_path: str, changes: dict) -> str:
   """Format configuration changes for display."""
   if not changes:
     return f"{config_path}: No changes needed (already optimized)"

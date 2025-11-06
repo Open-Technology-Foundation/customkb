@@ -118,7 +118,7 @@ class MemoryMonitor:
             f"{current['percent']:.1f}% of system)")
 
 
-def run_test_batch(batch_name: str, batch_config: Dict, 
+def run_test_batch(batch_name: str, batch_config: dict,
                    verbose: bool = False, coverage: bool = False) -> dict[str, any]:
   """Run a batch of tests with memory monitoring."""
   print(f"\n{'='*60}")
