@@ -279,7 +279,7 @@ class AdaptiveCategorizer:
     else:
       return 3
   
-  def _sample_chunks(self, chunks: list[Tuple], top: int, middle: int, bottom: int) -> str:
+  def _sample_chunks(self, chunks: list[tuple], top: int, middle: int, bottom: int) -> str:
     """Sample chunks from article"""
     total = len(chunks)
     sampled = []
@@ -301,7 +301,7 @@ class AdaptiveCategorizer:
     text = '\n'.join([chunk[1] for chunk in sampled if chunk[1]])
     return text
   
-  async def categorize_article(self, article_path: str, chunks: list[Tuple]) -> ArticleCategories:
+  async def categorize_article(self, article_path: str, chunks: list[tuple]) -> ArticleCategories:
     """Categorize a single article"""
     start_time = time.time()
     

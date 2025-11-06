@@ -386,7 +386,7 @@ def get_formatter(format_type: str | ReferenceFormat) -> ReferenceFormatter:
   return formatters[format_enum]()
 
 
-def format_references(references: list[Tuple], format_type: str | ReferenceFormat = 'xml',
+def format_references(references: list[tuple], format_type: str | ReferenceFormat = 'xml',
                      context_files: list[str] | None = None,
                      debug: bool = False) -> str:
   """

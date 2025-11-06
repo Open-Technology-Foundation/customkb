@@ -229,7 +229,7 @@ def split_text(text: str, splitter: Any, metadata: dict | None = None) -> list[d
     raise ChunkingError(f"Failed to split text: {e}") from e
 
 
-def calculate_chunk_statistics(chunks: list[Dict]) -> dict[str, Any]:
+def calculate_chunk_statistics(chunks: list[dict]) -> dict[str, Any]:
   """
   Calculate statistics about chunks.
   
@@ -288,7 +288,7 @@ def optimize_chunk_size(text_length: int, target_chunks: int = 10) -> int:
   return chunk_size
 
 
-def merge_small_chunks(chunks: list[Dict], min_size: int = 100) -> list[Dict]:
+def merge_small_chunks(chunks: list[dict], min_size: int = 100) -> list[dict]:
   """
   Merge chunks that are too small.
   
@@ -336,7 +336,7 @@ def merge_small_chunks(chunks: list[Dict], min_size: int = 100) -> list[Dict]:
   return merged
 
 
-def validate_chunks(chunks: list[Dict], kb: Any) -> bool:
+def validate_chunks(chunks: list[dict], kb: Any) -> bool:
   """
   Validate that chunks meet requirements.
   
