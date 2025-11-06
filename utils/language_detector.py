@@ -7,7 +7,7 @@ and fallback mechanisms.
 """
 
 import os
-from typing import Optional, Dict, Tuple
+
 from pathlib import Path
 import logging
 
@@ -17,12 +17,12 @@ try:
 except ImportError:
   HAS_LANGDETECT = False
   
-from database.db_manager import language_codes, get_iso_code
+from database.db_manager import get_iso_code
 
 logger = logging.getLogger(__name__)
 
 # Language detection cache to avoid re-detection
-_detection_cache: Dict[str, str] = {}
+_detection_cache: dict[str, str] = {}
 
 # Map langdetect language codes to our ISO codes
 # langdetect uses some different codes than ISO 639-1
@@ -37,7 +37,7 @@ def detect_file_language(
     sample_size: int = 3072,
     min_confidence: float = 0.95,
     fallback_language: str = 'en'
-) -> Tuple[str, float]:
+) -> tuple[str, float]:
   """
   Detect the language of a file by sampling its content.
   
@@ -109,7 +109,7 @@ def detect_file_language(
     logger.warning(f"Error detecting language for {file_path}: {e}")
     return fallback_language, 0.0
 
-def should_skip_detection(file_path: str) -> Optional[str]:
+def should_skip_detection(file_path: str) -> str | None:
   """
   Check if language detection should be skipped based on file type.
   
@@ -157,7 +157,7 @@ def clear_detection_cache():
   _detection_cache.clear()
   logger.debug("Language detection cache cleared")
 
-def get_cache_stats() -> Dict[str, int]:
+def get_cache_stats() -> dict[str, int]:
   """Get statistics about the detection cache."""
   return {
     'cache_size': len(_detection_cache),

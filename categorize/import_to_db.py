@@ -3,17 +3,15 @@ Import categorization results into the knowledgebase database.
 """
 
 import sqlite3
-import json
 from pathlib import Path
-from typing import List, Dict, Any
-from dataclasses import dataclass
+from typing import Any
 
 from config.config_manager import KnowledgeBase
 from utils.logging_config import get_logger
 
 logger = get_logger(__name__)
 
-def import_categories(kb: KnowledgeBase, results: List[Any]) -> str:
+def import_categories(kb: KnowledgeBase, results: list[Any]) -> str:
   """
   Import categorization results into the knowledgebase database.
   

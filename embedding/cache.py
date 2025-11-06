@@ -11,12 +11,10 @@ import json
 import hashlib
 import threading
 import atexit
-from typing import List, Optional, Dict, Any
+from typing import Any
 from concurrent.futures import ThreadPoolExecutor
-from pathlib import Path
 
 from utils.logging_config import get_logger
-from utils.exceptions import CacheError
 
 logger = get_logger(__name__)
 
@@ -32,7 +30,7 @@ MODEL_DIMENSIONS = {
   'gemini-embedding-001': None,  # Variable dimensions
 }
 
-def get_expected_dimensions(model: str) -> Optional[int]:
+def get_expected_dimensions(model: str) -> int | None:
   """Get expected dimensions for a model.
   
   Args:
@@ -86,7 +84,7 @@ class CacheThreadManager:
       self._metrics['thread_pool_tasks'] += 1
       return self._executor.submit(func, *args, **kwargs)
   
-  def get_from_memory_cache(self, cache_key: str) -> Optional[List[float]]:
+  def get_from_memory_cache(self, cache_key: str) -> list[float] | None:
     """Thread-safe retrieval from memory cache."""
     with self._lock:
       if cache_key in self._memory_cache:
@@ -99,7 +97,7 @@ class CacheThreadManager:
         self._metrics['cache_misses'] += 1
     return None
   
-  def add_to_memory_cache(self, cache_key: str, embedding: List[float], kb=None):
+  def add_to_memory_cache(self, cache_key: str, embedding: list[float], kb=None):
     """Thread-safe addition to memory cache with LRU eviction based on memory usage."""
     with self._lock:
       # Configure cache size from KB config if available
@@ -144,7 +142,7 @@ class CacheThreadManager:
       if max_memory_mb is not None:
         self._max_memory_mb = max_memory_mb
   
-  def get_metrics(self) -> Dict[str, Any]:
+  def get_metrics(self) -> dict[str, Any]:
     """Get cache performance metrics."""
     with self._lock:
       total_requests = self._metrics['cache_hits'] + self._metrics['cache_misses']
@@ -215,7 +213,7 @@ def get_cache_file_path(cache_key: str) -> str:
   return os.path.join(subdir, f"{cache_key}.json")
 
 
-def get_cached_embedding(text: str, model: str) -> Optional[List[float]]:
+def get_cached_embedding(text: str, model: str) -> list[float] | None:
   """
   Check if embedding exists in cache (memory first, then disk).
   
@@ -268,7 +266,7 @@ def get_cached_embedding(text: str, model: str) -> Optional[List[float]]:
   return None
 
 
-def add_to_memory_cache(cache_key: str, embedding: List[float], kb=None) -> None:
+def add_to_memory_cache(cache_key: str, embedding: list[float], kb=None) -> None:
   """
   Add embedding to memory cache.
   
@@ -280,7 +278,7 @@ def add_to_memory_cache(cache_key: str, embedding: List[float], kb=None) -> None
   cache_manager.add_to_memory_cache(cache_key, embedding, kb)
 
 
-def save_embedding_to_cache(text: str, model: str, embedding: List[float], kb=None) -> None:
+def save_embedding_to_cache(text: str, model: str, embedding: list[float], kb=None) -> None:
   """
   Save embedding to both memory and disk cache.
   
@@ -315,7 +313,7 @@ def save_embedding_to_cache(text: str, model: str, embedding: List[float], kb=No
   cache_manager.submit_cache_task(_save_to_disk)
 
 
-def clear_cache(memory_only: bool = False) -> Dict[str, int]:
+def clear_cache(memory_only: bool = False) -> dict[str, int]:
   """
   Clear the embedding cache.
   
@@ -355,7 +353,7 @@ def clear_cache(memory_only: bool = False) -> Dict[str, int]:
   return stats
 
 
-def get_cache_stats() -> Dict[str, Any]:
+def get_cache_stats() -> dict[str, Any]:
   """
   Get cache statistics.
   

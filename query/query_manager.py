@@ -15,12 +15,11 @@ All imports below will trigger deprecation warnings after 2025-08-30.
 
 import warnings
 import argparse
-import asyncio
 import numpy as np
-from typing import List, Tuple, Dict, Any, Optional, Set
+from typing import Any
 
-from utils.logging_config import setup_logging, get_logger, elapsed_time
-from config.config_manager import KnowledgeBase, get_fq_cfg_filename
+from utils.logging_config import get_logger
+from config.config_manager import KnowledgeBase
 
 # Import from new refactored modules
 from .search import (
@@ -101,18 +100,18 @@ def _deprecation_warning(func_name: str, new_module: str):
     )
 
 # Backward compatibility wrapper functions - Search module
-def get_context_range(index_start: int, context_n: int) -> List[int]:
+def get_context_range(index_start: int, context_n: int) -> list[int]:
     """Calculate the start and end indices for context retrieval."""
     _deprecation_warning('get_context_range', 'search')
     return _get_context_range(index_start, context_n)
 
-def fetch_document_by_id(kb: KnowledgeBase, doc_id: int) -> Optional[Tuple[int, int, str]]:
+def fetch_document_by_id(kb: KnowledgeBase, doc_id: int) -> tuple[int, int, str] | None:
     """Fetch a document by its ID from the database."""
     _deprecation_warning('fetch_document_by_id', 'search')
     return _fetch_document_by_id(kb, doc_id)
 
-async def filter_results_by_category(kb: KnowledgeBase, results: List[Tuple[int, float]], 
-                                    categories: List[str]) -> List[Tuple[int, float]]:
+async def filter_results_by_category(kb: KnowledgeBase, results: list[tuple[int, float]], 
+                                    categories: list[str]) -> list[tuple[int, float]]:
     """Filter search results by category if categorization is enabled."""
     _deprecation_warning('filter_results_by_category', 'search')
     return await _filter_results_by_category(kb, results, categories)
@@ -120,13 +119,13 @@ async def filter_results_by_category(kb: KnowledgeBase, results: List[Tuple[int,
 async def perform_hybrid_search(kb: KnowledgeBase, query_text: str, 
                                query_embedding: np.ndarray,
                                top_k: int = 10,
-                               categories: List[str] = None,
-                               rerank: bool = False) -> List[Tuple[int, float]]:
+                               categories: list[str] = None,
+                               rerank: bool = False) -> list[tuple[int, float]]:
     """Perform hybrid search combining vector similarity and BM25 keyword search."""
     _deprecation_warning('perform_hybrid_search', 'search')
     return await _perform_hybrid_search(kb, query_text, query_embedding, top_k, categories, rerank)
 
-async def process_reference_batch(kb: KnowledgeBase, batch: List[Tuple[int, float]]) -> List[List[Any]]:
+async def process_reference_batch(kb: KnowledgeBase, batch: list[tuple[int, float]]) -> list[list[Any]]:
     """Process a batch of search results to retrieve document content."""
     _deprecation_warning('process_reference_batch', 'search')
     return await _process_reference_batch(kb, batch)
@@ -138,27 +137,27 @@ def normalize_query(query: str) -> str:
     return _normalize_query(query)
 
 def get_synonyms_for_word(word: str, max_synonyms: int = 2, 
-                         relevance_threshold: float = 0.6) -> List[str]:
+                         relevance_threshold: float = 0.6) -> list[str]:
     """Get synonyms for a word using various methods."""
     _deprecation_warning('get_synonyms_for_word', 'enhancement')
     return _get_synonyms_for_word(word, max_synonyms, relevance_threshold)
 
-def correct_spelling(word: str, vocabulary: Optional[Set[str]] = None) -> str:
+def correct_spelling(word: str, vocabulary: set[str] | None = None) -> str:
     """Attempt to correct spelling of a word."""
     _deprecation_warning('correct_spelling', 'enhancement')
     return _correct_spelling(word, vocabulary)
 
-def expand_synonyms(query: str, kb: Optional[KnowledgeBase] = None) -> str:
+def expand_synonyms(query: str, kb: KnowledgeBase | None = None) -> str:
     """Expand query with synonyms for better matching."""
     _deprecation_warning('expand_synonyms', 'enhancement')
     return _expand_synonyms(query, kb)
 
-def apply_spelling_correction(query: str, kb: Optional[KnowledgeBase] = None) -> str:
+def apply_spelling_correction(query: str, kb: KnowledgeBase | None = None) -> str:
     """Apply spelling correction to query terms."""
     _deprecation_warning('apply_spelling_correction', 'enhancement')
     return _apply_spelling_correction(query, kb)
 
-def enhance_query(query: str, kb: Optional[KnowledgeBase] = None) -> str:
+def enhance_query(query: str, kb: KnowledgeBase | None = None) -> str:
     """Apply all query enhancements."""
     _deprecation_warning('enhance_query', 'enhancement')
     return _enhance_query(query, kb)
@@ -168,7 +167,7 @@ def get_enhancement_cache_key(query_text: str) -> str:
     _deprecation_warning('get_enhancement_cache_key', 'enhancement')
     return _get_enhancement_cache_key(query_text)
 
-def get_cached_enhanced_query(query_text: str, kb=None) -> Optional[str]:
+def get_cached_enhanced_query(query_text: str, kb=None) -> str | None:
     """Retrieve enhanced query from cache."""
     _deprecation_warning('get_cached_enhanced_query', 'enhancement')
     return _get_cached_enhanced_query(query_text, kb)
@@ -184,17 +183,17 @@ def get_cache_key(query_text: str, model: str) -> str:
     _deprecation_warning('get_cache_key', 'embedding')
     return _get_cache_key(query_text, model)
 
-def get_cached_query_embedding(query_text: str, model: str, kb=None) -> Optional[List[float]]:
+def get_cached_query_embedding(query_text: str, model: str, kb=None) -> list[float] | None:
     """Retrieve cached query embedding."""
     _deprecation_warning('get_cached_query_embedding', 'embedding')
     return _get_cached_query_embedding(query_text, model, kb)
 
-def save_query_embedding_to_cache(query_text: str, model: str, embedding: List[float]) -> None:
+def save_query_embedding_to_cache(query_text: str, model: str, embedding: list[float]) -> None:
     """Save query embedding to cache."""
     _deprecation_warning('save_query_embedding_to_cache', 'embedding')
     return _save_query_embedding_to_cache(query_text, model, embedding)
 
-async def get_query_embedding(query_text: str, model: str, kb: Optional[KnowledgeBase] = None) -> np.ndarray:
+async def get_query_embedding(query_text: str, model: str, kb: KnowledgeBase | None = None) -> np.ndarray:
     """Get embedding for a query, using cache if available."""
     _deprecation_warning('get_query_embedding', 'embedding')
     return await _get_query_embedding(query_text, model, kb)
@@ -205,7 +204,7 @@ def load_and_validate_api_keys():
     _deprecation_warning('load_and_validate_api_keys', 'response')
     return _load_and_validate_api_keys()
 
-def format_messages_for_responses_api(messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+def format_messages_for_responses_api(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Format messages for OpenAI Responses API."""
     _deprecation_warning('format_messages_for_responses_api', 'response')
     return _format_messages_for_responses_api(messages)
@@ -217,13 +216,13 @@ async def generate_ai_response(kb: KnowledgeBase, reference_string: str, query_t
     return await _generate_ai_response(kb, reference_string, query_text, prompt_template)
 
 # Backward compatibility wrapper functions - Processing module
-def read_context_file(file_path: str) -> Tuple[str, str]:
+def read_context_file(file_path: str) -> tuple[str, str]:
     """Read additional context from a file."""
     _deprecation_warning('read_context_file', 'processing')
     return _read_context_file(file_path)
 
-def build_reference_string(kb: KnowledgeBase, reference: List[List[Any]], 
-                          context_files_content: List[Tuple[str, str]] = None,
+def build_reference_string(kb: KnowledgeBase, reference: list[list[Any]], 
+                          context_files_content: list[tuple[str, str]] = None,
                           debug: bool = False, format_type: str = None) -> str:
     """Build a reference string from the retrieved documents."""
     _deprecation_warning('build_reference_string', 'processing')

@@ -3,18 +3,14 @@ Unit tests for config_manager.py
 Tests configuration loading, parsing, validation, and KnowledgeBase class functionality.
 """
 
-import pytest
 import os
 import tempfile
-import configparser
-from unittest.mock import patch, Mock
-from pathlib import Path
+from unittest.mock import patch
 
 from config.config_manager import (
   get_fq_cfg_filename,
   get_kb_name,
-  KnowledgeBase,
-  VECTORDBS
+  KnowledgeBase
 )
 from tests.fixtures.mock_data import MockDataGenerator
 

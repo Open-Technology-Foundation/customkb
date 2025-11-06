@@ -8,11 +8,9 @@ import os
 import tempfile
 import sqlite3
 import numpy as np
-import asyncio
 import json
 import time
-from unittest.mock import patch, Mock, AsyncMock, MagicMock
-from pathlib import Path
+from unittest.mock import patch, Mock, AsyncMock
 
 from query.query_manager import (
   get_cache_key,
@@ -943,7 +941,6 @@ class TestQueryEnhancement:
   def test_apply_spelling_correction(self):
     """Test spelling correction functionality."""
     from query.query_manager import apply_spelling_correction
-    from config.config_manager import KnowledgeBase
     
     # Create mock KB with spelling correction enabled
     kb = Mock()

@@ -11,7 +11,7 @@ import json
 import hashlib
 import time
 import numpy as np
-from typing import Optional, List, Any
+from typing import Any
 from pathlib import Path
 
 from utils.logging_config import get_logger
@@ -58,7 +58,7 @@ def get_cache_file_path(cache_key: str) -> str:
   return os.path.join(subdir, f"{cache_key}.json")
 
 
-def get_cached_query_embedding(query_text: str, model: str, kb=None) -> Optional[List[float]]:
+def get_cached_query_embedding(query_text: str, model: str, kb=None) -> list[float] | None:
   """
   Retrieve cached query embedding.
   
@@ -99,7 +99,7 @@ def get_cached_query_embedding(query_text: str, model: str, kb=None) -> Optional
   return None
 
 
-def save_query_embedding_to_cache(query_text: str, model: str, embedding: List[float]) -> None:
+def save_query_embedding_to_cache(query_text: str, model: str, embedding: list[float]) -> None:
   """
   Save query embedding to cache.
   
@@ -149,7 +149,7 @@ async def generate_query_embedding(query_text: str, model: str, kb=None) -> np.n
     embeddings = await get_embeddings_with_provider([query_text], model, kb)
     
     if not embeddings or not embeddings[0]:
-      raise EmbeddingError(f"Failed to generate embedding for query")
+      raise EmbeddingError("Failed to generate embedding for query")
     
     embedding = embeddings[0]
     
@@ -164,7 +164,7 @@ async def generate_query_embedding(query_text: str, model: str, kb=None) -> np.n
     raise EmbeddingError(f"Failed to generate query embedding: {e}") from e
 
 
-async def get_query_embedding(query_text: str, model: str, kb: Optional[Any] = None) -> np.ndarray:
+async def get_query_embedding(query_text: str, model: str, kb: Any | None = None) -> np.ndarray:
   """
   Get embedding for a query, using cache if available.
   

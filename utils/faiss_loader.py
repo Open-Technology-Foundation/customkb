@@ -7,7 +7,6 @@ It attempts to use GPU acceleration when available but falls back gracefully.
 """
 
 import os
-import sys
 import logging
 import warnings
 
@@ -121,7 +120,8 @@ def check_cuda_availability():
           name = name.decode()
         logger.info(f"GPU hardware detected: {name}")
       pynvml.nvmlShutdown()
-    except:
+    except (ImportError, OSError, RuntimeError) as e:
+      logger.debug(f"NVML not available or failed: {e}")
       pass  # NVML not available or failed
     
     # Try to check CUDA using ctypes

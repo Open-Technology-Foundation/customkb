@@ -9,7 +9,7 @@ levels, and handlers across all modules.
 import os
 import sys
 import logging
-from typing import Optional, Dict, Any
+from typing import Any
 from pathlib import Path
 
 # Standard log format for all modules
@@ -44,7 +44,7 @@ class ColoredFormatter(logging.Formatter):
 class ContextFilter(logging.Filter):
   """Add contextual information to log records."""
   
-  def __init__(self, context: Dict[str, Any] = None):
+  def __init__(self, context: dict[str, Any] = None):
     super().__init__()
     self.context = context or {}
   
@@ -149,7 +149,7 @@ def setup_console_handler(
 
 def configure_root_logger(
   level: int = None,
-  log_file: Optional[str] = None,
+  log_file: str | None = None,
   console: bool = True,
   colored: bool = True
 ) -> logging.Logger:
@@ -199,8 +199,8 @@ def configure_root_logger(
 
 def get_logger(
   name: str,
-  level: Optional[int] = None,
-  context: Optional[Dict[str, Any]] = None
+  level: int | None = None,
+  context: dict[str, Any] | None = None
 ) -> logging.Logger:
   """
   Get a configured logger for a module.
@@ -278,11 +278,11 @@ def configure_module_loggers():
 
 # Compatibility functions - delegate to logging_utils for now
 def setup_logging(verbose: bool, debug: bool = False, 
-                 log_file: Optional[str] = None,
+                 log_file: str | None = None,
                  log_to_file: bool = True,
-                 config_file: Optional[str] = None,
-                 kb_directory: Optional[str] = None,
-                 kb_name: Optional[str] = None) -> Optional[logging.Logger]:
+                 config_file: str | None = None,
+                 kb_directory: str | None = None,
+                 kb_name: str | None = None) -> logging.Logger | None:
   """Set up logging configuration - compatibility wrapper."""
   from utils.logging_utils import setup_logging as _setup_logging
   return _setup_logging(verbose, debug, log_file, log_to_file, config_file, kb_directory, kb_name)
@@ -292,7 +292,7 @@ def dashes(offset: int = 0, char: str = '-') -> str:
   from utils.logging_utils import dashes as _dashes
   return _dashes(offset, char)
 
-def elapsed_time(start_time: int, end_time: Optional[int] = None) -> str:
+def elapsed_time(start_time: int, end_time: int | None = None) -> str:
   """Calculate elapsed time."""
   from utils.logging_utils import elapsed_time as _elapsed_time
   return _elapsed_time(start_time, end_time)

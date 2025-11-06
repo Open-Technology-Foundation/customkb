@@ -6,7 +6,7 @@ Handles loading, validating, and resolving AI model configurations.
 
 import os
 import json
-from typing import Dict, Any, Optional
+from typing import Any
 
 from utils.logging_config import get_logger
 
@@ -15,7 +15,7 @@ models_file = os.path.join(os.path.dirname(__file__), "..", "Models.json")
 
 logger = get_logger(__name__)
 
-def get_canonical_model(model_name: str) -> Dict[str, Any]:
+def get_canonical_model(model_name: str) -> dict[str, Any]:
   """
   Resolve a model name or alias to its canonical definition.
   

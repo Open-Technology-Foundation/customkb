@@ -6,12 +6,10 @@ Tests embedding generation, caching, FAISS index operations, and async processin
 import pytest
 import os
 import tempfile
-import numpy as np
 import asyncio
 import json
 import threading
-from unittest.mock import patch, Mock, AsyncMock, MagicMock
-from pathlib import Path
+from unittest.mock import patch, Mock, AsyncMock
 
 from embedding.embed_manager import (
   get_cache_key,
@@ -71,7 +69,6 @@ class TestCacheThreadManager:
     """Test cache manager thread safety with concurrent operations."""
     manager = CacheThreadManager()
     import threading
-    import time
     
     # Test concurrent cache additions
     def add_embeddings(thread_id):
@@ -472,7 +469,6 @@ class TestCacheFunctionality:
     
     # Mock the global cache manager
     with patch('embedding.embed_manager.cache_manager', test_manager):
-      from config.config_manager import KnowledgeBase
       
       # Create a KB instance 
       kb = Mock()
@@ -771,7 +767,6 @@ class TestProcessEmbeddings:
   @patch('embedding.embed_manager.faiss.write_index')
   def test_process_embeddings_success(self, mock_write, mock_asyncio, temp_config_file, temp_database):
     """Test successful embedding processing."""
-    import sqlite3
     
     args = Mock()
     args.config_file = temp_config_file
@@ -877,7 +872,7 @@ class TestErrorHandling:
     with patch.dict(os.environ, {'OPENAI_API_KEY': 'invalid_key'}):
       with pytest.raises((EnvironmentError, ValueError)):
         # This should fail during module import validation
-        from embedding import embed_manager
+        pass
   
   def test_corrupted_cache_file_handling(self, temp_data_manager):
     """Test handling of corrupted cache files."""
@@ -899,7 +894,7 @@ class TestErrorHandling:
     with patch('os.makedirs', side_effect=OSError("Permission denied")):
       # Should not crash during module import
       try:
-        from embedding import embed_manager
+        pass
       except OSError:
         pytest.fail("Should handle cache directory creation failure gracefully")
   

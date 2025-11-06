@@ -5,10 +5,7 @@ Unit tests for the reranking manager module.
 import os
 import sys
 import pytest
-import asyncio
-from unittest.mock import Mock, patch, MagicMock
-import tempfile
-import shutil
+from unittest.mock import Mock, patch
 
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))

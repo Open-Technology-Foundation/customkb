@@ -5,10 +5,7 @@ Tests text processing, file handling, and utility functions.
 
 import pytest
 import os
-import tempfile
-import glob
 from unittest.mock import patch, Mock
-from pathlib import Path
 
 from utils.text_utils import (
   clean_text,

@@ -5,11 +5,8 @@ Tests complete workflows from database creation through querying.
 
 import pytest
 import os
-import tempfile
-import subprocess
 import json
 from unittest.mock import patch, Mock
-from pathlib import Path
 
 
 @pytest.mark.integration
@@ -23,7 +20,7 @@ class TestEndToEndWorkflow:
     kb_name = "test_kb"
     
     # Create configuration file
-    config_content = f"""[DEFAULT]
+    config_content = """[DEFAULT]
 vector_model = text-embedding-3-small
 vector_dimensions = 1536
 vector_chunks = 100
@@ -190,7 +187,6 @@ vector_dimensions = 1536
       f.write(sample_texts[0])
     
     from database.db_manager import process_database
-    from embedding.embed_manager import process_embeddings
     
     mock_logger = Mock()
     
@@ -251,7 +247,6 @@ vector_dimensions = 1536
     test_files.append(txt_file)
     
     from database.db_manager import process_database
-    from embedding.embed_manager import process_embeddings
     
     mock_logger = Mock()
     
@@ -300,7 +295,6 @@ vector_dimensions = 1536
     
     from database.db_manager import process_database
     from embedding.embed_manager import process_embeddings
-    from query.query_manager import process_query
     
     mock_logger = Mock()
     
@@ -662,7 +656,7 @@ query_model = gpt-4o
     # Check for truncated path display
     assert ".../widgets/forms/validation.js" in result or "validation.js" in result
     # Should not show the full absolute path in display
-    assert not kb_dir in result  # Full path should be truncated
+    assert kb_dir not in result  # Full path should be truncated
 
 
 @pytest.mark.integration

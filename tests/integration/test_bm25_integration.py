@@ -7,8 +7,7 @@ import pytest
 import os
 import tempfile
 import sqlite3
-import pickle
-from unittest.mock import patch, Mock, MagicMock
+from unittest.mock import patch, Mock
 import numpy as np
 
 from config.config_manager import KnowledgeBase

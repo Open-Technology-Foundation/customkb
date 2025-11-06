@@ -23,10 +23,10 @@ The configuration resolution hierarchy is:
 import os
 import configparser
 import time
-from typing import Optional
+
 
 from utils.logging_config import get_logger
-from utils.text_utils import split_filepath, find_file, get_env
+from utils.text_utils import split_filepath, get_env
 
 # Initialize vector database directory
 VECTORDBS = os.getenv('VECTORDBS', '/var/lib/vectordbs')
@@ -39,7 +39,7 @@ if not os.path.exists(VECTORDBS):
 logger = get_logger(__name__)
 
 
-def get_kb_name(kb_input: str) -> Optional[str]:
+def get_kb_name(kb_input: str) -> str | None:
   """
   Extract and validate knowledgebase name from user input.
   
@@ -88,7 +88,7 @@ def get_kb_name(kb_input: str) -> Optional[str]:
   return kb_name
 
 
-def get_fq_cfg_filename(cfgfile: str) -> Optional[str]:
+def get_fq_cfg_filename(cfgfile: str) -> str | None:
   """
   Resolve knowledgebase name to its configuration file path.
   
@@ -635,7 +635,7 @@ class KnowledgeBase:
       self.bm25_min_token_length = kwargs.get('bm25_min_token_length', self.DEF_BM25_MIN_TOKEN_LENGTH)
       self.bm25_rebuild_threshold = kwargs.get('bm25_rebuild_threshold', self.DEF_BM25_REBUILD_THRESHOLD)
 
-  def save_config(self, output_to: Optional[str] = None) -> None:
+  def save_config(self, output_to: str | None = None) -> None:
     """
     Save current configuration to a file or print to stderr.
 

@@ -94,11 +94,14 @@ packages = ["config", "database", "embedding", "query", "models", "utils", "cate
 line-length = 127
 target-version = ['py312']
 include = '\.pyi?$'
+# Use 2-space indentation (CustomKB standard, documented in CLAUDE.md)
+# Note: Black doesn't support custom indent-width, so we maintain 2-space manually
 extend-exclude = '''
 /(
     \.git
   | \.venv
   | \.mailer
+  | \.gudang
   | build
   | dist
   | __pycache__

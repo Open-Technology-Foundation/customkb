@@ -9,18 +9,14 @@ Handles the generation and storage of vector embeddings with:
 
 import os
 import sys
-import time
 import numpy as np
 import argparse
 import asyncio
 import hashlib
 import json
-import threading
-import atexit
-from typing import List, Tuple, Optional, Dict, Any, Set
-from concurrent.futures import ThreadPoolExecutor
 
-from utils.logging_utils import setup_logging, get_logger, time_to_finish
+
+from utils.logging_utils import get_logger, time_to_finish
 from config.config_manager import KnowledgeBase, get_fq_cfg_filename
 from database.db_manager import connect_to_database, close_database
 
@@ -37,7 +33,7 @@ try:
   GOOGLE_AI_AVAILABLE = True
 except ImportError:
   GOOGLE_AI_AVAILABLE = False
-from utils.security_utils import validate_api_key, safe_log_error
+from utils.security_utils import validate_api_key
 
 # Import cache manager from cache module
 from embedding.cache import CacheThreadManager, cache_manager
@@ -201,7 +197,7 @@ def get_cache_key(text: str, model: str) -> str:
   text_hash = hashlib.md5(text.encode('utf-8')).hexdigest()
   return f"{model}_{text_hash}"
 
-def get_cached_embedding(text: str, model: str) -> Optional[List[float]]:
+def get_cached_embedding(text: str, model: str) -> list[float] | None:
   """
   Retrieve a cached embedding if it exists, checking memory first then disk.
   
@@ -234,7 +230,7 @@ def get_cached_embedding(text: str, model: str) -> Optional[List[float]]:
   
   return None
 
-def add_to_memory_cache(cache_key: str, embedding: List[float], kb=None) -> None:
+def add_to_memory_cache(cache_key: str, embedding: list[float], kb=None) -> None:
   """
   Add an embedding to the in-memory cache with LRU eviction.
   
@@ -245,7 +241,7 @@ def add_to_memory_cache(cache_key: str, embedding: List[float], kb=None) -> None
   """
   cache_manager.add_to_memory_cache(cache_key, embedding, kb)
 
-def save_embedding_to_cache(text: str, model: str, embedding: List[float], kb=None) -> None:
+def save_embedding_to_cache(text: str, model: str, embedding: list[float], kb=None) -> None:
   """
   Save an embedding to both memory and disk cache.
   
@@ -320,7 +316,7 @@ def get_optimal_faiss_index(dimensions: int, dataset_size: int, kb=None) -> fais
   
   return faiss.IndexIDMap(index)
 
-def calculate_optimal_batch_size(chunks: List[str], model: str, max_batch_size: int, kb=None) -> int:
+def calculate_optimal_batch_size(chunks: list[str], model: str, max_batch_size: int, kb=None) -> int:
   """
   Calculate the optimal batch size based on token limits.
   
@@ -363,7 +359,7 @@ def calculate_optimal_batch_size(chunks: List[str], model: str, max_batch_size: 
   # Ensure at least one chunk per batch
   return max(1, max_chunks)
 
-async def process_embedding_batch_async(kb: KnowledgeBase, chunks: List[str]) -> List[List[float]]:
+async def process_embedding_batch_async(kb: KnowledgeBase, chunks: list[str]) -> list[list[float]]:
   """
   Process a batch of text chunks to generate embeddings asynchronously.
   
@@ -376,7 +372,7 @@ async def process_embedding_batch_async(kb: KnowledgeBase, chunks: List[str]) ->
   """
   max_tries = getattr(kb, 'api_max_retries', 20)
   tries = 0
-  cached_embeddings: List[Optional[List[float]]] = [get_cached_embedding(chunk, kb.vector_model) for chunk in chunks]
+  cached_embeddings: list[list[float] | None] = [get_cached_embedding(chunk, kb.vector_model) for chunk in chunks]
   uncached_indices = [i for i, emb in enumerate(cached_embeddings) if emb is None]
   
   if not uncached_indices:
@@ -440,7 +436,7 @@ async def process_embedding_batch_async(kb: KnowledgeBase, chunks: List[str]) ->
         safe_log_error(f"Retry attempt {tries} for model {kb.vector_model}")
         tries += 1
         if tries > max_tries:
-          safe_log_error(f"Max retries reached for sub-batch. Skipping batch.")
+          safe_log_error("Max retries reached for sub-batch. Skipping batch.")
           safe_log_error(f"Failed after {tries} attempts with model {kb.vector_model}")
           # Skip this batch instead of exiting the program
           break
@@ -458,7 +454,7 @@ async def process_embedding_batch_async(kb: KnowledgeBase, chunks: List[str]) ->
       
   return [emb for emb in result if emb is not None]
 
-async def get_embeddings_for_batch(kb: KnowledgeBase, chunks: List[str]) -> List[List[float]]:
+async def get_embeddings_for_batch(kb: KnowledgeBase, chunks: list[str]) -> list[list[float]]:
   """
   Get embeddings for a batch of text chunks without updating the index.
   Used for training the FAISS index.
@@ -526,7 +522,7 @@ async def get_embeddings_for_batch(kb: KnowledgeBase, chunks: List[str]) -> List
     return []
 
 async def process_batch_and_update(kb: KnowledgeBase, index: faiss.IndexIDMap, 
-                                 chunks: List[str], ids: List[int]) -> Set[int]:
+                                 chunks: list[str], ids: list[int]) -> set[int]:
   """
   Process a batch and update the database with success status.
   
@@ -544,7 +540,7 @@ async def process_batch_and_update(kb: KnowledgeBase, index: faiss.IndexIDMap,
     embeddings_list = await process_embedding_batch_async(kb, chunks)
     
     if not embeddings_list:
-      logger.warning(f"No embeddings were generated for batch")
+      logger.warning("No embeddings were generated for batch")
       return set()
     
     # Add embeddings to index
@@ -559,7 +555,7 @@ async def process_batch_and_update(kb: KnowledgeBase, index: faiss.IndexIDMap,
     return set()
 
 async def process_all_batches_with_checkpoints(kb: KnowledgeBase, index: faiss.IndexIDMap, 
-                                          all_chunks: List[List[str]], all_ids: List[List[int]]) -> Set[int]:
+                                          all_chunks: list[list[str]], all_ids: list[list[int]]) -> set[int]:
   """
   Process all batches of embeddings with checkpointing and concurrency.
   
@@ -671,7 +667,7 @@ def process_embeddings(args: argparse.Namespace, logger) -> str:
   # Configure cache manager with KB settings
   configure_cache_manager(kb)
 
-  from utils.logging_utils import log_model_operation, OperationLogger
+  from utils.logging_utils import log_model_operation
   
   # Log embedding operation start
   log_model_operation(logger, "embedding_start", kb.vector_model,
@@ -697,7 +693,7 @@ def process_embeddings(args: argparse.Namespace, logger) -> str:
   rows = kb.sql_cursor.fetchall()
   if not rows:
     close_database(kb)
-    return f"No rows were found to embed."
+    return "No rows were found to embed."
 
   logger.info(f"{len(rows)} found for embedding.")
 
@@ -775,7 +771,7 @@ def process_embeddings(args: argparse.Namespace, logger) -> str:
   logger.info(f"Using optimal batch size of {optimal_batch_size} (configured max: {configured_batch_size})")
   
   # Deduplicate texts to avoid embedding the same text multiple times
-  text_to_ids: Dict[str, List[int]] = {}
+  text_to_ids: dict[str, list[int]] = {}
   for row_id, text in rows:
     if text in text_to_ids:
       text_to_ids[text].append(row_id)

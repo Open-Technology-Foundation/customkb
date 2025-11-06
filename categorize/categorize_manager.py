@@ -7,16 +7,13 @@ This module handles AI-powered categorization of articles in knowledgebases.
 import asyncio
 import json
 import sqlite3
-import sys
-import os
 import argparse
 import yaml
 import time
 from pathlib import Path
-from typing import List, Dict, Any, Tuple, Optional, Set
+
 from dataclasses import dataclass, asdict, field
 from datetime import datetime
-import signal
 import re
 
 from openai import AsyncOpenAI, OpenAI
@@ -28,7 +25,6 @@ import pandas as pd
 from config.config_manager import KnowledgeBase, get_fq_cfg_filename
 from utils.logging_config import get_logger
 from utils.text_utils import get_env
-from utils.security_utils import validate_file_path
 from categorize.category_deduplicator import CategoryDeduplicator
 
 # Setup module logger
@@ -46,12 +42,12 @@ class ArticleCategories:
   article_path: str
   total_chunks: int
   sampled_chunks: int
-  categories: List[CategoryResult]
-  primary_category: Optional[str]
+  categories: list[CategoryResult]
+  primary_category: str | None
   processing_time: float
-  error: Optional[str] = None
-  model_used: Optional[str] = None
-  suggested_new_categories: List[str] = field(default_factory=list)
+  error: str | None = None
+  model_used: str | None = None
+  suggested_new_categories: list[str] = field(default_factory=list)
 
 class CategoryGenerator:
   """Generate initial categories based on KB content"""
@@ -60,7 +56,7 @@ class CategoryGenerator:
     self.kb = kb
     self.logger = get_logger(__name__)
     
-  def analyze_content(self, sample_size: int = 10) -> List[str]:
+  def analyze_content(self, sample_size: int = 10) -> list[str]:
     """Analyze KB content to generate initial categories"""
     # Use existing database connection from KnowledgeBase
     conn = sqlite3.connect(self.kb.knowledge_base_db)
@@ -125,7 +121,7 @@ class CategoryGenerator:
     categories = self._generate_categories_from_samples(all_text)
     return categories
   
-  def _generate_categories_from_samples(self, samples: List[str]) -> List[str]:
+  def _generate_categories_from_samples(self, samples: list[str]) -> list[str]:
     """Use AI to generate categories from sample texts"""
     client = OpenAI(api_key=get_env('OPENAI_API_KEY', None))
     
@@ -176,10 +172,10 @@ Return ONLY the Python list, no other text."""
 class AdaptiveCategorizer:
   """Main categorization engine with adaptive learning"""
   
-  def __init__(self, kb: KnowledgeBase, model_name: Optional[str] = None,
-               checkpoint_file: Optional[str] = None,
-               sampling_config: Optional[Tuple[int, int, int]] = None,
-               confidence_threshold: Optional[float] = None,
+  def __init__(self, kb: KnowledgeBase, model_name: str | None = None,
+               checkpoint_file: str | None = None,
+               sampling_config: tuple[int, int, int] | None = None,
+               confidence_threshold: float | None = None,
                enable_deduplication: bool = True,
                dedup_threshold: float = 85.0,
                use_variable_categories: bool = True):
@@ -213,7 +209,7 @@ class AdaptiveCategorizer:
     # Setup deduplicator if enabled
     self.deduplicator = CategoryDeduplicator() if enable_deduplication else None
     
-  def _load_or_generate_categories(self) -> List[str]:
+  def _load_or_generate_categories(self) -> list[str]:
     """Load existing categories or generate new ones"""
     cats_dir = Path(self.kb.knowledge_base_db).parent / "cats"
     categories_file = cats_dir / "categories.yaml"
@@ -283,7 +279,7 @@ class AdaptiveCategorizer:
     else:
       return 3
   
-  def _sample_chunks(self, chunks: List[Tuple], top: int, middle: int, bottom: int) -> str:
+  def _sample_chunks(self, chunks: list[Tuple], top: int, middle: int, bottom: int) -> str:
     """Sample chunks from article"""
     total = len(chunks)
     sampled = []
@@ -305,7 +301,7 @@ class AdaptiveCategorizer:
     text = '\n'.join([chunk[1] for chunk in sampled if chunk[1]])
     return text
   
-  async def categorize_article(self, article_path: str, chunks: List[Tuple]) -> ArticleCategories:
+  async def categorize_article(self, article_path: str, chunks: list[Tuple]) -> ArticleCategories:
     """Categorize a single article"""
     start_time = time.time()
     
@@ -357,7 +353,7 @@ Return ONLY a JSON object like:
       # Try to parse JSON with better error handling
       try:
         result = json.loads(response_content)
-      except json.JSONDecodeError as json_err:
+      except json.JSONDecodeError:
         # Log the actual response for debugging
         self.logger.debug(f"Invalid JSON response: {response_content[:500]}")
         
@@ -422,7 +418,7 @@ Return ONLY a JSON object like:
         error=str(e)
       )
   
-  async def process_all_articles(self, articles: List[str], max_concurrent: int = 5) -> List[ArticleCategories]:
+  async def process_all_articles(self, articles: list[str], max_concurrent: int = 5) -> list[ArticleCategories]:
     """Process all articles with concurrency control"""
     semaphore = asyncio.Semaphore(max_concurrent)
     
@@ -482,7 +478,7 @@ Return ONLY a JSON object like:
     
     return results
   
-  def _save_checkpoint(self, results: List[ArticleCategories]):
+  def _save_checkpoint(self, results: list[ArticleCategories]):
     """Save checkpoint for resume capability (JSON format)"""
     if not self.checkpoint_file:
       cats_dir = Path(self.kb.knowledge_base_db).parent / "cats"
@@ -501,7 +497,7 @@ Return ONLY a JSON object like:
 
     self.logger.debug(f"Checkpoint saved: {len(results)} articles processed")
   
-  def load_checkpoint(self) -> Optional[List[ArticleCategories]]:
+  def load_checkpoint(self) -> list[ArticleCategories] | None:
     """Load checkpoint if exists (supports JSON and legacy pickle formats)"""
     # Try JSON format first
     json_checkpoint = self.checkpoint_file or (Path(self.kb.knowledge_base_db).parent / "cats" / "checkpoint.json")
@@ -576,7 +572,7 @@ async def categorize_async(args: argparse.Namespace, kb: KnowledgeBase, logger) 
   cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name IN ('chunks', 'docs')")
   table = cursor.fetchone()
   if not table:
-    return f"Error: No 'chunks' or 'docs' table found in database"
+    return "Error: No 'chunks' or 'docs' table found in database"
   
   table_name = table[0]
   

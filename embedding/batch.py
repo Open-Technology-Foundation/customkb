@@ -8,10 +8,8 @@ and parallel batch processing for efficient embedding generation.
 
 import os
 import json
-import pickle
 import asyncio
-from typing import List, Dict, Any, Tuple, Optional
-from pathlib import Path
+from typing import Any
 
 import numpy as np
 
@@ -21,12 +19,11 @@ faiss, FAISS_GPU_AVAILABLE = get_faiss()
 
 from utils.logging_config import get_logger
 from utils.exceptions import ProcessingError, BatchError
-from .cache import save_embedding_to_cache, get_cached_embedding
 
 logger = get_logger(__name__)
 
 
-def calculate_optimal_batch_size(chunks: List[str], model: str, max_batch_size: int, kb=None) -> int:
+def calculate_optimal_batch_size(chunks: list[str], model: str, max_batch_size: int, kb=None) -> int:
   """
   Calculate optimal batch size based on text length and model constraints.
   
@@ -87,7 +84,7 @@ def calculate_optimal_batch_size(chunks: List[str], model: str, max_batch_size: 
   return optimal_batch
 
 
-def save_checkpoint(kb: Any, index: faiss.Index, doc_ids: List[int], 
+def save_checkpoint(kb: Any, index: faiss.Index, doc_ids: list[int], 
                    processed_count: int, checkpoint_file: str) -> None:
   """
   Save processing checkpoint.
@@ -122,7 +119,7 @@ def save_checkpoint(kb: Any, index: faiss.Index, doc_ids: List[int],
     raise ProcessingError(f"Checkpoint save failed: {e}") from e
 
 
-def load_checkpoint(checkpoint_file: str) -> Tuple[Optional[faiss.Index], Optional[Dict]]:
+def load_checkpoint(checkpoint_file: str) -> tuple[faiss.Index | None, dict | None]:
   """
   Load processing checkpoint.
   
@@ -173,8 +170,8 @@ def remove_checkpoint(checkpoint_file: str) -> None:
         logger.warning(f"Failed to remove checkpoint file {file_path}: {e}")
 
 
-async def process_batch_with_retry(process_func, batch: List[str], max_retries: int = 3, 
-                                  retry_delay: float = 1.0) -> List[List[float]]:
+async def process_batch_with_retry(process_func, batch: list[str], max_retries: int = 3, 
+                                  retry_delay: float = 1.0) -> list[list[float]]:
   """
   Process a batch with retry logic.
   
@@ -206,8 +203,8 @@ async def process_batch_with_retry(process_func, batch: List[str], max_retries: 
   raise BatchError("batch_unknown", f"Batch processing failed after {max_retries} retries: {last_error}") from last_error
 
 
-async def process_batches_parallel(process_func, chunks: List[str], batch_size: int, 
-                                  max_concurrent: int = 3) -> List[List[float]]:
+async def process_batches_parallel(process_func, chunks: list[str], batch_size: int, 
+                                  max_concurrent: int = 3) -> list[list[float]]:
   """
   Process batches in parallel with concurrency control.
   
@@ -223,7 +220,7 @@ async def process_batches_parallel(process_func, chunks: List[str], batch_size: 
   embeddings = []
   semaphore = asyncio.Semaphore(max_concurrent)
   
-  async def process_with_semaphore(batch: List[str], batch_idx: int) -> Tuple[int, List[List[float]]]:
+  async def process_with_semaphore(batch: list[str], batch_idx: int) -> tuple[int, list[list[float]]]:
     async with semaphore:
       result = await process_func(batch)
       return batch_idx, result
@@ -246,7 +243,7 @@ async def process_batches_parallel(process_func, chunks: List[str], batch_size: 
   return embeddings
 
 
-def validate_batch_consistency(embeddings: List[List[float]], expected_count: int, 
+def validate_batch_consistency(embeddings: list[list[float]], expected_count: int, 
                               expected_dims: int) -> bool:
   """
   Validate batch processing results.
@@ -341,7 +338,7 @@ class BatchProcessor:
     else:
       return f"{seconds/3600:.1f}h"
   
-  def get_summary(self) -> Dict[str, Any]:
+  def get_summary(self) -> dict[str, Any]:
     """
     Get processing summary.
     

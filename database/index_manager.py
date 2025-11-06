@@ -6,7 +6,7 @@ for optimal query performance.
 """
 
 import sqlite3
-from typing import List, Tuple, Dict, Optional
+
 from pathlib import Path
 
 from utils.logging_config import get_logger
@@ -31,7 +31,7 @@ EXPECTED_INDEXES = [
 ]
 
 
-def get_database_indexes(db_path: str) -> List[Tuple[str, Optional[str]]]:
+def get_database_indexes(db_path: str) -> list[tuple[str, str | None]]:
   """
   Get all indexes from a SQLite database.
   
@@ -51,7 +51,7 @@ def get_database_indexes(db_path: str) -> List[Tuple[str, Optional[str]]]:
     return cursor.fetchall()
 
 
-def verify_indexes(db_path: str) -> Dict[str, bool]:
+def verify_indexes(db_path: str) -> dict[str, bool]:
   """
   Verify that all expected indexes exist in the database.
   
@@ -104,7 +104,7 @@ def get_table_name(db_path: str) -> str:
     return result[0] if result else 'chunks'  # Default to 'chunks' for new databases
 
 
-def create_missing_indexes(db_path: str, dry_run: bool = False) -> List[str]:
+def create_missing_indexes(db_path: str, dry_run: bool = False) -> list[str]:
   """
   Create any missing indexes in the database.
   

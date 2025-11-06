@@ -7,10 +7,7 @@ prompt templates, and model-specific formatting.
 """
 
 import os
-import sys
-import asyncio
-import json
-from typing import List, Dict, Any, Optional, Tuple
+from typing import Any
 
 from openai import OpenAI, AsyncOpenAI
 from anthropic import Anthropic, AsyncAnthropic
@@ -145,7 +142,7 @@ def _is_gpt5_model(model: str) -> bool:
   return model_lower.startswith('gpt-5') or model_lower.startswith('gpt5')
 
 
-def format_messages_for_responses_api(messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+def format_messages_for_responses_api(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
   """
   Format messages for OpenAI Responses API.
   
@@ -176,7 +173,7 @@ def format_messages_for_responses_api(messages: List[Dict[str, Any]]) -> List[Di
   return formatted_messages
 
 
-def _extract_content_from_response(data: Dict[str, Any]) -> str:
+def _extract_content_from_response(data: dict[str, Any]) -> str:
   """
   Extract content from API response data.
   
@@ -212,7 +209,7 @@ def _extract_content_from_response(data: Dict[str, Any]) -> str:
     return ""
 
 
-def get_prompt_template(template_name: str = None) -> Dict[str, str]:
+def get_prompt_template(template_name: str = None) -> dict[str, str]:
   """
   Get prompt template by name.
   
@@ -298,7 +295,7 @@ Please provide a detailed technical response that:
   return templates.get(template_name, templates['default'])
 
 
-async def generate_openai_response(messages: List[Dict[str, Any]], model: str, 
+async def generate_openai_response(messages: list[dict[str, Any]], model: str, 
                                   temperature: float = 0.7, max_tokens: int = 2000) -> str:
   """
   Generate response using OpenAI models.
@@ -382,12 +379,13 @@ async def generate_openai_response(messages: List[Dict[str, Any]], model: str,
       try:
         error_detail = e.response.json()
         error_msg = f"{error_msg} - Details: {error_detail}"
-      except:
+      except (ValueError, AttributeError, TypeError) as json_err:
+        logger.debug(f"Could not parse error response as JSON: {json_err}")
         pass
     raise APIError(f"OpenAI request failed for model {model}: {error_msg}") from e
 
 
-async def generate_anthropic_response(messages: List[Dict[str, Any]], model: str,
+async def generate_anthropic_response(messages: list[dict[str, Any]], model: str,
                                      temperature: float = 0.7, max_tokens: int = 2000) -> str:
   """
   Generate response using Anthropic Claude models.
@@ -435,7 +433,7 @@ async def generate_anthropic_response(messages: List[Dict[str, Any]], model: str
     raise APIError(f"Anthropic request failed: {e}") from e
 
 
-async def generate_google_response(messages: List[Dict[str, Any]], model: str,
+async def generate_google_response(messages: list[dict[str, Any]], model: str,
                                   temperature: float = 0.7, max_tokens: int = 2000) -> str:
   """
   Generate response using Google AI models.
@@ -485,7 +483,7 @@ async def generate_google_response(messages: List[Dict[str, Any]], model: str,
     raise APIError(f"Google AI request failed: {e}") from e
 
 
-async def generate_xai_response(messages: List[Dict[str, Any]], model: str,
+async def generate_xai_response(messages: list[dict[str, Any]], model: str,
                                temperature: float = 0.7, max_tokens: int = 2000) -> str:
   """
   Generate response using xAI models.
@@ -517,7 +515,7 @@ async def generate_xai_response(messages: List[Dict[str, Any]], model: str,
     raise APIError(f"xAI request failed: {e}") from e
 
 
-async def generate_llama_response(messages: List[Dict[str, Any]], model: str,
+async def generate_llama_response(messages: list[dict[str, Any]], model: str,
                                  temperature: float = 0.7, max_tokens: int = 2000) -> str:
   """
   Generate response using local Llama models via Ollama.
@@ -602,19 +600,23 @@ async def generate_ai_response(kb: Any, reference_string: str, query_text: str,
     max_tokens = getattr(kb, 'query_max_tokens', 2000)
     
     logger.info(f"Generating response with {provider} model: {model_name}")
-    
-    # Route to appropriate provider
-    if provider == 'anthropic':
-      response = await generate_anthropic_response(messages, model_name, temperature, max_tokens)
-    elif provider == 'google':
-      response = await generate_google_response(messages, model_name, temperature, max_tokens)
-    elif provider == 'xai':
-      response = await generate_xai_response(messages, model_name, temperature, max_tokens)
-    elif provider == 'local' or 'llama' in model_name.lower():
-      response = await generate_llama_response(messages, model_name, temperature, max_tokens)
-    else:
-      # Default to OpenAI
-      response = await generate_openai_response(messages, model_name, temperature, max_tokens)
+
+    # Route to appropriate provider using pattern matching (Python 3.10+)
+    match provider:
+      case 'anthropic':
+        response = await generate_anthropic_response(messages, model_name, temperature, max_tokens)
+      case 'google':
+        response = await generate_google_response(messages, model_name, temperature, max_tokens)
+      case 'xai':
+        response = await generate_xai_response(messages, model_name, temperature, max_tokens)
+      case 'local':
+        response = await generate_llama_response(messages, model_name, temperature, max_tokens)
+      case _ if 'llama' in model_name.lower():
+        # Handle llama models even if provider isn't explicitly 'local'
+        response = await generate_llama_response(messages, model_name, temperature, max_tokens)
+      case _:
+        # Default to OpenAI for all other providers
+        response = await generate_openai_response(messages, model_name, temperature, max_tokens)
     
     if not response:
       raise ModelError(model_name, "Empty response from AI model")

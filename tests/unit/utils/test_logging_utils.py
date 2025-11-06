@@ -5,11 +5,9 @@ Tests logging configuration, formatting, and utility functions.
 
 import pytest
 import logging
-import tempfile
 import os
 import time
-from unittest.mock import patch, Mock, MagicMock
-from pathlib import Path
+from unittest.mock import patch, Mock
 
 from utils.logging_utils import (
   get_kb_info_from_config,

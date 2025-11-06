@@ -5,14 +5,13 @@ This module provides functionality to monitor and limit system resource usage
 to prevent crashes and ensure stable operation.
 """
 
-import os
 import sys
 import psutil
 import resource
 import threading
 import time
 import signal
-from typing import Dict, Optional, Tuple, Callable, Any
+from typing import Callable
 from contextlib import contextmanager
 
 from utils.logging_config import get_logger
@@ -49,7 +48,7 @@ class ResourceMonitor:
     # Track initial state
     self.initial_memory = self.get_memory_info()
     
-  def get_memory_info(self) -> Dict[str, float]:
+  def get_memory_info(self) -> dict[str, float]:
     """Get current memory usage information."""
     mem_info = self.process.memory_info()
     system_mem = psutil.virtual_memory()
@@ -63,7 +62,7 @@ class ResourceMonitor:
       'system_total_mb': system_mem.total / 1024 / 1024
     }
   
-  def check_memory_limits(self) -> Tuple[bool, str]:
+  def check_memory_limits(self) -> tuple[bool, str]:
     """
     Check if memory usage is within limits.
     
@@ -179,9 +178,9 @@ def memory_limit(limit_mb: int):
 
 
 @contextmanager
-def resource_limited(memory_mb: Optional[int] = None, 
-                    cpu_seconds: Optional[int] = None,
-                    file_descriptors: Optional[int] = None):
+def resource_limited(memory_mb: int | None = None, 
+                    cpu_seconds: int | None = None,
+                    file_descriptors: int | None = None):
   """
   Context manager for multiple resource limits.
   
@@ -317,7 +316,7 @@ class ResourceGuard:
 
 
 # Global resource guard instance (lazy initialization)
-_global_guard: Optional[ResourceGuard] = None
+_global_guard: ResourceGuard | None = None
 
 
 def get_resource_guard(memory_limit_gb: float = None) -> ResourceGuard:

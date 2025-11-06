@@ -12,7 +12,7 @@ import tempfile
 import time
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Optional, Tuple, Any, Generator, Union
+from typing import Any, Generator
 
 from utils.logging_config import get_logger
 from utils.exceptions import (
@@ -33,7 +33,7 @@ def database_connection(
   timeout: float = 30.0,
   check_same_thread: bool = False,
   read_only: bool = False
-) -> Generator[Tuple[sqlite3.Connection, sqlite3.Cursor], None, None]:
+) -> Generator[tuple[sqlite3.Connection, sqlite3.Cursor], None, None]:
   """
   Context manager for SQLite database connections.
   
@@ -104,7 +104,7 @@ def database_connection(
 
 @contextmanager
 def atomic_write(
-  filepath: Union[str, Path],
+  filepath: str | Path,
   mode: str = 'w',
   encoding: str = 'utf-8',
   create_dirs: bool = True
@@ -183,8 +183,8 @@ def atomic_write(
 @contextmanager
 def timed_operation(
   operation_name: str,
-  timeout: Optional[float] = None,
-  logger_instance: Optional[Any] = None
+  timeout: float | None = None,
+  logger_instance: Any | None = None
 ) -> Generator[dict, None, None]:
   """
   Context manager for timing operations.
@@ -241,8 +241,8 @@ def timed_operation(
 
 @contextmanager
 def resource_limit(
-  max_memory_mb: Optional[int] = None,
-  max_cpu_percent: Optional[float] = None
+  max_memory_mb: int | None = None,
+  max_cpu_percent: float | None = None
 ) -> Generator[None, None, None]:
   """
   Context manager for resource limiting.
@@ -365,7 +365,7 @@ def retry_on_error(
 def batch_processor(
   items: list,
   batch_size: int = 100,
-  progress_callback: Optional[callable] = None
+  progress_callback: callable | None = None
 ) -> Generator[list, None, None]:
   """
   Context manager for batch processing.
@@ -414,7 +414,7 @@ def batch_processor(
 
 
 @contextmanager
-def safe_import(module_name: str, package: Optional[str] = None) -> Generator[Any, None, None]:
+def safe_import(module_name: str, package: str | None = None) -> Generator[Any, None, None]:
   """
   Context manager for safe module imports.
   

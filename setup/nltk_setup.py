@@ -44,7 +44,7 @@ def check_permissions():
 
 def download_nltk_data():
   """Download required NLTK data for CustomKB."""
-  print(f"NLTK Data Download")
+  print("NLTK Data Download")
   print(f"Target directory: {NLTK_DATA_DIR}")
   print("=" * 50)
   
@@ -142,7 +142,7 @@ def cleanup_nltk_data():
           print(f"     ❌ Error removing {filename}: {e}")
   
   print("\n" + "=" * 50)
-  print(f"Summary:")
+  print("Summary:")
   print(f"  Files kept: {kept_count}")
   print(f"  Files removed: {removed_count}")
   

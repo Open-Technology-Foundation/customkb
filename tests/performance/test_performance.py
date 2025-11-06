@@ -6,10 +6,7 @@ Tests scalability, throughput, and resource usage under various loads.
 import pytest
 import time
 import psutil
-import os
-import tempfile
 from unittest.mock import patch, Mock
-from typing import List
 
 
 @pytest.mark.performance
@@ -121,7 +118,6 @@ db_max_tokens = 50
   
   def test_database_memory_usage(self, temp_data_manager, mock_nltk_data):
     """Test memory usage during database operations."""
-    import psutil
     
     # Monitor memory usage
     process = psutil.Process()
@@ -173,7 +169,7 @@ class TestEmbeddingPerformance:
   
   def test_embedding_batch_processing_performance(self, temp_config_file, mock_openai_client):
     """Test performance of embedding batch processing."""
-    from embedding.embed_manager import calculate_optimal_batch_size, process_embedding_batch_async
+    from embedding.embed_manager import calculate_optimal_batch_size
     from config.config_manager import KnowledgeBase
     
     kb = KnowledgeBase(temp_config_file)
@@ -240,7 +236,6 @@ class TestQueryPerformance:
   def test_vector_search_performance(self, temp_database, temp_config_file, mock_faiss_index):
     """Test vector search performance with various dataset sizes."""
     import numpy as np
-    from query.query_manager import get_query_embedding
     
     # Mock different index sizes
     test_sizes = [100, 1000, 10000]
@@ -301,7 +296,6 @@ class TestQueryPerformance:
   def test_concurrent_query_performance(self, temp_config_file, mock_faiss_index):
     """Test performance under concurrent query load."""
     import asyncio
-    import numpy as np
     from query.query_manager import process_reference_batch
     from config.config_manager import KnowledgeBase
     
@@ -350,7 +344,6 @@ class TestMemoryUsagePatterns:
   
   def test_memory_usage_during_large_operations(self, temp_data_manager):
     """Test memory usage during large operations."""
-    import psutil
     
     process = psutil.Process()
     
@@ -381,7 +374,6 @@ class TestMemoryUsagePatterns:
   
   def test_memory_cleanup_after_operations(self, temp_data_manager):
     """Test that memory is properly cleaned up after operations."""
-    import psutil
     import gc
     
     process = psutil.Process()

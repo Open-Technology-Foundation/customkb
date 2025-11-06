@@ -6,10 +6,11 @@ like XML, JSON, Markdown, and plain text for feeding to LLMs.
 """
 
 from abc import ABC, abstractmethod
-from typing import Dict, List, Any, Optional, Tuple
+
 import json
 import xml.sax.saxutils
 from utils.logging_config import get_logger
+from utils.enums import ReferenceFormat
 
 logger = get_logger(__name__)
 
@@ -28,7 +29,7 @@ class ReferenceFormatter(ABC):
     pass
   
   @abstractmethod
-  def format_metadata(self, metadata_elems: List[str], similarity_score: str, debug: bool) -> str:
+  def format_metadata(self, metadata_elems: list[str], similarity_score: str, debug: bool) -> str:
     """Format metadata section."""
     pass
   
@@ -72,7 +73,7 @@ class XMLFormatter(ReferenceFormatter):
     safe_src = xml.sax.saxutils.escape(str(src))
     return f'<context src="{safe_src}:{sid}">\n'
   
-  def format_metadata(self, metadata_elems: List[str], similarity_score: str, debug: bool) -> str:
+  def format_metadata(self, metadata_elems: list[str], similarity_score: str, debug: bool) -> str:
     """Format metadata section as XML."""
     if not metadata_elems and not (similarity_score and debug):
       return ""
@@ -131,7 +132,7 @@ class JSONFormatter(ReferenceFormatter):
     }
     return ""
   
-  def format_metadata(self, metadata_elems: List[str], similarity_score: str, debug: bool) -> str:
+  def format_metadata(self, metadata_elems: list[str], similarity_score: str, debug: bool) -> str:
     """Store metadata for current reference."""
     if not self.current_ref:
       return ""
@@ -219,7 +220,7 @@ class MarkdownFormatter(ReferenceFormatter):
     self.in_document_group = True
     return f"{header}### {src}:{sid}\n\n"
   
-  def format_metadata(self, metadata_elems: List[str], similarity_score: str, debug: bool) -> str:
+  def format_metadata(self, metadata_elems: list[str], similarity_score: str, debug: bool) -> str:
     """Format metadata section as Markdown."""
     if not metadata_elems and not (similarity_score and debug):
       return ""
@@ -292,7 +293,7 @@ class PlainTextFormatter(ReferenceFormatter):
     src = display_source or source
     return f"--- {src}:{sid} ---\n"
   
-  def format_metadata(self, metadata_elems: List[str], similarity_score: str, debug: bool) -> str:
+  def format_metadata(self, metadata_elems: list[str], similarity_score: str, debug: bool) -> str:
     """Format metadata inline for plain text."""
     if not debug:
       return ""  # Skip metadata in plain text unless debugging
@@ -340,49 +341,65 @@ class PlainTextFormatter(ReferenceFormatter):
     return content.rstrip() + "\n"
 
 
-def get_formatter(format_type: str) -> ReferenceFormatter:
+def get_formatter(format_type: str | ReferenceFormat) -> ReferenceFormatter:
   """
   Factory function to get appropriate formatter.
-  
+
   Args:
-      format_type: One of 'xml', 'json', 'markdown', 'plain'
-      
+      format_type: ReferenceFormat enum or string ('xml', 'json', 'markdown', 'plain')
+
   Returns:
       ReferenceFormatter instance
-      
+
   Raises:
       ValueError: If format_type is not supported
   """
+  # Convert string to enum if needed
+  if isinstance(format_type, str):
+    try:
+      format_enum = ReferenceFormat.from_string(format_type)
+    except ValueError:
+      # Fall back to direct string matching for legacy support
+      formatters_legacy = {
+        'xml': XMLFormatter,
+        'json': JSONFormatter,
+        'markdown': MarkdownFormatter,
+        'md': MarkdownFormatter,
+        'plain': PlainTextFormatter,
+        'text': PlainTextFormatter
+      }
+      format_lower = format_type.lower()
+      if format_lower not in formatters_legacy:
+        raise ValueError(f"Unsupported format type: {format_type}. Supported: {list(formatters_legacy.keys())}")
+      return formatters_legacy[format_lower]()
+  else:
+    format_enum = format_type
+
+  # Map enum to formatter classes
   formatters = {
-    'xml': XMLFormatter,
-    'json': JSONFormatter,
-    'markdown': MarkdownFormatter,
-    'md': MarkdownFormatter,  # Alias
-    'plain': PlainTextFormatter,
-    'text': PlainTextFormatter  # Alias
+    ReferenceFormat.XML: XMLFormatter,
+    ReferenceFormat.JSON: JSONFormatter,
+    ReferenceFormat.MARKDOWN: MarkdownFormatter,
+    ReferenceFormat.PLAIN: PlainTextFormatter,
   }
-  
-  format_lower = format_type.lower()
-  if format_lower not in formatters:
-    raise ValueError(f"Unsupported format type: {format_type}. Supported: {list(formatters.keys())}")
-  
-  return formatters[format_lower]()
+
+  return formatters[format_enum]()
 
 
-def format_references(references: List[Tuple], format_type: str = 'xml',
-                     context_files: Optional[List[str]] = None,
+def format_references(references: list[Tuple], format_type: str | ReferenceFormat = 'xml',
+                     context_files: list[str] | None = None,
                      debug: bool = False) -> str:
   """
   Format references using the appropriate formatter.
-  
+
   This is a convenience function that creates a formatter and formats references.
-  
+
   Args:
       references: List of reference tuples (typically containing source, sid, content, metadata, etc.)
-      format_type: Output format ('xml', 'json', 'markdown', 'plain')
+      format_type: ReferenceFormat enum or string ('xml', 'json', 'markdown', 'plain')
       context_files: Optional list of context file contents
       debug: Whether to include debug information
-      
+
   Returns:
       Formatted reference string
   """
@@ -397,7 +414,7 @@ def format_references(references: List[Tuple], format_type: str = 'xml',
         content, filename = file_data
       else:
         content = file_data
-        filename = f"context_file.txt"
+        filename = "context_file.txt"
       content_parts.append(formatter.format_context_file(content, filename))
   
   # Track document grouping

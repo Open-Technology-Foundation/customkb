@@ -9,8 +9,7 @@ persistence, and similarity search operations.
 import os
 import json
 import numpy as np
-from typing import List, Tuple, Optional, Dict, Any
-from pathlib import Path
+from typing import Any
 
 # Load FAISS with proper GPU initialization
 from utils.faiss_loader import get_faiss
@@ -120,7 +119,7 @@ def train_index(index: faiss.Index, training_vectors: np.ndarray) -> None:
 
 
 def add_vectors_to_index(index: faiss.Index, vectors: np.ndarray, 
-                        ids: Optional[np.ndarray] = None) -> int:
+                        ids: np.ndarray | None = None) -> int:
   """
   Add vectors to the index.
   
@@ -157,7 +156,7 @@ def add_vectors_to_index(index: faiss.Index, vectors: np.ndarray,
 
 
 def search_index(index: faiss.Index, query_vectors: np.ndarray, 
-                k: int = 10, nprobe: int = 10) -> Tuple[np.ndarray, np.ndarray]:
+                k: int = 10, nprobe: int = 10) -> tuple[np.ndarray, np.ndarray]:
   """
   Search the index for similar vectors.
   
@@ -188,7 +187,7 @@ def search_index(index: faiss.Index, query_vectors: np.ndarray,
   return distances, indices
 
 
-def save_index(index: faiss.Index, index_path: str, metadata: Dict[str, Any] = None) -> None:
+def save_index(index: faiss.Index, index_path: str, metadata: dict[str, Any] = None) -> None:
   """
   Save FAISS index to disk.
   
@@ -217,7 +216,7 @@ def save_index(index: faiss.Index, index_path: str, metadata: Dict[str, Any] = N
     raise CustomIndexError(f"Index save failed: {e}") from e
 
 
-def load_index(index_path: str) -> Tuple[faiss.Index, Optional[Dict[str, Any]]]:
+def load_index(index_path: str) -> tuple[faiss.Index, dict[str, Any] | None]:
   """
   Load FAISS index from disk.
   
@@ -250,7 +249,7 @@ def load_index(index_path: str) -> Tuple[faiss.Index, Optional[Dict[str, Any]]]:
     raise CustomIndexError(f"Index load failed: {e}") from e
 
 
-def merge_indexes(indexes: List[faiss.Index]) -> faiss.Index:
+def merge_indexes(indexes: list[faiss.Index]) -> faiss.Index:
   """
   Merge multiple FAISS indexes into one.
   
@@ -340,7 +339,7 @@ def optimize_index(index: faiss.Index, optimization_level: str = 'medium') -> fa
   return index
 
 
-def get_index_stats(index: faiss.Index) -> Dict[str, Any]:
+def get_index_stats(index: faiss.Index) -> dict[str, Any]:
   """
   Get statistics about the index.
   
@@ -375,7 +374,7 @@ def get_index_stats(index: faiss.Index) -> Dict[str, Any]:
   return stats
 
 
-def remove_vectors_from_index(index: faiss.Index, ids_to_remove: List[int]) -> int:
+def remove_vectors_from_index(index: faiss.Index, ids_to_remove: list[int]) -> int:
   """
   Remove vectors from the index by ID.
   

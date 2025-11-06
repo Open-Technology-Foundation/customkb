@@ -6,7 +6,7 @@ Provides realistic test data for databases, configurations, and API responses.
 import json
 import tempfile
 import os
-from typing import Dict, List, Any, Optional
+from typing import Any
 from pathlib import Path
 
 
@@ -111,7 +111,7 @@ additional_stopword_languages = {kwargs.get('additional_stopword_languages', 'fr
     return config_content
 
   @staticmethod
-  def create_sample_texts() -> List[str]:
+  def create_sample_texts() -> list[str]:
     """Create sample text documents for testing."""
     return [
       "# Introduction to Machine Learning\nMachine learning is a subset of artificial intelligence that enables computers to learn and improve from experience without being explicitly programmed.",
@@ -136,7 +136,7 @@ additional_stopword_languages = {kwargs.get('additional_stopword_languages', 'fr
     ]
 
   @staticmethod
-  def create_mock_embedding_response(texts: List[str], dimensions: int = 1536) -> Dict[str, Any]:
+  def create_mock_embedding_response(texts: list[str], dimensions: int = 1536) -> dict[str, Any]:
     """
     Create a mock OpenAI embedding API response.
     
@@ -171,7 +171,7 @@ additional_stopword_languages = {kwargs.get('additional_stopword_languages', 'fr
     }
 
   @staticmethod
-  def create_mock_chat_response(content: str, model: str = "gpt-4o") -> Dict[str, Any]:
+  def create_mock_chat_response(content: str, model: str = "gpt-4o") -> dict[str, Any]:
     """
     Create a mock OpenAI chat completion response.
     
@@ -203,7 +203,7 @@ additional_stopword_languages = {kwargs.get('additional_stopword_languages', 'fr
     }
 
   @staticmethod
-  def create_mock_anthropic_response(content: str, model: str = "claude-3-sonnet-20240229") -> Dict[str, Any]:
+  def create_mock_anthropic_response(content: str, model: str = "claude-3-sonnet-20240229") -> dict[str, Any]:
     """
     Create a mock Anthropic message response.
     
@@ -229,7 +229,7 @@ additional_stopword_languages = {kwargs.get('additional_stopword_languages', 'fr
     }
 
   @staticmethod
-  def create_database_rows(texts: List[str], source_doc: str = "test.txt") -> List[tuple]:
+  def create_database_rows(texts: list[str], source_doc: str = "test.txt") -> list[tuple]:
     """
     Create database rows for testing.
     
