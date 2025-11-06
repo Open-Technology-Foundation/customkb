@@ -8,9 +8,8 @@ from sentence-transformers, implementing caching and batch processing for effici
 import hashlib
 import json
 import os
-import time
 from collections import OrderedDict
-from typing import List, Tuple, Optional, Dict, Any
+from typing import List, Tuple, Optional, Any
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 

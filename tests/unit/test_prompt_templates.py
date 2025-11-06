@@ -3,7 +3,6 @@ Unit tests for prompt templates.
 """
 
 import unittest
-from unittest.mock import Mock, patch
 from query.prompt_templates import (
     get_prompt_template, list_templates, validate_template_name,
     PROMPT_TEMPLATES

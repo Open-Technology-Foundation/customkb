@@ -2,9 +2,7 @@
 
 import os
 import tempfile
-import shutil
-from unittest.mock import Mock, patch, MagicMock
-import pytest
+from unittest.mock import Mock, patch
 
 from utils.optimization_manager import (
     get_system_memory_gb,

@@ -4,7 +4,7 @@ Unit tests for Google AI embedding integration.
 """
 
 import pytest
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch
 import numpy as np
 
 from embedding.embed_manager import process_embedding_batch_async

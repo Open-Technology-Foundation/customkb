@@ -10,9 +10,8 @@ import os
 import sys
 import sqlite3
 import numpy as np
-from typing import Dict, List, Tuple, Optional
+from typing import Dict
 import argparse
-import asyncio
 
 from config.config_manager import KnowledgeBase, get_fq_cfg_filename
 from database.db_manager import connect_to_database, close_database

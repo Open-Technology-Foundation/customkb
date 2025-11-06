@@ -388,7 +388,6 @@ def handle_exception(e: Exception, logger=None, raise_custom: bool = True) -> Op
       CustomKBError if raise_custom is True
   """
   import sqlite3
-  import psutil
   
   custom_error = None
   

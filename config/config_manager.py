@@ -26,7 +26,7 @@ import time
 from typing import Optional
 
 from utils.logging_config import get_logger
-from utils.text_utils import split_filepath, find_file, get_env
+from utils.text_utils import split_filepath, get_env
 
 # Initialize vector database directory
 VECTORDBS = os.getenv('VECTORDBS', '/var/lib/vectordbs')

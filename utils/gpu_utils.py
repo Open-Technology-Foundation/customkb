@@ -7,7 +7,6 @@ intelligent decisions about GPU usage for FAISS operations.
 
 import os
 import subprocess
-import re
 from typing import Optional, Tuple
 from utils.logging_config import get_logger
 

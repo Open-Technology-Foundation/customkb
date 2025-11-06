@@ -149,7 +149,7 @@ async def generate_query_embedding(query_text: str, model: str, kb=None) -> np.n
     embeddings = await get_embeddings_with_provider([query_text], model, kb)
     
     if not embeddings or not embeddings[0]:
-      raise EmbeddingError(f"Failed to generate embedding for query")
+      raise EmbeddingError("Failed to generate embedding for query")
     
     embedding = embeddings[0]
     

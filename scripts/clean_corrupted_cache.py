@@ -10,8 +10,7 @@ import os
 import sys
 import json
 import argparse
-from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Dict, Tuple
 
 # Add parent directory to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -151,7 +150,7 @@ def get_cache_stats() -> Dict[str, any]:
       try:
         size_bytes = os.path.getsize(file_path)
         stats['total_size_mb'] += size_bytes / (1024 * 1024)
-        
+
         # Try to get model info
         with open(file_path, 'r') as f:
           cache_data = json.load(f)
@@ -160,8 +159,9 @@ def get_cache_stats() -> Dict[str, any]:
             stats['by_model'][model] = {'count': 0, 'size_mb': 0}
           stats['by_model'][model]['count'] += 1
           stats['by_model'][model]['size_mb'] += size_bytes / (1024 * 1024)
-      except:
-        pass
+      except (OSError, json.JSONDecodeError, KeyError) as e:
+        logger.debug(f"Could not process cache file {file_path}: {e}")
+        pass  # Skip corrupted or inaccessible cache files
   
   return stats
 

@@ -6,11 +6,10 @@ This creates a focused BM25 index while using symlinked db/faiss files.
 
 import os
 import sys
-import sqlite3
 import pickle
 import argparse
 import logging
-from typing import List, Set, Dict, Any
+from typing import List
 from rank_bm25 import BM25Okapi
 
 # Add parent directory to path

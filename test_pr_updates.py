@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """Test script to verify PR dependency updates compatibility"""
 
-import sys
 import subprocess
 import tempfile
 import shutil

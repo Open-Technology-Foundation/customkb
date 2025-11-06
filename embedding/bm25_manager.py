@@ -170,7 +170,7 @@ def load_bm25_index(kb: 'KnowledgeBase') -> Optional[Dict[str, Any]]:
         logger.error("Invalid BM25 index file: missing required keys")
         return None
 
-      logger.info(f"Loaded BM25 index from legacy pickle format, migrating to NPZ...")
+      logger.info("Loaded BM25 index from legacy pickle format, migrating to NPZ...")
 
       # Trigger rebuild to migrate to NPZ format
       # This will happen automatically on next rebuild

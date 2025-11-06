@@ -15,7 +15,6 @@ from pathlib import Path
 
 from utils.logging_config import get_logger
 from utils.text_utils import clean_text
-from utils.exceptions import ProcessingError
 
 logger = get_logger(__name__)
 

@@ -4,7 +4,6 @@ Unit tests for BM25 manager functionality.
 Tests BM25 index building, loading, and score calculation.
 """
 
-import pytest
 import tempfile
 import os
 import sqlite3

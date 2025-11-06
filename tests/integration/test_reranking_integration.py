@@ -5,17 +5,12 @@ Integration tests for reranking functionality in the query pipeline.
 import os
 import sys
 import pytest
-import tempfile
-import shutil
 from unittest.mock import patch, Mock
-import asyncio
 
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
-from config.config_manager import KnowledgeBase
 from query.query_manager import process_query_async
-from database.db_manager import connect_to_database, close_database
 from tests.fixtures.mock_data import create_mock_knowledge_base
 from utils.logging_config import get_logger
 

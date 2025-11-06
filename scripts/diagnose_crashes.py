@@ -8,7 +8,6 @@ import os
 import sys
 import subprocess
 import psutil
-import json
 from pathlib import Path
 
 def check_system_state():

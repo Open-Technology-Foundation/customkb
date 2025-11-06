@@ -4,7 +4,6 @@ import sqlite3
 import tempfile
 import os
 from unittest.mock import Mock, patch
-import pytest
 
 from database.index_manager import (
     get_database_indexes,

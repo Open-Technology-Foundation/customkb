@@ -6,7 +6,7 @@ Merges similar categories using fuzzy string matching
 
 from typing import List, Dict, Set, Tuple, Optional
 from dataclasses import dataclass
-from rapidfuzz import fuzz, process
+from rapidfuzz import fuzz
 import logging
 
 logger = logging.getLogger(__name__)

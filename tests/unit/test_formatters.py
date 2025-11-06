@@ -4,7 +4,6 @@ Unit tests for reference formatters.
 
 import unittest
 import json
-import xml.etree.ElementTree as ET
 from query.formatters import (
     get_formatter, XMLFormatter, JSONFormatter, 
     MarkdownFormatter, PlainTextFormatter

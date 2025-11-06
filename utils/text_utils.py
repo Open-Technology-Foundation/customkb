@@ -200,7 +200,6 @@ def tokenize_for_bm25(text: str, language: str = 'en') -> Tuple[str, int]:
       Tuple of (space-separated tokens string, document length).
   """
   # Import here to avoid circular imports
-  from nltk.corpus import stopwords
   from database.db_manager import get_iso_code, get_full_language_name
   
   # Convert to lowercase but preserve acronyms and important terms

@@ -5,11 +5,8 @@ Tests database operations, text processing, chunking, and metadata extraction.
 
 import pytest
 import os
-import sqlite3
-import tempfile
 import json
-from unittest.mock import patch, Mock, MagicMock
-from pathlib import Path
+from unittest.mock import patch, Mock
 
 from database.db_manager import (
   detect_file_type,

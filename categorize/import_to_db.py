@@ -3,10 +3,8 @@ Import categorization results into the knowledgebase database.
 """
 
 import sqlite3
-import json
 from pathlib import Path
-from typing import List, Dict, Any
-from dataclasses import dataclass
+from typing import List, Any
 
 from config.config_manager import KnowledgeBase
 from utils.logging_config import get_logger

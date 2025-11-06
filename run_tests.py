@@ -7,8 +7,6 @@ Provides convenient commands for running different types of tests.
 import sys
 import subprocess
 import argparse
-import os
-from pathlib import Path
 import resource
 import time
 try:

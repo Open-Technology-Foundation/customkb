@@ -7,16 +7,13 @@ This module handles AI-powered categorization of articles in knowledgebases.
 import asyncio
 import json
 import sqlite3
-import sys
-import os
 import argparse
 import yaml
 import time
 from pathlib import Path
-from typing import List, Dict, Any, Tuple, Optional, Set
+from typing import List, Tuple, Optional
 from dataclasses import dataclass, asdict, field
 from datetime import datetime
-import signal
 import re
 
 from openai import AsyncOpenAI, OpenAI
@@ -28,7 +25,6 @@ import pandas as pd
 from config.config_manager import KnowledgeBase, get_fq_cfg_filename
 from utils.logging_config import get_logger
 from utils.text_utils import get_env
-from utils.security_utils import validate_file_path
 from categorize.category_deduplicator import CategoryDeduplicator
 
 # Setup module logger
@@ -357,7 +353,7 @@ Return ONLY a JSON object like:
       # Try to parse JSON with better error handling
       try:
         result = json.loads(response_content)
-      except json.JSONDecodeError as json_err:
+      except json.JSONDecodeError:
         # Log the actual response for debugging
         self.logger.debug(f"Invalid JSON response: {response_content[:500]}")
         
@@ -576,7 +572,7 @@ async def categorize_async(args: argparse.Namespace, kb: KnowledgeBase, logger) 
   cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name IN ('chunks', 'docs')")
   table = cursor.fetchone()
   if not table:
-    return f"Error: No 'chunks' or 'docs' table found in database"
+    return "Error: No 'chunks' or 'docs' table found in database"
   
   table_name = table[0]
   

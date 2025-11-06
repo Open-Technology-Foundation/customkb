@@ -6,7 +6,7 @@ like XML, JSON, Markdown, and plain text for feeding to LLMs.
 """
 
 from abc import ABC, abstractmethod
-from typing import Dict, List, Any, Optional, Tuple
+from typing import List, Optional, Tuple
 import json
 import xml.sax.saxutils
 from utils.logging_config import get_logger
@@ -397,7 +397,7 @@ def format_references(references: List[Tuple], format_type: str = 'xml',
         content, filename = file_data
       else:
         content = file_data
-        filename = f"context_file.txt"
+        filename = "context_file.txt"
       content_parts.append(formatter.format_context_file(content, filename))
   
   # Track document grouping

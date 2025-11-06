@@ -10,7 +10,6 @@ import os
 import json
 import numpy as np
 from typing import List, Tuple, Optional, Dict, Any
-from pathlib import Path
 
 # Load FAISS with proper GPU initialization
 from utils.faiss_loader import get_faiss

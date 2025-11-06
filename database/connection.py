@@ -8,7 +8,7 @@ and connection lifecycle management.
 
 import sqlite3
 from contextlib import contextmanager
-from typing import Optional, Tuple, Any
+from typing import Any
 from pathlib import Path
 
 from utils.logging_config import get_logger
@@ -211,7 +211,7 @@ def database_connection(kb: Any):
     if kb.sql_connection:
       kb.sql_connection.commit()
     
-  except Exception as e:
+  except Exception:
     # Rollback on error
     if hasattr(kb, 'sql_connection') and kb.sql_connection:
       try:

@@ -7,10 +7,8 @@ with unified interface and error handling.
 """
 
 import os
-import sys
 import asyncio
-from typing import List, Optional, Dict, Any
-import time
+from typing import List, Any
 
 from openai import OpenAI, AsyncOpenAI
 from utils.logging_config import get_logger
@@ -131,7 +129,7 @@ class OpenAIProvider(EmbeddingProvider):
       
     except asyncio.TimeoutError as e:
       logger.error(f"OpenAI API timeout: {e}")
-      raise APIError(f"Failed to get OpenAI embeddings: Request timed out after 300 seconds") from e
+      raise APIError("Failed to get OpenAI embeddings: Request timed out after 300 seconds") from e
     except Exception as e:
       logger.error(f"OpenAI API error: {e}")
       raise APIError(f"Failed to get OpenAI embeddings: {e}") from e
@@ -156,7 +154,7 @@ class OpenAIProvider(EmbeddingProvider):
       
     except asyncio.TimeoutError as e:
       logger.error(f"OpenAI sync API timeout: {e}")
-      raise APIError(f"Failed to get OpenAI embedding: Request timed out after 300 seconds") from e
+      raise APIError("Failed to get OpenAI embedding: Request timed out after 300 seconds") from e
     except Exception as e:
       logger.error(f"OpenAI sync API error: {e}")
       raise APIError(f"Failed to get OpenAI embedding: {e}") from e

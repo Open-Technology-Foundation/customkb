@@ -10,11 +10,11 @@ import shutil
 import configparser
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List
 
 from utils.logging_config import get_logger
 from config.config_manager import get_fq_cfg_filename, KnowledgeBase
-from database.index_manager import verify_indexes, create_missing_indexes
+from database.index_manager import create_missing_indexes
 
 logger = get_logger(__name__)
 
@@ -479,7 +479,7 @@ def process_optimize(args, logger) -> str:
         configs = [potential_path]
       else:
         # Fall back to checking if it's a local file or directory
-        logger.debug(f"Not found as KB name, checking local paths")
+        logger.debug("Not found as KB name, checking local paths")
         logger.debug(f"Is file? {os.path.isfile(args.target)}")
         logger.debug(f"Is dir? {os.path.isdir(args.target)}")
         

@@ -6,7 +6,7 @@ Handles loading, validating, and resolving AI model configurations.
 
 import os
 import json
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 
 from utils.logging_config import get_logger
 

@@ -15,12 +15,11 @@ All imports below will trigger deprecation warnings after 2025-08-30.
 
 import warnings
 import argparse
-import asyncio
 import numpy as np
 from typing import List, Tuple, Dict, Any, Optional, Set
 
-from utils.logging_config import setup_logging, get_logger, elapsed_time
-from config.config_manager import KnowledgeBase, get_fq_cfg_filename
+from utils.logging_config import get_logger
+from config.config_manager import KnowledgeBase
 
 # Import from new refactored modules
 from .search import (

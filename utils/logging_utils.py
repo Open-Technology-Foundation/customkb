@@ -13,7 +13,7 @@ import os
 import psutil
 import configparser
 import json
-from typing import Optional, Dict, Any, Union, Tuple
+from typing import Optional, Dict, Any, Tuple
 
 # Note: Global logger removed - use get_logger(__name__) in each module
 

@@ -4,7 +4,7 @@ Unit tests for consecutive document formatting in different formats.
 
 import unittest
 from unittest.mock import Mock
-from query.formatters import get_formatter, MarkdownFormatter
+from query.formatters import MarkdownFormatter
 from query.query_manager import build_reference_string
 
 

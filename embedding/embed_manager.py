@@ -9,18 +9,14 @@ Handles the generation and storage of vector embeddings with:
 
 import os
 import sys
-import time
 import numpy as np
 import argparse
 import asyncio
 import hashlib
 import json
-import threading
-import atexit
-from typing import List, Tuple, Optional, Dict, Any, Set
-from concurrent.futures import ThreadPoolExecutor
+from typing import List, Optional, Dict, Set
 
-from utils.logging_utils import setup_logging, get_logger, time_to_finish
+from utils.logging_utils import get_logger, time_to_finish
 from config.config_manager import KnowledgeBase, get_fq_cfg_filename
 from database.db_manager import connect_to_database, close_database
 
@@ -37,7 +33,7 @@ try:
   GOOGLE_AI_AVAILABLE = True
 except ImportError:
   GOOGLE_AI_AVAILABLE = False
-from utils.security_utils import validate_api_key, safe_log_error
+from utils.security_utils import validate_api_key
 
 # Import cache manager from cache module
 from embedding.cache import CacheThreadManager, cache_manager
@@ -440,7 +436,7 @@ async def process_embedding_batch_async(kb: KnowledgeBase, chunks: List[str]) ->
         safe_log_error(f"Retry attempt {tries} for model {kb.vector_model}")
         tries += 1
         if tries > max_tries:
-          safe_log_error(f"Max retries reached for sub-batch. Skipping batch.")
+          safe_log_error("Max retries reached for sub-batch. Skipping batch.")
           safe_log_error(f"Failed after {tries} attempts with model {kb.vector_model}")
           # Skip this batch instead of exiting the program
           break
@@ -544,7 +540,7 @@ async def process_batch_and_update(kb: KnowledgeBase, index: faiss.IndexIDMap,
     embeddings_list = await process_embedding_batch_async(kb, chunks)
     
     if not embeddings_list:
-      logger.warning(f"No embeddings were generated for batch")
+      logger.warning("No embeddings were generated for batch")
       return set()
     
     # Add embeddings to index
@@ -671,7 +667,7 @@ def process_embeddings(args: argparse.Namespace, logger) -> str:
   # Configure cache manager with KB settings
   configure_cache_manager(kb)
 
-  from utils.logging_utils import log_model_operation, OperationLogger
+  from utils.logging_utils import log_model_operation
   
   # Log embedding operation start
   log_model_operation(logger, "embedding_start", kb.vector_model,
@@ -697,7 +693,7 @@ def process_embeddings(args: argparse.Namespace, logger) -> str:
   rows = kb.sql_cursor.fetchall()
   if not rows:
     close_database(kb)
-    return f"No rows were found to embed."
+    return "No rows were found to embed."
 
   logger.info(f"{len(rows)} found for embedding.")
 

@@ -10,7 +10,7 @@ import json
 import sqlite3
 import sys
 from pathlib import Path
-from typing import Optional, List, Dict, Any
+from typing import List, Dict, Any
 
 from utils.logging_config import get_logger
 
@@ -70,7 +70,7 @@ def validate_file_path(filepath: str, allowed_extensions: List[str] = None,
       path_parts = Path(clean_path).parts
       if any(part == '..' for part in path_parts):
         raise ValueError("Invalid file path: path traversal detected")
-    except (OSError, ValueError) as e:
+    except (OSError, ValueError):
       # If path parsing fails, it might be malformed
       if '..' in clean_path and ('/..' in clean_path or '../' in clean_path or '\\..\\' in clean_path or clean_path.startswith('..')):
         raise ValueError("Invalid file path: path traversal detected")

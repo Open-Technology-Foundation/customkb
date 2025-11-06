@@ -6,7 +6,6 @@ Test security utilities - fixed to match current API.
 import os
 import pytest
 import tempfile
-from pathlib import Path
 
 from utils.security_utils import validate_file_path, validate_safe_path, validate_api_key, sanitize_query_text, mask_sensitive_data
 

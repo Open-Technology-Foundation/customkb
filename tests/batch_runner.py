@@ -9,10 +9,9 @@ import subprocess
 import argparse
 import time
 import psutil
-import os
 import gc
 from pathlib import Path
-from typing import List, Dict, Tuple, Optional
+from typing import Dict, Tuple
 import json
 
 

@@ -7,10 +7,7 @@ prompt templates, and model-specific formatting.
 """
 
 import os
-import sys
-import asyncio
-import json
-from typing import List, Dict, Any, Optional, Tuple
+from typing import List, Dict, Any
 
 from openai import OpenAI, AsyncOpenAI
 from anthropic import Anthropic, AsyncAnthropic
@@ -382,7 +379,8 @@ async def generate_openai_response(messages: List[Dict[str, Any]], model: str,
       try:
         error_detail = e.response.json()
         error_msg = f"{error_msg} - Details: {error_detail}"
-      except:
+      except (ValueError, AttributeError, TypeError) as json_err:
+        logger.debug(f"Could not parse error response as JSON: {json_err}")
         pass
     raise APIError(f"OpenAI request failed for model {model}: {error_msg}") from e
 

@@ -7,19 +7,15 @@ import pytest
 import time
 import psutil
 import os
-import tempfile
 import sqlite3
-import pickle
 import numpy as np
 from unittest.mock import patch, Mock
-from typing import List, Tuple
 
 from config.config_manager import KnowledgeBase
 from embedding.bm25_manager import (
   build_bm25_index, 
   load_bm25_index, 
-  get_bm25_scores,
-  ensure_bm25_index
+  get_bm25_scores
 )
 from query.query_manager import perform_hybrid_search
 from utils.text_utils import tokenize_for_bm25
@@ -163,7 +159,6 @@ enable_hybrid_search = true
   
   def test_bm25_index_memory_usage(self, temp_data_manager):
     """Test BM25 index memory usage during building and loading."""
-    import psutil
     
     process = psutil.Process()
     initial_memory = process.memory_info().rss
@@ -370,7 +365,6 @@ enable_hybrid_search = true
   
   def test_concurrent_bm25_search_performance(self, temp_data_manager):
     """Test BM25 search performance under concurrent load."""
-    import asyncio
     import threading
     
     kb_dir = temp_data_manager.create_temp_dir()
@@ -531,7 +525,7 @@ enable_hybrid_search = true
       filled_terms = random.sample(terms, min(3, len(terms)))
       try:
         text = pattern.format(*filled_terms)
-      except (IndexError, KeyError) as e:
+      except (IndexError, KeyError):
         # Not enough terms for pattern or format error
         text = f"Document {i} about machine learning and artificial intelligence algorithms."
       
@@ -663,7 +657,6 @@ vector_weight = {vector_weight}
   
   def test_hybrid_search_memory_efficiency(self, temp_data_manager):
     """Test memory efficiency of hybrid search operations."""
-    import psutil
     
     process = psutil.Process()
     initial_memory = process.memory_info().rss
@@ -847,7 +840,6 @@ class TestBM25TokenizationPerformance:
   
   def test_tokenization_memory_usage(self):
     """Test memory usage during tokenization operations."""
-    import psutil
     
     process = psutil.Process()
     initial_memory = process.memory_info().rss

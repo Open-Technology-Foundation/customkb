@@ -6,13 +6,11 @@ import pytest
 import tempfile
 import os
 import sqlite3
-import shutil
 import sys
 import gc
 import psutil
 from pathlib import Path
 from unittest.mock import Mock, patch, AsyncMock
-from typing import Dict, Any, List
 
 # Add project root to Python path for imports
 project_root = Path(__file__).parent.parent
@@ -189,7 +187,6 @@ def temp_config_file(temp_data_manager, sample_config_content, monkeypatch):
 def temp_kb_setup(temp_data_manager, sample_config_content):
   """Create a complete KB setup in temporary VECTORDBS."""
   import tempfile
-  from unittest.mock import patch
   
   # Create temporary VECTORDBS directory
   temp_vectordbs = tempfile.mkdtemp(prefix='test_vectordbs_')

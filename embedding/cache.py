@@ -13,10 +13,8 @@ import threading
 import atexit
 from typing import List, Optional, Dict, Any
 from concurrent.futures import ThreadPoolExecutor
-from pathlib import Path
 
 from utils.logging_config import get_logger
-from utils.exceptions import CacheError
 
 logger = get_logger(__name__)
 

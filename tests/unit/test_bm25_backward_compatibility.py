@@ -3,10 +3,8 @@ Backward compatibility tests for BM25 integration.
 Ensures that existing functionality works with and without BM25 features.
 """
 
-import pytest
 import os
 import sqlite3
-import tempfile
 from unittest.mock import patch, Mock
 
 from config.config_manager import KnowledgeBase
@@ -120,7 +118,6 @@ db_max_tokens = 150
       
       # Test text processing without BM25
       from database.db_manager import init_text_splitter
-      from utils.text_utils import enhanced_clean_text
       
       splitter = init_text_splitter(kb, 'text')
       stop_words = set(['the', 'a', 'an', 'and', 'or', 'but'])

@@ -6,7 +6,7 @@ Provides realistic test data for databases, configurations, and API responses.
 import json
 import tempfile
 import os
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any
 from pathlib import Path
 
 

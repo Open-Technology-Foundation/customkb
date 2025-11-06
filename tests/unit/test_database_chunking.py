@@ -7,8 +7,7 @@ Tests text chunking, file type detection, and chunk optimization.
 
 import os
 import unittest
-from unittest.mock import Mock, patch, MagicMock
-from pathlib import Path
+from unittest.mock import Mock, patch
 
 import sys
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))

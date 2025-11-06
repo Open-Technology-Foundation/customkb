@@ -9,7 +9,7 @@ search execution, context assembly, and response generation.
 import os
 import asyncio
 import argparse
-from typing import List, Tuple, Any, Optional
+from typing import List, Tuple, Any
 
 from utils.logging_config import get_logger
 from utils.text_utils import clean_text

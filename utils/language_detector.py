@@ -17,7 +17,7 @@ try:
 except ImportError:
   HAS_LANGDETECT = False
   
-from database.db_manager import language_codes, get_iso_code
+from database.db_manager import get_iso_code
 
 logger = logging.getLogger(__name__)
 

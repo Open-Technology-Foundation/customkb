@@ -8,10 +8,8 @@ and parallel batch processing for efficient embedding generation.
 
 import os
 import json
-import pickle
 import asyncio
 from typing import List, Dict, Any, Tuple, Optional
-from pathlib import Path
 
 import numpy as np
 
@@ -21,7 +19,6 @@ faiss, FAISS_GPU_AVAILABLE = get_faiss()
 
 from utils.logging_config import get_logger
 from utils.exceptions import ProcessingError, BatchError
-from .cache import save_embedding_to_cache, get_cached_embedding
 
 logger = get_logger(__name__)
 

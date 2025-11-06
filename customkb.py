@@ -30,7 +30,6 @@ Run 'customkb <command> -h' for detailed help on each command.
 import sys
 import os
 import argparse
-import textwrap
 import signal
 import time
 from pathlib import Path
@@ -51,13 +50,12 @@ if str(project_root) not in sys.path:
   sys.path.insert(0, str(project_root))
 
 # Import modules
-from utils.logging_config import setup_logging, dashes, elapsed_time
+from utils.logging_config import setup_logging, elapsed_time
 from config.config_manager import get_fq_cfg_filename, KnowledgeBase
 from database.db_manager import process_database
 from embedding.embed_manager import process_embeddings
 from query.query_manager import process_query
 from models.model_manager import get_canonical_model
-from utils.text_utils import get_env
 from utils.optimization_manager import process_optimize
 from database.index_manager import process_verify_indexes
 
@@ -400,7 +398,7 @@ Examples:
     )
     logger = logging.getLogger(__name__)
     
-    logger.debug(f"Optimize command with no config_file")
+    logger.debug("Optimize command with no config_file")
     logger.debug(f"Args: {args}")
     
     # Set target from config_file for the optimization manager
@@ -493,7 +491,7 @@ Examples:
           sys.exit(1)
       result = process_query(args, logger)
       print(result)  # Keep print for user output
-      logger.debug(f"Query command completed")
+      logger.debug("Query command completed")
     elif args.command == 'edit':
       result = edit_config(args, logger)
       if result == 0:
@@ -504,16 +502,16 @@ Examples:
     elif args.command == 'bm25':
       result = rebuild_bm25_index(args, logger)
       print(result)  # Keep print for user output
-      logger.debug(f"BM25 command completed")
+      logger.debug("BM25 command completed")
     elif args.command == 'verify-indexes':
       result = process_verify_indexes(args, logger)
       print(result)  # Keep print for user output
-      logger.debug(f"Verify-indexes command completed")
+      logger.debug("Verify-indexes command completed")
     elif args.command == 'categorize':
       from categorize.categorize_manager import process_categorize
       result = process_categorize(args, logger)
       print(result)  # Keep print for user output
-      logger.debug(f"Categorize command completed")
+      logger.debug("Categorize command completed")
     else:
       logger.error(f'Unknown command: {args.command}')
       sys.exit(1)

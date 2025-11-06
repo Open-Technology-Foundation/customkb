@@ -5,14 +5,13 @@ This module provides functionality to monitor and limit system resource usage
 to prevent crashes and ensure stable operation.
 """
 
-import os
 import sys
 import psutil
 import resource
 import threading
 import time
 import signal
-from typing import Dict, Optional, Tuple, Callable, Any
+from typing import Dict, Optional, Tuple, Callable
 from contextlib import contextmanager
 
 from utils.logging_config import get_logger

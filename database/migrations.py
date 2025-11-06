@@ -6,7 +6,7 @@ This module handles schema migrations and upgrades for the database.
 """
 
 import sqlite3
-from typing import List, Dict, Any, Optional
+from typing import Dict, Any
 from datetime import datetime
 
 from utils.logging_config import get_logger

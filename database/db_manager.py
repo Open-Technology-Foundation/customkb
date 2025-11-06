@@ -36,12 +36,11 @@ import sqlite3
 import argparse
 import re
 import warnings
-from typing import List, Optional, Dict, Any, Tuple, Set
+from typing import Dict, Any
 from contextlib import contextmanager
-from datetime import datetime
 
-from utils.logging_config import setup_logging, get_logger, elapsed_time, time_to_finish
-from utils.text_utils import get_files, split_filepath, clean_text, enhanced_clean_text, nlp
+from utils.logging_config import get_logger, time_to_finish
+from utils.text_utils import get_files, split_filepath, enhanced_clean_text, nlp
 from config.config_manager import KnowledgeBase, get_fq_cfg_filename
 
 # Import from new refactored modules
@@ -141,14 +140,8 @@ __all__ = [
 # Import NLTK for text processing
 import nltk
 from nltk.corpus import stopwords
-from nltk.tokenize import word_tokenize
 from nltk.stem import WordNetLemmatizer
 import spacy
-from langchain_text_splitters import (
-  RecursiveCharacterTextSplitter,
-  MarkdownTextSplitter,
-  Language
-)
 
 # Set up NLTK data path
 NLTK_DATA = os.getenv('NLTK_DATA')
@@ -468,7 +461,6 @@ def process_database(args: argparse.Namespace, logger) -> str:
         
         # Efficiently query which file paths already exist
         if canonical_paths:
-          from utils.security_utils import safe_sql_in_query
           # Convert to list of strings (safe for IN query)
           safe_paths = [str(path) for path in canonical_paths]
           query_template = "SELECT DISTINCT sourcedoc FROM docs WHERE sourcedoc IN ({placeholders})"
@@ -639,7 +631,7 @@ def process_text_file(kb: KnowledgeBase, sourcefile: str, splitter: Any,
     logger.info(f"Skipping {sourcefile} (already in database, use --force to reprocess)")
     return False
     
-  from utils.logging_config import log_file_operation, log_operation_error, OperationLogger
+  from utils.logging_config import log_file_operation, log_operation_error
   
   # Log file processing start with enhanced context
   log_file_operation(logger, "processing_start", sourcefile, 

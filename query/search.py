@@ -9,7 +9,7 @@ category filtering, and document retrieval operations.
 import os
 import numpy as np
 import sqlite3
-from typing import List, Tuple, Optional, Any, Set
+from typing import List, Tuple, Optional, Any
 
 # Load FAISS with proper GPU initialization
 from utils.faiss_loader import get_faiss

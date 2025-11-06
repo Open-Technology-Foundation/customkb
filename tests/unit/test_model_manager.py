@@ -6,9 +6,7 @@ Tests model resolution, alias handling, and Models.json parsing.
 import pytest
 import os
 import json
-import tempfile
-from unittest.mock import patch, Mock
-from pathlib import Path
+from unittest.mock import patch
 
 from models.model_manager import get_canonical_model
 
@@ -246,7 +244,6 @@ class TestGetCanonicalModel:
           mock_join.return_value = "/project/Models.json"
           
           # Import to trigger path calculation
-          from models import model_manager
           
           # Should call dirname twice (once for file, once for parent)
           assert mock_dirname.call_count >= 1
