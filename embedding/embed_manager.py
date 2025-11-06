@@ -180,7 +180,7 @@ def configure_cache_manager(kb: 'KnowledgeBase') -> None:
   cache_manager.configure(
     max_workers=cache_thread_pool_size,
     memory_cache_size=memory_cache_size,
-    memory_limit_mb=cache_memory_limit_mb
+    max_memory_mb=cache_memory_limit_mb
   )
 
 def get_cache_key(text: str, model: str) -> str:
