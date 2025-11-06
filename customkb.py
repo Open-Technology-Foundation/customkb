@@ -453,68 +453,76 @@ Examples:
     print("Error: Failed to initialize logging system. Application cannot continue.", file=sys.stderr)
     sys.exit(1)
 
-  # Execute the appropriate command
+  # Execute the appropriate command using pattern matching (Python 3.10+)
   try:
-    if args.command == 'database':
-      result = process_database(args, logger)
-      print(result)  # Keep print for user output
-      logger.debug(f"Database command completed: {result}")
-    elif args.command == 'embed':
-      result = process_embeddings(args, logger)
-      print(result)  # Keep print for user output
-      logger.debug(f"Embed command completed: {result}")
-    elif args.command == 'query':
-      # Set environment variables from command line arguments
-      if args.model:
-        args.model = get_canonical_model(args.model)['model']
-        os.environ['QUERY_MODEL'] = args.model
-      if args.top_k:
-        os.environ['QUERY_TOP_K'] = str(args.top_k)
-      if args.context_scope:
-        os.environ['QUERY_CONTEXT_SCOPE'] = str(args.context_scope)
-      if args.temperature:
-        os.environ['QUERY_TEMPERATURE'] = args.temperature
-      if args.max_tokens:
-        os.environ['QUERY_MAX_TOKENS'] = args.max_tokens
-      if args.role:
-        os.environ['QUERY_ROLE'] = args.role
-      if args.prompt_template:
-        # Validate prompt template
-        from query.prompt_templates import validate_template_name
-        if not validate_template_name(args.prompt_template):
-          logger.error(f"Invalid prompt template: {args.prompt_template}")
-          from query.prompt_templates import list_templates
-          templates = list_templates()
-          logger.info("Available templates:")
-          for name, desc in templates.items():
-            logger.info(f"  {name}: {desc}")
-          sys.exit(1)
-      result = process_query(args, logger)
-      print(result)  # Keep print for user output
-      logger.debug("Query command completed")
-    elif args.command == 'edit':
-      result = edit_config(args, logger)
-      if result == 0:
-        logger.info("Configuration file edited successfully")
-      else:
-        logger.error("Failed to edit configuration file")
-      sys.exit(result)
-    elif args.command == 'bm25':
-      result = rebuild_bm25_index(args, logger)
-      print(result)  # Keep print for user output
-      logger.debug("BM25 command completed")
-    elif args.command == 'verify-indexes':
-      result = process_verify_indexes(args, logger)
-      print(result)  # Keep print for user output
-      logger.debug("Verify-indexes command completed")
-    elif args.command == 'categorize':
-      from categorize.categorize_manager import process_categorize
-      result = process_categorize(args, logger)
-      print(result)  # Keep print for user output
-      logger.debug("Categorize command completed")
-    else:
-      logger.error(f'Unknown command: {args.command}')
-      sys.exit(1)
+    match args.command:
+      case 'database':
+        result = process_database(args, logger)
+        print(result)  # Keep print for user output
+        logger.debug(f"Database command completed: {result}")
+
+      case 'embed':
+        result = process_embeddings(args, logger)
+        print(result)  # Keep print for user output
+        logger.debug(f"Embed command completed: {result}")
+
+      case 'query':
+        # Set environment variables from command line arguments
+        if args.model:
+          args.model = get_canonical_model(args.model)['model']
+          os.environ['QUERY_MODEL'] = args.model
+        if args.top_k:
+          os.environ['QUERY_TOP_K'] = str(args.top_k)
+        if args.context_scope:
+          os.environ['QUERY_CONTEXT_SCOPE'] = str(args.context_scope)
+        if args.temperature:
+          os.environ['QUERY_TEMPERATURE'] = args.temperature
+        if args.max_tokens:
+          os.environ['QUERY_MAX_TOKENS'] = args.max_tokens
+        if args.role:
+          os.environ['QUERY_ROLE'] = args.role
+        if args.prompt_template:
+          # Validate prompt template
+          from query.prompt_templates import validate_template_name
+          if not validate_template_name(args.prompt_template):
+            logger.error(f"Invalid prompt template: {args.prompt_template}")
+            from query.prompt_templates import list_templates
+            templates = list_templates()
+            logger.info("Available templates:")
+            for name, desc in templates.items():
+              logger.info(f"  {name}: {desc}")
+            sys.exit(1)
+        result = process_query(args, logger)
+        print(result)  # Keep print for user output
+        logger.debug("Query command completed")
+
+      case 'edit':
+        result = edit_config(args, logger)
+        if result == 0:
+          logger.info("Configuration file edited successfully")
+        else:
+          logger.error("Failed to edit configuration file")
+        sys.exit(result)
+
+      case 'bm25':
+        result = rebuild_bm25_index(args, logger)
+        print(result)  # Keep print for user output
+        logger.debug("BM25 command completed")
+
+      case 'verify-indexes':
+        result = process_verify_indexes(args, logger)
+        print(result)  # Keep print for user output
+        logger.debug("Verify-indexes command completed")
+
+      case 'categorize':
+        from categorize.categorize_manager import process_categorize
+        result = process_categorize(args, logger)
+        print(result)  # Keep print for user output
+        logger.debug("Categorize command completed")
+
+      case _:
+        logger.error(f'Unknown command: {args.command}')
+        sys.exit(1)
   except Exception as e:
     logger.error(f"Application error: {e}")
     sys.exit(1)

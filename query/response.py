@@ -600,19 +600,23 @@ async def generate_ai_response(kb: Any, reference_string: str, query_text: str,
     max_tokens = getattr(kb, 'query_max_tokens', 2000)
     
     logger.info(f"Generating response with {provider} model: {model_name}")
-    
-    # Route to appropriate provider
-    if provider == 'anthropic':
-      response = await generate_anthropic_response(messages, model_name, temperature, max_tokens)
-    elif provider == 'google':
-      response = await generate_google_response(messages, model_name, temperature, max_tokens)
-    elif provider == 'xai':
-      response = await generate_xai_response(messages, model_name, temperature, max_tokens)
-    elif provider == 'local' or 'llama' in model_name.lower():
-      response = await generate_llama_response(messages, model_name, temperature, max_tokens)
-    else:
-      # Default to OpenAI
-      response = await generate_openai_response(messages, model_name, temperature, max_tokens)
+
+    # Route to appropriate provider using pattern matching (Python 3.10+)
+    match provider:
+      case 'anthropic':
+        response = await generate_anthropic_response(messages, model_name, temperature, max_tokens)
+      case 'google':
+        response = await generate_google_response(messages, model_name, temperature, max_tokens)
+      case 'xai':
+        response = await generate_xai_response(messages, model_name, temperature, max_tokens)
+      case 'local':
+        response = await generate_llama_response(messages, model_name, temperature, max_tokens)
+      case _ if 'llama' in model_name.lower():
+        # Handle llama models even if provider isn't explicitly 'local'
+        response = await generate_llama_response(messages, model_name, temperature, max_tokens)
+      case _:
+        # Default to OpenAI for all other providers
+        response = await generate_openai_response(messages, model_name, temperature, max_tokens)
     
     if not response:
       raise ModelError(model_name, "Empty response from AI model")
