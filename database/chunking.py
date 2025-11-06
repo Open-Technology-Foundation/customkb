@@ -95,8 +95,11 @@ def init_text_splitter(kb: Any, file_type: str = 'text') -> Any:
       ChunkingError: If splitter initialization fails
   """
   try:
-    chunk_size = getattr(kb, 'chunk_size', 500)
-    chunk_overlap = getattr(kb, 'chunk_overlap', 50)
+    # Use canonical configuration parameters
+    chunk_size = getattr(kb, 'db_max_tokens', 200)
+    max_overlap = getattr(kb, 'max_chunk_overlap', 100)
+    min_tokens = getattr(kb, 'db_min_tokens', 100)
+    chunk_overlap = min(max_overlap, min_tokens // 2)
     
     if file_type == 'markdown':
       logger.debug(f"Initializing Markdown splitter (chunk_size={chunk_size})")
@@ -165,8 +168,11 @@ def get_language_specific_splitter(file_path: str, kb: Any) -> Any | None:
   if extension in LANGUAGE_MAP:
     try:
       language = LANGUAGE_MAP[extension]
-      chunk_size = getattr(kb, 'chunk_size', 500)
-      chunk_overlap = getattr(kb, 'chunk_overlap', 50)
+      # Use canonical configuration parameters
+      chunk_size = getattr(kb, 'db_max_tokens', 200)
+      max_overlap = getattr(kb, 'max_chunk_overlap', 100)
+      min_tokens = getattr(kb, 'db_min_tokens', 100)
+      chunk_overlap = min(max_overlap, min_tokens // 2)
       
       logger.debug(f"Creating {language} splitter for {extension}")
       

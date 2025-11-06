@@ -77,9 +77,10 @@ class TestInitTextSplitter:
     """Test HTML text splitter initialization."""
     kb = KnowledgeBase(temp_config_file)
     splitter = init_text_splitter(kb, 'html')
-    
-    # Should return a callable function for HTML processing
-    assert callable(splitter)
+
+    # Should return RecursiveCharacterTextSplitter
+    assert hasattr(splitter, '_chunk_size')
+    assert splitter._chunk_size == kb.db_max_tokens
   
   def test_default_text_splitter(self, temp_config_file):
     """Test default text splitter initialization."""

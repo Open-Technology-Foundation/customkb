@@ -95,12 +95,13 @@ class TestFileTypeDetection(unittest.TestCase):
 
 class TestTextSplitter(unittest.TestCase):
   """Test text splitter initialization."""
-  
+
   def setUp(self):
     """Set up test fixtures."""
     self.kb = Mock()
-    self.kb.chunk_size = 500
-    self.kb.chunk_overlap = 50
+    self.kb.db_max_tokens = 500
+    self.kb.max_chunk_overlap = 100
+    self.kb.db_min_tokens = 100
   
   def test_init_markdown_splitter(self):
     """Test Markdown splitter initialization."""
@@ -138,7 +139,7 @@ class TestTextSplitter(unittest.TestCase):
   
   def test_init_splitter_error(self):
     """Test splitter initialization error handling."""
-    self.kb.chunk_size = None  # Invalid configuration
+    self.kb.db_max_tokens = None  # Invalid configuration
     
     with self.assertRaises(ChunkingError) as cm:
       init_text_splitter(self.kb, 'text')
@@ -148,12 +149,13 @@ class TestTextSplitter(unittest.TestCase):
 
 class TestLanguageSpecificSplitter(unittest.TestCase):
   """Test language-specific code splitting."""
-  
+
   def setUp(self):
     """Set up test fixtures."""
     self.kb = Mock()
-    self.kb.chunk_size = 500
-    self.kb.chunk_overlap = 50
+    self.kb.db_max_tokens = 500
+    self.kb.max_chunk_overlap = 100
+    self.kb.db_min_tokens = 100
   
   def test_python_splitter(self):
     """Test Python-specific splitter."""
@@ -173,7 +175,7 @@ class TestLanguageSpecificSplitter(unittest.TestCase):
   @patch('database.chunking.logger')
   def test_splitter_creation_error(self, mock_logger):
     """Test error handling in splitter creation."""
-    self.kb.chunk_size = -1  # Invalid
+    self.kb.db_max_tokens = -1  # Invalid
     
     splitter = get_language_specific_splitter('script.py', self.kb)
     self.assertIsNone(splitter)
@@ -182,12 +184,13 @@ class TestLanguageSpecificSplitter(unittest.TestCase):
 
 class TestTextSplitting(unittest.TestCase):
   """Test text splitting functionality."""
-  
+
   def setUp(self):
     """Set up test fixtures."""
     self.kb = Mock()
-    self.kb.chunk_size = 100
-    self.kb.chunk_overlap = 20
+    self.kb.db_max_tokens = 100
+    self.kb.max_chunk_overlap = 100
+    self.kb.db_min_tokens = 40
     self.splitter = Mock()
   
   def test_split_text_basic(self):
