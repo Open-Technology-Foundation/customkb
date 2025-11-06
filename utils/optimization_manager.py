@@ -39,7 +39,7 @@ def get_system_memory_gb() -> float:
       return 16  # Safe default
 
 
-def get_optimized_settings(memory_gb: float = None) -> Dict:
+def get_optimized_settings(memory_gb: float = None) -> dict:
   """
   Get optimized settings based on available system memory and GPU.
   
@@ -236,7 +236,7 @@ def backup_config(config_path: str) -> str:
   return backup_path
 
 
-def optimize_config(config_path: str, dry_run: bool = False, memory_gb: float = None, check_indexes: bool = True) -> Dict:
+def optimize_config(config_path: str, dry_run: bool = False, memory_gb: float = None, check_indexes: bool = True) -> dict:
   """Apply performance optimizations to a configuration file."""
   logger.info(f"Processing: {config_path}")
   
@@ -329,7 +329,7 @@ def optimize_config(config_path: str, dry_run: bool = False, memory_gb: float = 
   return changes
 
 
-def analyze_kb_size(config_path: str) -> Dict:
+def analyze_kb_size(config_path: str) -> dict:
   """Analyze the size of a knowledgebase."""
   kb_dir = os.path.dirname(config_path)
   stats = {
