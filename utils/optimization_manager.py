@@ -13,6 +13,7 @@ from pathlib import Path
 
 
 from utils.logging_config import get_logger
+from utils.enums import OptimizationTier
 from config.config_manager import get_fq_cfg_filename, KnowledgeBase
 from database.index_manager import create_missing_indexes
 
@@ -73,31 +74,32 @@ def get_optimized_settings(memory_gb: float = None) -> Dict:
     gpu_info = {'detected': False}
     gpu_memory_mb = 0
   
+  # Determine optimization tier based on memory
+  tier_enum = OptimizationTier.from_memory(memory_gb)
+  tier = tier_enum.value
+
   # Base settings that scale with memory
-  if memory_gb < 16:
-    # Low memory settings (conservative)
-    tier = "low"
-    memory_factor = 0.25
-    thread_factor = 0.5
-    batch_factor = 0.5
-  elif memory_gb < 64:
-    # Medium memory settings (balanced)
-    tier = "medium"
-    memory_factor = 0.5
-    thread_factor = 0.75
-    batch_factor = 0.75
-  elif memory_gb < 128:
-    # High memory settings (performance)
-    tier = "high"
-    memory_factor = 0.75
-    thread_factor = 1.0
-    batch_factor = 1.0
-  else:
-    # Very high memory settings (maximum performance)
-    tier = "very_high"
-    memory_factor = 1.0
-    thread_factor = 1.5
-    batch_factor = 1.5
+  match tier_enum:
+    case OptimizationTier.LOW:
+      # Low memory settings (conservative)
+      memory_factor = 0.25
+      thread_factor = 0.5
+      batch_factor = 0.5
+    case OptimizationTier.MEDIUM:
+      # Medium memory settings (balanced)
+      memory_factor = 0.5
+      thread_factor = 0.75
+      batch_factor = 0.75
+    case OptimizationTier.HIGH:
+      # High memory settings (performance)
+      memory_factor = 0.75
+      thread_factor = 1.0
+      batch_factor = 1.0
+    case OptimizationTier.VERY_HIGH:
+      # Very high memory settings (maximum performance)
+      memory_factor = 1.0
+      thread_factor = 1.5
+      batch_factor = 1.5
   
   # Calculate scaled values
   # Reduced base memory cache from 500000 to 200000 to prevent OOM
@@ -576,27 +578,34 @@ def process_optimize(args, logger) -> str:
     ])
     
     # Tier-specific recommendations
-    if settings_info['tier'] == 'low':
-      output.extend([
-        "\nLow Memory Tier (<16GB):",
-        "- Conservative settings to avoid memory pressure",
-        "- Consider upgrading RAM for better performance"
-      ])
-    elif settings_info['tier'] == 'medium':
-      output.extend([
-        "\nMedium Memory Tier (16-64GB):",
-        "- Balanced settings for good performance",
-        "- Suitable for most workloads"
-      ])
-    elif settings_info['tier'] == 'high':
-      output.extend([
-        "\nHigh Memory Tier (64-128GB):",
-        "- High performance settings",
-        "- Excellent for production workloads"
-      ])
-    else:
-      output.extend([
-        "\nVery High Memory Tier (>128GB):",
+    tier_value = settings_info['tier']
+    try:
+      tier_enum = OptimizationTier.from_string(tier_value)
+    except ValueError:
+      tier_enum = None
+
+    match tier_enum:
+      case OptimizationTier.LOW:
+        output.extend([
+          "\nLow Memory Tier (<16GB):",
+          "- Conservative settings to avoid memory pressure",
+          "- Consider upgrading RAM for better performance"
+        ])
+      case OptimizationTier.MEDIUM:
+        output.extend([
+          "\nMedium Memory Tier (16-64GB):",
+          "- Balanced settings for good performance",
+          "- Suitable for most workloads"
+        ])
+      case OptimizationTier.HIGH:
+        output.extend([
+          "\nHigh Memory Tier (64-128GB):",
+          "- High performance settings",
+          "- Excellent for production workloads"
+        ])
+      case OptimizationTier.VERY_HIGH | None:
+        output.extend([
+          "\nVery High Memory Tier (>128GB):",
         "- Maximum performance settings",
         "- Optimal for large-scale deployments"
       ])

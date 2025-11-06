@@ -10,6 +10,7 @@ from abc import ABC, abstractmethod
 import json
 import xml.sax.saxutils
 from utils.logging_config import get_logger
+from utils.enums import ReferenceFormat
 
 logger = get_logger(__name__)
 
@@ -340,49 +341,65 @@ class PlainTextFormatter(ReferenceFormatter):
     return content.rstrip() + "\n"
 
 
-def get_formatter(format_type: str) -> ReferenceFormatter:
+def get_formatter(format_type: str | ReferenceFormat) -> ReferenceFormatter:
   """
   Factory function to get appropriate formatter.
-  
+
   Args:
-      format_type: One of 'xml', 'json', 'markdown', 'plain'
-      
+      format_type: ReferenceFormat enum or string ('xml', 'json', 'markdown', 'plain')
+
   Returns:
       ReferenceFormatter instance
-      
+
   Raises:
       ValueError: If format_type is not supported
   """
+  # Convert string to enum if needed
+  if isinstance(format_type, str):
+    try:
+      format_enum = ReferenceFormat.from_string(format_type)
+    except ValueError:
+      # Fall back to direct string matching for legacy support
+      formatters_legacy = {
+        'xml': XMLFormatter,
+        'json': JSONFormatter,
+        'markdown': MarkdownFormatter,
+        'md': MarkdownFormatter,
+        'plain': PlainTextFormatter,
+        'text': PlainTextFormatter
+      }
+      format_lower = format_type.lower()
+      if format_lower not in formatters_legacy:
+        raise ValueError(f"Unsupported format type: {format_type}. Supported: {list(formatters_legacy.keys())}")
+      return formatters_legacy[format_lower]()
+  else:
+    format_enum = format_type
+
+  # Map enum to formatter classes
   formatters = {
-    'xml': XMLFormatter,
-    'json': JSONFormatter,
-    'markdown': MarkdownFormatter,
-    'md': MarkdownFormatter,  # Alias
-    'plain': PlainTextFormatter,
-    'text': PlainTextFormatter  # Alias
+    ReferenceFormat.XML: XMLFormatter,
+    ReferenceFormat.JSON: JSONFormatter,
+    ReferenceFormat.MARKDOWN: MarkdownFormatter,
+    ReferenceFormat.PLAIN: PlainTextFormatter,
   }
-  
-  format_lower = format_type.lower()
-  if format_lower not in formatters:
-    raise ValueError(f"Unsupported format type: {format_type}. Supported: {list(formatters.keys())}")
-  
-  return formatters[format_lower]()
+
+  return formatters[format_enum]()
 
 
-def format_references(references: list[Tuple], format_type: str = 'xml',
+def format_references(references: list[Tuple], format_type: str | ReferenceFormat = 'xml',
                      context_files: list[str] | None = None,
                      debug: bool = False) -> str:
   """
   Format references using the appropriate formatter.
-  
+
   This is a convenience function that creates a formatter and formats references.
-  
+
   Args:
       references: List of reference tuples (typically containing source, sid, content, metadata, etc.)
-      format_type: Output format ('xml', 'json', 'markdown', 'plain')
+      format_type: ReferenceFormat enum or string ('xml', 'json', 'markdown', 'plain')
       context_files: Optional list of context file contents
       debug: Whether to include debug information
-      
+
   Returns:
       Formatted reference string
   """
