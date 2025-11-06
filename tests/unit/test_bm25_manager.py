@@ -154,27 +154,24 @@ class TestBM25Manager:
     result = build_bm25_index(self.mock_kb)
     assert result is None
 
-  @patch('builtins.open', create=True)
-  @patch('pickle.load')
   @patch('os.path.exists')
-  def test_load_bm25_index_success(self, mock_exists, mock_pickle_load, mock_open):
-    """Test successful BM25 index loading."""
-    # Setup
-    mock_exists.return_value = True
-    mock_data = {
-      'bm25': Mock(),
-      'doc_ids': [1, 2, 3],
-      'total_docs': 3
-    }
-    mock_pickle_load.return_value = mock_data
-    mock_open.return_value.__enter__.return_value = Mock()
-    
+  def test_load_bm25_index_legacy_pickle_detected(self, mock_exists):
+    """Test that legacy pickle format triggers error message."""
+    # Setup - simulate old pickle file exists but no JSON metadata
+    def exists_side_effect(path):
+      if path.endswith('.bm25'):
+        return True  # Old pickle file exists
+      elif path.endswith('.bm25.json'):
+        return False  # No JSON metadata (indicates old format)
+      return False
+
+    mock_exists.side_effect = exists_side_effect
+
     # Execute
     result = load_bm25_index(self.mock_kb)
-    
+
     # Verify
-    assert result == mock_data
-    mock_pickle_load.assert_called_once()
+    assert result is None  # Should return None for legacy pickle files
 
   @patch('os.path.exists')
   def test_load_bm25_index_file_not_found(self, mock_exists):

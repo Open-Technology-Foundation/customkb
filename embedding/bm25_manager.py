@@ -157,30 +157,21 @@ def load_bm25_index(kb: 'KnowledgeBase') -> dict[str, Any] | None:
     except Exception as e:
       logger.warning(f"Failed to load NPZ format BM25 index: {e}")
 
-  # Backward compatibility: try loading old pickle format (version 1.0)
-  if os.path.exists(bm25_path):
-    try:
-      import pickle
-      with open(bm25_path, 'rb') as f:
-        bm25_data = pickle.load(f)
-
-      # Validate loaded data
-      required_keys = ['bm25', 'doc_ids', 'total_docs']
-      if not all(key in bm25_data for key in required_keys):
-        logger.error("Invalid BM25 index file: missing required keys")
-        return None
-
-      logger.info("Loaded BM25 index from legacy pickle format, migrating to NPZ...")
-
-      # Trigger rebuild to migrate to NPZ format
-      # This will happen automatically on next rebuild
-      logger.warning("Legacy pickle format detected. Consider rebuilding with 'customkb bm25 <kb_name> --force'")
-
-      return bm25_data
-
-    except Exception as e:
-      logger.error(f"Error loading legacy pickle BM25 index: {e}")
-      return None
+  # Legacy pickle format is no longer supported (removed for security)
+  # Check if there's an old pickle file that needs migration
+  if os.path.exists(bm25_path) and not os.path.exists(bm25_path.replace('.bm25', '.bm25.json')):
+    logger.error("=" * 70)
+    logger.error("LEGACY BM25 INDEX DETECTED")
+    logger.error("=" * 70)
+    logger.error(f"The BM25 index at {bm25_path} is in the old pickle format.")
+    logger.error("Pickle deserialization has been removed for security reasons.")
+    logger.error("")
+    logger.error("To migrate to the secure NPZ format, run:")
+    logger.error(f"  customkb bm25 <kb_name> --force")
+    logger.error("")
+    logger.error("This will rebuild the BM25 index in the new NPZ+JSON format.")
+    logger.error("=" * 70)
+    return None
 
   logger.debug(f"BM25 index not found at {bm25_path}")
   return None
