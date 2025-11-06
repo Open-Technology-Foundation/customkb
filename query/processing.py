@@ -9,7 +9,7 @@ search execution, context assembly, and response generation.
 import os
 import asyncio
 import argparse
-from typing import List, Tuple, Any
+from typing import Any
 
 from utils.logging_config import get_logger
 from utils.text_utils import clean_text
@@ -24,7 +24,7 @@ from .response import generate_ai_response
 logger = get_logger(__name__)
 
 
-def read_context_file(file_path: str) -> Tuple[str, str]:
+def read_context_file(file_path: str) -> tuple[str, str]:
   """
   Read additional context from a file.
   
@@ -49,8 +49,8 @@ def read_context_file(file_path: str) -> Tuple[str, str]:
     raise ProcessingError(f"Context file read failed: {e}") from e
 
 
-def build_reference_string(kb: Any, reference: List[List[Any]], 
-                          context_files_content: List[Tuple[str, str]] = None,
+def build_reference_string(kb: Any, reference: list[list[Any]], 
+                          context_files_content: list[tuple[str, str]] = None,
                           debug: bool = False, format_type: str = None) -> str:
   """
   Build a reference string from the retrieved documents.
@@ -93,8 +93,8 @@ def build_reference_string(kb: Any, reference: List[List[Any]],
     return build_simple_reference_string(reference, context_files_content)
 
 
-def build_simple_reference_string(reference: List[List[Any]], 
-                                 context_files_content: List[Tuple[str, str]] = None) -> str:
+def build_simple_reference_string(reference: list[list[Any]], 
+                                 context_files_content: list[tuple[str, str]] = None) -> str:
   """
   Build a simple text reference string as fallback.
   
@@ -348,7 +348,7 @@ def validate_query_args(args: argparse.Namespace) -> bool:
   return True
 
 
-def prepare_query_context(query_text: str, context_files: List[str] = None) -> Tuple[str, List[Tuple[str, str]]]:
+def prepare_query_context(query_text: str, context_files: list[str] = None) -> tuple[str, list[tuple[str, str]]]:
   """
   Prepare query context by combining query text with context files.
   
@@ -377,8 +377,8 @@ def prepare_query_context(query_text: str, context_files: List[str] = None) -> T
   return enhanced_query, context_files_content
 
 
-async def batch_process_queries(queries: List[str], config_file: str, 
-                               **kwargs) -> List[Tuple[str, str]]:
+async def batch_process_queries(queries: list[str], config_file: str, 
+                               **kwargs) -> list[tuple[str, str]]:
   """
   Process multiple queries in batch.
   

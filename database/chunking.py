@@ -6,7 +6,7 @@ This module handles breaking down documents into manageable chunks
 for processing and embedding.
 """
 
-from typing import List, Dict, Any, Optional
+from typing import Any
 from pathlib import Path
 
 from langchain_text_splitters import (
@@ -149,7 +149,7 @@ def init_text_splitter(kb: Any, file_type: str = 'text') -> Any:
     raise ChunkingError(f"Text splitter initialization failed: {e}") from e
 
 
-def get_language_specific_splitter(file_path: str, kb: Any) -> Optional[Any]:
+def get_language_specific_splitter(file_path: str, kb: Any) -> Any | None:
   """
   Get a language-specific code splitter if available.
   
@@ -182,7 +182,7 @@ def get_language_specific_splitter(file_path: str, kb: Any) -> Optional[Any]:
   return None
 
 
-def split_text(text: str, splitter: Any, metadata: Optional[Dict] = None) -> List[Dict]:
+def split_text(text: str, splitter: Any, metadata: Dict | None = None) -> list[Dict]:
   """
   Split text into chunks using the provided splitter.
   
@@ -229,7 +229,7 @@ def split_text(text: str, splitter: Any, metadata: Optional[Dict] = None) -> Lis
     raise ChunkingError(f"Failed to split text: {e}") from e
 
 
-def calculate_chunk_statistics(chunks: List[Dict]) -> Dict[str, Any]:
+def calculate_chunk_statistics(chunks: list[Dict]) -> dict[str, Any]:
   """
   Calculate statistics about chunks.
   
@@ -288,7 +288,7 @@ def optimize_chunk_size(text_length: int, target_chunks: int = 10) -> int:
   return chunk_size
 
 
-def merge_small_chunks(chunks: List[Dict], min_size: int = 100) -> List[Dict]:
+def merge_small_chunks(chunks: list[Dict], min_size: int = 100) -> list[Dict]:
   """
   Merge chunks that are too small.
   
@@ -336,7 +336,7 @@ def merge_small_chunks(chunks: List[Dict], min_size: int = 100) -> List[Dict]:
   return merged
 
 
-def validate_chunks(chunks: List[Dict], kb: Any) -> bool:
+def validate_chunks(chunks: list[Dict], kb: Any) -> bool:
   """
   Validate that chunks meet requirements.
   

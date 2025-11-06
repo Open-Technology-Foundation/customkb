@@ -10,7 +10,7 @@ import shutil
 import configparser
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List
+
 
 from utils.logging_config import get_logger
 from config.config_manager import get_fq_cfg_filename, KnowledgeBase
@@ -199,7 +199,7 @@ def get_gpu_batch_size(gpu_memory_mb: int, batch_factor: float) -> int:
     return int(4096 * batch_factor)
 
 
-def find_kb_configs(vectordbs_dir: str) -> List[str]:
+def find_kb_configs(vectordbs_dir: str) -> list[str]:
   """Find all knowledgebase configuration files in VECTORDBS."""
   configs = []
   

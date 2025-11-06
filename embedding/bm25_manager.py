@@ -10,7 +10,7 @@ import os
 import json
 import sqlite3
 import numpy as np
-from typing import List, Tuple, Optional, Dict, Any
+from typing import Any
 from rank_bm25 import BM25Okapi
 
 from utils.logging_config import get_logger
@@ -18,7 +18,7 @@ from utils.text_utils import tokenize_for_bm25
 
 logger = get_logger(__name__)
 
-def build_bm25_index(kb: 'KnowledgeBase') -> Optional[BM25Okapi]:
+def build_bm25_index(kb: 'KnowledgeBase') -> BM25Okapi | None:
   """
   Build BM25 index from database and save to disk.
   
@@ -101,7 +101,7 @@ def build_bm25_index(kb: 'KnowledgeBase') -> Optional[BM25Okapi]:
     logger.error(f"Error building BM25 index: {e}")
     return None
 
-def load_bm25_index(kb: 'KnowledgeBase') -> Optional[Dict[str, Any]]:
+def load_bm25_index(kb: 'KnowledgeBase') -> dict[str, Any] | None:
   """
   Load BM25 index from disk (NPZ format with JSON metadata).
 
@@ -227,7 +227,7 @@ def rebuild_bm25_if_needed(kb: 'KnowledgeBase') -> bool:
     logger.error(f"Error checking BM25 rebuild status: {e}")
     return False
 
-def get_bm25_scores(kb: 'KnowledgeBase', query_text: str, bm25_data: Dict[str, Any], max_results: int = None) -> List[Tuple[int, float]]:
+def get_bm25_scores(kb: 'KnowledgeBase', query_text: str, bm25_data: dict[str, Any], max_results: int = None) -> list[tuple[int, float]]:
   """
   Get BM25 scores for a query with result limiting.
   

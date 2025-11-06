@@ -7,7 +7,7 @@ intelligent decisions about GPU usage for FAISS operations.
 
 import os
 import subprocess
-from typing import Optional, Tuple
+
 from utils.logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -16,7 +16,7 @@ logger = get_logger(__name__)
 _gpu_memory_cache = None
 
 
-def get_gpu_memory_mb() -> Optional[int]:
+def get_gpu_memory_mb() -> int | None:
   """
   Detect total GPU memory in MB.
   
@@ -78,7 +78,7 @@ def get_gpu_memory_mb() -> Optional[int]:
   return None
 
 
-def get_safe_gpu_memory_limit_mb(buffer_gb: float = 4.0) -> Optional[int]:
+def get_safe_gpu_memory_limit_mb(buffer_gb: float = 4.0) -> int | None:
   """
   Get safe GPU memory limit for FAISS operations.
   
@@ -114,7 +114,7 @@ def get_safe_gpu_memory_limit_mb(buffer_gb: float = 4.0) -> Optional[int]:
   return safe_limit_mb
 
 
-def should_use_gpu_for_index(index_size_mb: float, kb_config: Optional[object] = None) -> Tuple[bool, str]:
+def should_use_gpu_for_index(index_size_mb: float, kb_config: object | None = None) -> tuple[bool, str]:
   """
   Determine if GPU should be used for a FAISS index.
   

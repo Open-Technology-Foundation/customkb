@@ -7,7 +7,7 @@ Provides text cleaning, tokenization, file handling, and environment variable ma
 import os
 import re
 import glob
-from typing import List, Tuple, Optional, Any, Set
+from typing import Any
 
 from nltk.tokenize import word_tokenize
 from utils.logging_config import get_logger
@@ -17,7 +17,7 @@ nlp = None
 
 logger = get_logger(__name__)
 
-def clean_text(text: str, stop_words: Optional[Set[str]] = None) -> str:
+def clean_text(text: str, stop_words: set[str] | None = None) -> str:
   """
   Basic text cleaning for embeddings.
   
@@ -43,8 +43,8 @@ def clean_text(text: str, stop_words: Optional[Set[str]] = None) -> str:
 
   return text.strip()
 
-def enhanced_clean_text(text: str, stop_words: Optional[Set[str]] = None, 
-                       lemmatizer: Optional[Any] = None) -> str:
+def enhanced_clean_text(text: str, stop_words: set[str] | None = None, 
+                       lemmatizer: Any | None = None) -> str:
   """
   Advanced text cleaning that preserves semantic structure and named entities.
   
@@ -124,7 +124,7 @@ def enhanced_clean_text(text: str, stop_words: Optional[Set[str]] = None,
     
   return text.strip()
 
-def get_files(pathspec: str) -> List[str]:
+def get_files(pathspec: str) -> list[str]:
   """
   Get file paths matching a specification, with directory recursion support.
 
@@ -140,7 +140,7 @@ def get_files(pathspec: str) -> List[str]:
   files = sorted(glob.glob(pathspec, recursive=True))
   return [f for f in files if not os.path.isdir(f)]
 
-def split_filepath(filepath: str, *, adddir: bool = True, realpath: bool = True) -> Tuple[str, str, str, str]:
+def split_filepath(filepath: str, *, adddir: bool = True, realpath: bool = True) -> tuple[str, str, str, str]:
   """
   Split a file path into directory, basename, extension, and full path.
 
@@ -164,7 +164,7 @@ def split_filepath(filepath: str, *, adddir: bool = True, realpath: bool = True)
   fqfn = f'{directory}/{basename}{extension}'
   return directory, basename, extension, fqfn
 
-def find_file(filename: str, search_path: str = './', followsymlinks: bool = True) -> Optional[str]:
+def find_file(filename: str, search_path: str = './', followsymlinks: bool = True) -> str | None:
   """
   Search for a file in a directory tree.
 
@@ -187,7 +187,7 @@ def find_file(filename: str, search_path: str = './', followsymlinks: bool = Tru
 
   return None
 
-def tokenize_for_bm25(text: str, language: str = 'en') -> Tuple[str, int]:
+def tokenize_for_bm25(text: str, language: str = 'en') -> tuple[str, int]:
   """
   Tokenize text specifically for BM25 indexing.
   Uses different processing than vector embeddings to optimize for keyword matching.

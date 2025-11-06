@@ -5,7 +5,7 @@ This module provides various prompt templates that can be used to structure
 how queries are presented to LLMs, improving response quality and consistency.
 """
 
-from typing import Dict, Optional
+
 
 
 PROMPT_TEMPLATES = {
@@ -104,7 +104,7 @@ Provide a detailed technical response:
 }
 
 
-def get_prompt_template(template_name: str, custom_system_role: Optional[str] = None) -> Dict[str, str]:
+def get_prompt_template(template_name: str, custom_system_role: str | None = None) -> dict[str, str]:
   """
   Get a prompt template by name, with optional custom system role override.
   
@@ -134,7 +134,7 @@ def get_prompt_template(template_name: str, custom_system_role: Optional[str] = 
   return template
 
 
-def list_templates() -> Dict[str, str]:
+def list_templates() -> dict[str, str]:
   """
   Get a list of all available templates with their descriptions.
   

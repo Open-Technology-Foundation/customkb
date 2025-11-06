@@ -8,7 +8,7 @@ with unified interface and error handling.
 
 import os
 import asyncio
-from typing import List, Any
+from typing import Any
 
 from openai import OpenAI, AsyncOpenAI
 from utils.logging_config import get_logger
@@ -40,7 +40,7 @@ class EmbeddingProvider:
     self.client = None
     self.async_client = None
   
-  async def get_embeddings(self, texts: List[str], model: str) -> List[List[float]]:
+  async def get_embeddings(self, texts: list[str], model: str) -> list[list[float]]:
     """
     Get embeddings for a list of texts.
     
@@ -53,7 +53,7 @@ class EmbeddingProvider:
     """
     raise NotImplementedError("Subclasses must implement get_embeddings")
   
-  def get_embedding_sync(self, text: str, model: str) -> List[float]:
+  def get_embedding_sync(self, text: str, model: str) -> list[float]:
     """
     Get embedding for a single text (synchronous).
     
@@ -98,7 +98,7 @@ class OpenAIProvider(EmbeddingProvider):
     self.client = OpenAI(api_key=api_key, timeout=timeout)
     self.async_client = AsyncOpenAI(api_key=api_key, timeout=timeout)
   
-  async def get_embeddings(self, texts: List[str], model: str) -> List[List[float]]:
+  async def get_embeddings(self, texts: list[str], model: str) -> list[list[float]]:
     """
     Get embeddings from OpenAI.
     
@@ -134,7 +134,7 @@ class OpenAIProvider(EmbeddingProvider):
       logger.error(f"OpenAI API error: {e}")
       raise APIError(f"Failed to get OpenAI embeddings: {e}") from e
   
-  def get_embedding_sync(self, text: str, model: str) -> List[float]:
+  def get_embedding_sync(self, text: str, model: str) -> list[float]:
     """
     Get single embedding from OpenAI (synchronous).
     
@@ -196,7 +196,7 @@ class GoogleAIProvider(EmbeddingProvider):
       logger.error(f"Failed to initialize Google AI client: {e}")
       raise AuthenticationError(f"Google AI initialization failed: {e}") from e
   
-  async def get_embeddings(self, texts: List[str], model: str = "gemini-embedding-001") -> List[List[float]]:
+  async def get_embeddings(self, texts: list[str], model: str = "gemini-embedding-001") -> list[list[float]]:
     """
     Get embeddings from Google AI.
     
@@ -221,7 +221,7 @@ class GoogleAIProvider(EmbeddingProvider):
       logger.error(f"Google AI API error: {e}")
       raise APIError(f"Failed to get Google embeddings: {e}") from e
   
-  async def _get_single_embedding_async(self, text: str, model: str) -> List[float]:
+  async def _get_single_embedding_async(self, text: str, model: str) -> list[float]:
     """
     Get single embedding from Google AI (async).
     
@@ -237,7 +237,7 @@ class GoogleAIProvider(EmbeddingProvider):
     loop = asyncio.get_event_loop()
     return await loop.run_in_executor(None, self.get_embedding_sync, text, model)
   
-  def get_embedding_sync(self, text: str, model: str = "gemini-embedding-001") -> List[float]:
+  def get_embedding_sync(self, text: str, model: str = "gemini-embedding-001") -> list[float]:
     """
     Get single embedding from Google AI (synchronous).
     
@@ -310,8 +310,8 @@ class EmbeddingProviderFactory:
     cls._providers.clear()
 
 
-async def get_embeddings_with_provider(texts: List[str], model: str, 
-                                      kb: Any = None) -> List[List[float]]:
+async def get_embeddings_with_provider(texts: list[str], model: str, 
+                                      kb: Any = None) -> list[list[float]]:
   """
   Get embeddings using the appropriate provider.
   

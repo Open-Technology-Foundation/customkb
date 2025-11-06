@@ -6,7 +6,7 @@ like XML, JSON, Markdown, and plain text for feeding to LLMs.
 """
 
 from abc import ABC, abstractmethod
-from typing import List, Optional, Tuple
+
 import json
 import xml.sax.saxutils
 from utils.logging_config import get_logger
@@ -28,7 +28,7 @@ class ReferenceFormatter(ABC):
     pass
   
   @abstractmethod
-  def format_metadata(self, metadata_elems: List[str], similarity_score: str, debug: bool) -> str:
+  def format_metadata(self, metadata_elems: list[str], similarity_score: str, debug: bool) -> str:
     """Format metadata section."""
     pass
   
@@ -72,7 +72,7 @@ class XMLFormatter(ReferenceFormatter):
     safe_src = xml.sax.saxutils.escape(str(src))
     return f'<context src="{safe_src}:{sid}">\n'
   
-  def format_metadata(self, metadata_elems: List[str], similarity_score: str, debug: bool) -> str:
+  def format_metadata(self, metadata_elems: list[str], similarity_score: str, debug: bool) -> str:
     """Format metadata section as XML."""
     if not metadata_elems and not (similarity_score and debug):
       return ""
@@ -131,7 +131,7 @@ class JSONFormatter(ReferenceFormatter):
     }
     return ""
   
-  def format_metadata(self, metadata_elems: List[str], similarity_score: str, debug: bool) -> str:
+  def format_metadata(self, metadata_elems: list[str], similarity_score: str, debug: bool) -> str:
     """Store metadata for current reference."""
     if not self.current_ref:
       return ""
@@ -219,7 +219,7 @@ class MarkdownFormatter(ReferenceFormatter):
     self.in_document_group = True
     return f"{header}### {src}:{sid}\n\n"
   
-  def format_metadata(self, metadata_elems: List[str], similarity_score: str, debug: bool) -> str:
+  def format_metadata(self, metadata_elems: list[str], similarity_score: str, debug: bool) -> str:
     """Format metadata section as Markdown."""
     if not metadata_elems and not (similarity_score and debug):
       return ""
@@ -292,7 +292,7 @@ class PlainTextFormatter(ReferenceFormatter):
     src = display_source or source
     return f"--- {src}:{sid} ---\n"
   
-  def format_metadata(self, metadata_elems: List[str], similarity_score: str, debug: bool) -> str:
+  def format_metadata(self, metadata_elems: list[str], similarity_score: str, debug: bool) -> str:
     """Format metadata inline for plain text."""
     if not debug:
       return ""  # Skip metadata in plain text unless debugging
@@ -369,8 +369,8 @@ def get_formatter(format_type: str) -> ReferenceFormatter:
   return formatters[format_lower]()
 
 
-def format_references(references: List[Tuple], format_type: str = 'xml',
-                     context_files: Optional[List[str]] = None,
+def format_references(references: list[Tuple], format_type: str = 'xml',
+                     context_files: list[str] | None = None,
                      debug: bool = False) -> str:
   """
   Format references using the appropriate formatter.

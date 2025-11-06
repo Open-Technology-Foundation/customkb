@@ -9,7 +9,7 @@ category filtering, and document retrieval operations.
 import os
 import numpy as np
 import sqlite3
-from typing import List, Tuple, Optional, Any
+from typing import Any
 
 # Load FAISS with proper GPU initialization
 from utils.faiss_loader import get_faiss
@@ -22,7 +22,7 @@ from utils.security_utils import validate_table_name
 logger = get_logger(__name__)
 
 
-def get_context_range(index_start: int, context_n: int) -> List[int]:
+def get_context_range(index_start: int, context_n: int) -> list[int]:
   """
   Calculate the start and end indices for context retrieval.
 
@@ -44,7 +44,7 @@ def get_context_range(index_start: int, context_n: int) -> List[int]:
   return [start_index, end_index - 1]
 
 
-def fetch_document_by_id(kb: Any, doc_id: int) -> Optional[Tuple[int, int, str]]:
+def fetch_document_by_id(kb: Any, doc_id: int) -> tuple[int, int, str] | None:
   """
   Fetch a document by its ID from the database.
   
@@ -77,8 +77,8 @@ def fetch_document_by_id(kb: Any, doc_id: int) -> Optional[Tuple[int, int, str]]
     raise DatabaseError(f"Failed to fetch document: {e}") from e
 
 
-async def filter_results_by_category(kb: Any, results: List[Tuple[int, float]], 
-                                    categories: List[str]) -> List[Tuple[int, float]]:
+async def filter_results_by_category(kb: Any, results: list[tuple[int, float]], 
+                                    categories: list[str]) -> list[tuple[int, float]]:
   """
   Filter search results by category if categorization is enabled.
   
@@ -168,7 +168,7 @@ async def filter_results_by_category(kb: Any, results: List[Tuple[int, float]],
 
 
 async def perform_vector_search(kb: Any, query_embedding: np.ndarray, 
-                               top_k: int = 10) -> List[Tuple[int, float]]:
+                               top_k: int = 10) -> list[tuple[int, float]]:
   """
   Perform vector similarity search using FAISS index.
   
@@ -218,7 +218,7 @@ async def perform_vector_search(kb: Any, query_embedding: np.ndarray,
 
 
 async def perform_bm25_search(kb: Any, query_text: str, 
-                             top_k: int = 10) -> List[Tuple[int, float]]:
+                             top_k: int = 10) -> list[tuple[int, float]]:
   """
   Perform BM25 keyword search if enabled.
   
@@ -255,10 +255,10 @@ async def perform_bm25_search(kb: Any, query_text: str,
     return []
 
 
-def merge_search_results(vector_results: List[Tuple[int, float]], 
-                        bm25_results: List[Tuple[int, float]],
+def merge_search_results(vector_results: list[tuple[int, float]], 
+                        bm25_results: list[tuple[int, float]],
                         vector_weight: float = 0.7,
-                        bm25_weight: float = 0.3) -> List[Tuple[int, float]]:
+                        bm25_weight: float = 0.3) -> list[tuple[int, float]]:
   """
   Merge vector and BM25 search results with weighted scoring.
   
@@ -317,8 +317,8 @@ def merge_search_results(vector_results: List[Tuple[int, float]],
 async def perform_hybrid_search(kb: Any, query_text: str, 
                                query_embedding: np.ndarray,
                                top_k: int = 10,
-                               categories: List[str] = None,
-                               rerank: bool = False) -> List[Tuple[int, float]]:
+                               categories: list[str] = None,
+                               rerank: bool = False) -> list[tuple[int, float]]:
   """
   Perform hybrid search combining vector similarity and BM25 keyword search.
   
@@ -380,7 +380,7 @@ async def perform_hybrid_search(kb: Any, query_text: str,
     raise SearchError(f"Search error: {e}") from e
 
 
-async def process_reference_batch(kb: Any, batch: List[Tuple[int, float]]) -> List[List[Any]]:
+async def process_reference_batch(kb: Any, batch: list[tuple[int, float]]) -> list[list[Any]]:
   """
   Process a batch of search results to retrieve document content with context.
   

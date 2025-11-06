@@ -6,7 +6,7 @@ This module handles schema migrations and upgrades for the database.
 """
 
 import sqlite3
-from typing import Dict, Any
+from typing import Any
 from datetime import datetime
 
 from utils.logging_config import get_logger
@@ -329,7 +329,7 @@ def run_all_migrations(kb: Any) -> int:
   return applied
 
 
-def check_migration_status(kb: Any) -> Dict[str, Any]:
+def check_migration_status(kb: Any) -> dict[str, Any]:
   """
   Check the status of database migrations.
   

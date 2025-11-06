@@ -9,7 +9,7 @@ import sys
 import pickle
 import argparse
 import logging
-from typing import List
+
 from rank_bm25 import BM25Okapi
 
 # Add parent directory to path
@@ -22,9 +22,9 @@ from utils.logging_config import get_logger
 logger = get_logger(__name__)
 
 def rebuild_bm25_with_filter(kb: KnowledgeBase, 
-                           keywords: List[str] = None,
-                           include_patterns: List[str] = None,
-                           exclude_patterns: List[str] = None,
+                           keywords: list[str] = None,
+                           include_patterns: list[str] = None,
+                           exclude_patterns: list[str] = None,
                            save_path: str = None) -> bool:
     """
     Rebuild BM25 index with filtering criteria.

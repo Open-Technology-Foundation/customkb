@@ -11,7 +11,7 @@ import time
 import psutil
 import gc
 from pathlib import Path
-from typing import Dict, Tuple
+
 import json
 
 
@@ -88,7 +88,7 @@ class MemoryMonitor:
     self.process = psutil.Process()
     self.initial_memory = self.get_memory_usage()
     
-  def get_memory_usage(self) -> Dict[str, float]:
+  def get_memory_usage(self) -> dict[str, float]:
     """Get current memory usage statistics."""
     mem_info = self.process.memory_info()
     return {
@@ -97,7 +97,7 @@ class MemoryMonitor:
       'percent': self.process.memory_percent(),
     }
   
-  def check_memory(self) -> Tuple[bool, str]:
+  def check_memory(self) -> tuple[bool, str]:
     """Check if memory usage is within limits."""
     current = self.get_memory_usage()
     
@@ -119,7 +119,7 @@ class MemoryMonitor:
 
 
 def run_test_batch(batch_name: str, batch_config: Dict, 
-                   verbose: bool = False, coverage: bool = False) -> Dict[str, any]:
+                   verbose: bool = False, coverage: bool = False) -> dict[str, any]:
   """Run a batch of tests with memory monitoring."""
   print(f"\n{'='*60}")
   print(f"Running batch: {batch_name}")

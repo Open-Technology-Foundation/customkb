@@ -4,7 +4,7 @@ Category Deduplication Module
 Merges similar categories using fuzzy string matching
 """
 
-from typing import List, Dict, Set, Tuple, Optional
+
 from dataclasses import dataclass
 from rapidfuzz import fuzz
 import logging
@@ -15,15 +15,15 @@ logger = logging.getLogger(__name__)
 class CategoryMergeGroup:
   """Represents a group of similar categories that should be merged"""
   primary: str  # The category name to keep
-  aliases: Set[str]  # Similar category names to merge
-  similarity_scores: Dict[str, float]  # Similarity scores for each alias
+  aliases: set[str]  # Similar category names to merge
+  similarity_scores: dict[str, float]  # Similarity scores for each alias
 
 class CategoryDeduplicator:
   """Handles deduplication of similar category names"""
   
   def __init__(self, similarity_threshold: float = 85.0, 
                case_sensitive: bool = False,
-               ignore_words: Optional[Set[str]] = None):
+               ignore_words: set[str] | None = None):
     """
     Initialize the deduplicator.
     
@@ -35,7 +35,7 @@ class CategoryDeduplicator:
     self.similarity_threshold = similarity_threshold
     self.case_sensitive = case_sensitive
     self.ignore_words = ignore_words or {'and', 'of', 'the', 'in', 'on', 'for', 'with', 'a', 'an'}
-    self.merge_groups: List[CategoryMergeGroup] = []
+    self.merge_groups: list[CategoryMergeGroup] = []
     
   def _normalize_category(self, category: str) -> str:
     """Normalize category name for comparison"""
@@ -50,7 +50,7 @@ class CategoryDeduplicator:
     
     return ' '.join(filtered_words) if filtered_words else normalized
   
-  def find_duplicates(self, categories: List[str]) -> List[CategoryMergeGroup]:
+  def find_duplicates(self, categories: list[str]) -> list[CategoryMergeGroup]:
     """
     Find groups of similar categories.
     
@@ -110,7 +110,7 @@ class CategoryDeduplicator:
     
     return self.merge_groups
   
-  def merge_category_counts(self, category_counts: Dict[str, int]) -> Dict[str, int]:
+  def merge_category_counts(self, category_counts: dict[str, int]) -> dict[str, int]:
     """
     Merge category counts based on identified duplicates.
     
@@ -144,7 +144,7 @@ class CategoryDeduplicator:
     
     return merged_counts
   
-  def apply_to_results(self, categories: List[str]) -> List[str]:
+  def apply_to_results(self, categories: list[str]) -> list[str]:
     """
     Apply deduplication to a list of categories.
     
@@ -194,8 +194,8 @@ class CategoryDeduplicator:
     
     return report
   
-  def suggest_manual_review(self, categories: List[str], 
-                          threshold_range: Tuple[float, float] = (70.0, 85.0)) -> List[Tuple[str, str, float]]:
+  def suggest_manual_review(self, categories: list[str], 
+                          threshold_range: tuple[float, float] = (70.0, 85.0)) -> list[tuple[str, str, float]]:
     """
     Find category pairs that might be duplicates but fall below auto-merge threshold.
     
@@ -232,9 +232,9 @@ class CategoryDeduplicator:
     
     return suggestions
 
-def deduplicate_categories(categories: List[str], 
+def deduplicate_categories(categories: list[str], 
                           similarity_threshold: float = 85.0,
-                          verbose: bool = False) -> Tuple[List[str], Optional[str]]:
+                          verbose: bool = False) -> tuple[list[str], str | None]:
   """
   Convenience function to deduplicate a list of categories.
   

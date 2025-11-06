@@ -10,7 +10,7 @@ import os
 import sys
 import json
 import argparse
-from typing import Dict, Tuple
+
 
 # Add parent directory to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -21,7 +21,7 @@ from embedding.cache import CACHE_DIR, MODEL_DIMENSIONS
 logger = get_logger(__name__)
 
 
-def scan_cache_directory() -> Tuple[int, int, int]:
+def scan_cache_directory() -> tuple[int, int, int]:
   """
   Scan cache directory for corrupted files.
   
@@ -118,7 +118,7 @@ def remove_file(file_path: str) -> bool:
     return False
 
 
-def get_cache_stats() -> Dict[str, any]:
+def get_cache_stats() -> dict[str, any]:
   """
   Get statistics about the cache directory.
   

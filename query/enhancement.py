@@ -10,7 +10,7 @@ import re
 import os
 import json
 import hashlib
-from typing import Optional, Set, List, Any
+from typing import Any
 from pathlib import Path
 
 from utils.logging_config import get_logger
@@ -57,7 +57,7 @@ def normalize_query(query: str) -> str:
 
 
 def get_synonyms_for_word(word: str, max_synonyms: int = 2, 
-                         relevance_threshold: float = 0.6) -> List[str]:
+                         relevance_threshold: float = 0.6) -> list[str]:
   """
   Get synonyms for a word using various methods.
   
@@ -129,7 +129,7 @@ def get_synonyms_for_word(word: str, max_synonyms: int = 2,
   return synonyms
 
 
-def correct_spelling(word: str, vocabulary: Optional[Set[str]] = None) -> str:
+def correct_spelling(word: str, vocabulary: set[str] | None = None) -> str:
   """
   Attempt to correct spelling of a word.
   
@@ -178,7 +178,7 @@ def correct_spelling(word: str, vocabulary: Optional[Set[str]] = None) -> str:
   return word
 
 
-def expand_synonyms(query: str, kb: Optional[Any] = None) -> str:
+def expand_synonyms(query: str, kb: Any | None = None) -> str:
   """
   Expand query with synonyms for better matching.
   
@@ -234,7 +234,7 @@ def expand_synonyms(query: str, kb: Optional[Any] = None) -> str:
   return query
 
 
-def apply_spelling_correction(query: str, kb: Optional[Any] = None) -> str:
+def apply_spelling_correction(query: str, kb: Any | None = None) -> str:
   """
   Apply spelling correction to query terms.
   
@@ -302,7 +302,7 @@ def get_enhancement_cache_key(query_text: str) -> str:
   return hashlib.sha256(query_text.encode()).hexdigest()
 
 
-def get_cached_enhanced_query(query_text: str, kb=None) -> Optional[str]:
+def get_cached_enhanced_query(query_text: str, kb=None) -> str | None:
   """
   Retrieve enhanced query from cache.
   
@@ -370,7 +370,7 @@ def save_enhanced_query_to_cache(original_query: str, enhanced_query: str) -> No
     logger.debug(f"Enhancement cache save failed: {e}")
 
 
-def enhance_query(query: str, kb: Optional[Any] = None) -> str:
+def enhance_query(query: str, kb: Any | None = None) -> str:
   """
   Apply all query enhancements.
   

@@ -9,7 +9,7 @@ import hashlib
 import json
 import os
 from collections import OrderedDict
-from typing import List, Tuple, Optional, Any
+from typing import Any
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 
@@ -46,7 +46,7 @@ def get_reranking_cache_key(query: str, document: str) -> str:
   return hashlib.md5(combined.encode('utf-8')).hexdigest()
 
 
-def get_cached_score(query: str, document: str) -> Optional[float]:
+def get_cached_score(query: str, document: str) -> float | None:
   """
   Retrieve a cached reranking score if available.
   
@@ -159,7 +159,7 @@ async def load_reranking_model(model_name: str, device: str = 'cpu'):
   return _reranking_model
 
 
-def batch_predict(model, pairs: List[Tuple[str, str]], batch_size: int) -> List[float]:
+def batch_predict(model, pairs: list[tuple[str, str]], batch_size: int) -> list[float]:
   """
   Predict scores for query-document pairs in batches.
   
@@ -189,9 +189,9 @@ def batch_predict(model, pairs: List[Tuple[str, str]], batch_size: int) -> List[
 async def rerank_documents(
     kb: Any,
     query: str,
-    documents: List[Tuple[int, str, float]],
-    top_k: Optional[int] = None
-) -> List[Tuple[int, str, float]]:
+    documents: list[tuple[int, str, float]],
+    top_k: int | None = None
+) -> list[tuple[int, str, float]]:
   """
   Rerank documents using a cross-encoder model.
   
@@ -283,8 +283,8 @@ async def rerank_documents(
 async def rerank_search_results(
     kb: Any,
     query: str,
-    search_results: List[Tuple[int, float]]
-) -> List[Tuple[int, float]]:
+    search_results: list[tuple[int, float]]
+) -> list[tuple[int, float]]:
   """
   Rerank search results by fetching document texts and applying cross-encoder.
   

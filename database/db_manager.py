@@ -36,7 +36,7 @@ import sqlite3
 import argparse
 import re
 import warnings
-from typing import Dict, Any
+from typing import Any
 from contextlib import contextmanager
 
 from utils.logging_config import get_logger, time_to_finish
@@ -271,7 +271,7 @@ def init_text_splitter(kb: KnowledgeBase, file_type: str = 'text') -> Any:
   _deprecation_warning('init_text_splitter', 'chunking')
   return _init_text_splitter(kb, file_type)
 
-def extract_metadata(text: str, file_path: str, kb) -> Dict[str, Any]:
+def extract_metadata(text: str, file_path: str, kb) -> dict[str, Any]:
   """
   Extract and track metadata about a text chunk.
   

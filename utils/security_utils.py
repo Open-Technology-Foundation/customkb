@@ -10,13 +10,13 @@ import json
 import sqlite3
 import sys
 from pathlib import Path
-from typing import List, Dict, Any
+from typing import Any
 
 from utils.logging_config import get_logger
 
 logger = get_logger(__name__)
 
-def validate_file_path(filepath: str, allowed_extensions: List[str] = None, 
+def validate_file_path(filepath: str, allowed_extensions: list[str] = None, 
                       base_dir: str = None, allow_absolute: bool = False, 
                       allow_relative_traversal: bool = False) -> str:
   """
@@ -222,7 +222,7 @@ def sanitize_config_value(value: str, max_length: int = 1000) -> str:
   return sanitized.strip()
 
 def safe_sql_in_query(cursor: sqlite3.Cursor, query_template: str, 
-                     id_list: List[int], additional_params: tuple = ()) -> None:
+                     id_list: list[int], additional_params: tuple = ()) -> None:
   """
   Safely execute SQL IN queries with proper parameterization.
   
@@ -290,7 +290,7 @@ def safe_log_error(error_msg: str, **kwargs) -> None:
   else:
     logger.error(safe_msg)
 
-def safe_json_loads(json_str: str, max_size: int = 10000) -> Dict[str, Any]:
+def safe_json_loads(json_str: str, max_size: int = 10000) -> dict[str, Any]:
   """
   Safely parse JSON with size limits.
   

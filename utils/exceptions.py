@@ -6,13 +6,13 @@ This module defines specific exception types for different error scenarios,
 improving error handling and debugging across the application.
 """
 
-from typing import Optional, Any, Dict
+from typing import Any
 
 
 class CustomKBError(Exception):
   """Base exception class for all CustomKB errors."""
   
-  def __init__(self, message: str, details: Optional[Dict[str, Any]] = None):
+  def __init__(self, message: str, details: dict[str, Any] | None = None):
     """
     Initialize CustomKB exception.
     
@@ -41,7 +41,7 @@ class ConfigurationError(CustomKBError):
 class KnowledgeBaseNotFoundError(ConfigurationError):
   """Raised when a knowledgebase cannot be found."""
   
-  def __init__(self, kb_name: str, available_kbs: Optional[list] = None):
+  def __init__(self, kb_name: str, available_kbs: list | None = None):
     """Initialize with KB name and available options."""
     message = f"Knowledgebase '{kb_name}' not found"
     details = {'kb_name': kb_name}
@@ -72,7 +72,7 @@ class ConnectionError(DatabaseError):
 class QueryError(DatabaseError):
   """Raised when a database query fails."""
   
-  def __init__(self, message: str, query: Optional[str] = None, params: Optional[tuple] = None):
+  def __init__(self, message: str, query: str | None = None, params: tuple | None = None):
     """Initialize with query details."""
     details = {}
     if query:
@@ -107,7 +107,7 @@ class EmbeddingError(CustomKBError):
 class ModelNotAvailableError(EmbeddingError):
   """Raised when an embedding model is not available."""
   
-  def __init__(self, model_name: str, reason: Optional[str] = None):
+  def __init__(self, model_name: str, reason: str | None = None):
     """Initialize with model details."""
     message = f"Model '{model_name}' is not available"
     if reason:
@@ -145,7 +145,7 @@ class AuthenticationError(APIError):
 class RateLimitError(APIError):
   """Raised when API rate limit is exceeded."""
   
-  def __init__(self, service: str, retry_after: Optional[int] = None):
+  def __init__(self, service: str, retry_after: int | None = None):
     """Initialize with rate limit details."""
     message = f"Rate limit exceeded for {service}"
     details = {'service': service}
@@ -160,7 +160,7 @@ class RateLimitError(APIError):
 class APIResponseError(APIError):
   """Raised when API returns an unexpected response."""
   
-  def __init__(self, service: str, status_code: Optional[int] = None, response: Optional[str] = None):
+  def __init__(self, service: str, status_code: int | None = None, response: str | None = None):
     """Initialize with response details."""
     message = f"Unexpected response from {service}"
     details = {'service': service}
@@ -372,7 +372,7 @@ class PermanentError(CustomKBError):
 
 
 # Utility functions
-def handle_exception(e: Exception, logger=None, raise_custom: bool = True) -> Optional[CustomKBError]:
+def handle_exception(e: Exception, logger=None, raise_custom: bool = True) -> CustomKBError | None:
   """
   Convert standard exceptions to CustomKB exceptions.
   

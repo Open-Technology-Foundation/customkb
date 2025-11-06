@@ -10,7 +10,7 @@ import os
 import sys
 import sqlite3
 import numpy as np
-from typing import Dict
+
 import argparse
 
 from config.config_manager import KnowledgeBase, get_fq_cfg_filename
@@ -36,7 +36,7 @@ class PerformanceAnalyzer:
       'index_stats': {}
     }
   
-  def get_memory_info(self) -> Dict[str, float]:
+  def get_memory_info(self) -> dict[str, float]:
     """Get current memory usage information."""
     process = psutil.Process()
     memory_info = process.memory_info()
@@ -49,7 +49,7 @@ class PerformanceAnalyzer:
       'total_mb': psutil.virtual_memory().total / 1024 / 1024
     }
   
-  def analyze_database(self) -> Dict[str, any]:
+  def analyze_database(self) -> dict[str, any]:
     """Analyze database performance characteristics."""
     stats = {}
     
@@ -87,7 +87,7 @@ class PerformanceAnalyzer:
     
     return stats
   
-  def analyze_faiss_index(self) -> Dict[str, any]:
+  def analyze_faiss_index(self) -> dict[str, any]:
     """Analyze FAISS index characteristics."""
     stats = {}
     
@@ -115,13 +115,13 @@ class PerformanceAnalyzer:
     
     return stats
   
-  def analyze_cache_performance(self) -> Dict[str, any]:
+  def analyze_cache_performance(self) -> dict[str, any]:
     """Analyze cache performance metrics."""
     from embedding.embed_manager import cache_manager
     
     return cache_manager.get_metrics()
   
-  def benchmark_query(self, query_text: str, iterations: int = 5) -> Dict[str, float]:
+  def benchmark_query(self, query_text: str, iterations: int = 5) -> dict[str, float]:
     """Benchmark query performance."""
     times = []
     memory_before = self.get_memory_info()

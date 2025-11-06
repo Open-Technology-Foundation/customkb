@@ -13,11 +13,11 @@ import os
 import psutil
 import configparser
 import json
-from typing import Optional, Dict, Any, Tuple
+from typing import Any
 
 # Note: Global logger removed - use get_logger(__name__) in each module
 
-def get_kb_info_from_config(config_file: str) -> Tuple[str, str]:
+def get_kb_info_from_config(config_file: str) -> tuple[str, str]:
   """
   Extract knowledgebase directory and name from config file path.
   
@@ -71,8 +71,8 @@ def get_log_file_path(config_log_file: str, kb_directory: str, kb_name: str) -> 
       os.makedirs(log_dir, exist_ok=True)
     return log_path
 
-def load_logging_config(config_file: Optional[str] = None, 
-                       kb_directory: Optional[str] = None) -> Dict[str, Any]:
+def load_logging_config(config_file: str | None = None, 
+                       kb_directory: str | None = None) -> dict[str, Any]:
   """
   Load logging configuration from .cfg file or environment variables.
   
@@ -202,7 +202,7 @@ def get_json_formatter() -> logging.Formatter:
   
   return JSONFormatter()
 
-def configure_module_logging(module_levels: Dict[str, str]):
+def configure_module_logging(module_levels: dict[str, str]):
   """
   Configure per-module logging levels.
   
@@ -305,11 +305,11 @@ def get_console_formatter(verbose: bool) -> colorlog.ColoredFormatter:
   )
 
 def setup_logging(verbose: bool, debug: bool = False, 
-                 log_file: Optional[str] = None,
+                 log_file: str | None = None,
                  log_to_file: bool = True,
-                 config_file: Optional[str] = None,
-                 kb_directory: Optional[str] = None,
-                 kb_name: Optional[str] = None) -> Optional[logging.Logger]:
+                 config_file: str | None = None,
+                 kb_directory: str | None = None,
+                 kb_name: str | None = None) -> logging.Logger | None:
   """
   Set up enhanced logging configuration with console and optional file output.
 
@@ -416,7 +416,7 @@ def dashes(offset: int = 0, char: str = '-') -> str:
   width, _ = shutil.get_terminal_size()
   return (char[0] * (width - offset))
 
-def elapsed_time(start_time: int, end_time: Optional[int] = None) -> str:
+def elapsed_time(start_time: int, end_time: int | None = None) -> str:
   """
   Calculate and format the elapsed time.
 
