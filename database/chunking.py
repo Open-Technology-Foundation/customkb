@@ -182,7 +182,7 @@ def get_language_specific_splitter(file_path: str, kb: Any) -> Any | None:
   return None
 
 
-def split_text(text: str, splitter: Any, metadata: Dict | None = None) -> list[Dict]:
+def split_text(text: str, splitter: Any, metadata: dict | None = None) -> list[dict]:
   """
   Split text into chunks using the provided splitter.
   

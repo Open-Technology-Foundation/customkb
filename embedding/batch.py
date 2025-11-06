@@ -119,7 +119,7 @@ def save_checkpoint(kb: Any, index: faiss.Index, doc_ids: list[int],
     raise ProcessingError(f"Checkpoint save failed: {e}") from e
 
 
-def load_checkpoint(checkpoint_file: str) -> tuple[faiss.Index | None, Dict | None]:
+def load_checkpoint(checkpoint_file: str) -> tuple[faiss.Index | None, dict | None]:
   """
   Load processing checkpoint.
   
