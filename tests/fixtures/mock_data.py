@@ -300,7 +300,52 @@ class TestDataManager:
     
     self.temp_files.append(temp_file)
     return temp_file
-    
+
+  def create_kb_directory(self, kb_name: str = "test_kb", config_content: str | None = None) -> tuple[str, str, str]:
+    """
+    Create a properly structured KB directory within a temp VECTORDBS.
+
+    This follows the CustomKB directory structure:
+    VECTORDBS/
+    ├── kb_name/
+    │   ├── kb_name.cfg
+    │   └── logs/
+
+    Args:
+        kb_name: Name of the knowledgebase
+        config_content: Optional configuration content (uses default if None)
+
+    Returns:
+        Tuple of (vectordbs_path, kb_dir, config_file)
+    """
+    import shutil
+
+    # Create temp VECTORDBS directory
+    temp_vectordbs = tempfile.mkdtemp(prefix='test_vectordbs_')
+    self.temp_dirs.append(temp_vectordbs)
+
+    # Create KB subdirectory
+    kb_dir = os.path.join(temp_vectordbs, kb_name)
+    os.makedirs(kb_dir)
+
+    # Create logs directory
+    logs_dir = os.path.join(kb_dir, 'logs')
+    os.makedirs(logs_dir)
+
+    # Create config file
+    config_file = os.path.join(kb_dir, f"{kb_name}.cfg")
+
+    if config_content is None:
+      # Use default config from MockDataGenerator
+      config_content = MockDataGenerator.create_sample_config(kb_name=kb_name)
+
+    with open(config_file, 'w') as f:
+      f.write(config_content)
+
+    self.temp_files.append(config_file)
+
+    return temp_vectordbs, kb_dir, config_file
+
   def cleanup(self):
     """Clean up all temporary files and directories."""
     import shutil

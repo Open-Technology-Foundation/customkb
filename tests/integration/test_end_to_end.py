@@ -13,13 +13,12 @@ from unittest.mock import patch, Mock
 class TestEndToEndWorkflow:
   """Test complete end-to-end CustomKB workflows."""
   
-  def test_complete_workflow_database_to_query(self, temp_data_manager, sample_texts, mock_openai_client, mock_anthropic_client, mock_faiss_index):
+  def test_complete_workflow_database_to_query(self, temp_data_manager, sample_texts, mock_openai_client, mock_anthropic_client, mock_faiss_index, monkeypatch):
     """Test complete workflow: database → embed → query."""
-    # Create test environment
-    kb_dir = temp_data_manager.create_temp_dir()
+    # Create test environment with proper KB directory structure
     kb_name = "test_kb"
-    
-    # Create configuration file
+
+    # Create configuration content
     config_content = """[DEFAULT]
 vector_model = text-embedding-3-small
 vector_dimensions = 1536
@@ -33,10 +32,13 @@ query_context_scope = 2
 query_temperature = 0.1
 query_role = You are a helpful assistant.
 """
-    config_file = os.path.join(kb_dir, f"{kb_name}.cfg")
-    with open(config_file, 'w') as f:
-      f.write(config_content)
-    
+
+    # Create properly structured KB directory
+    temp_vectordbs, kb_dir, config_file = temp_data_manager.create_kb_directory(kb_name, config_content)
+
+    # Monkeypatch VECTORDBS to use temp directory
+    monkeypatch.setattr('config.config_manager.VECTORDBS', temp_vectordbs)
+
     # Create test documents
     test_files = []
     for i, text in enumerate(sample_texts[:3]):
@@ -44,18 +46,18 @@ query_role = You are a helpful assistant.
       with open(file_path, 'w') as f:
         f.write(text)
       test_files.append(file_path)
-    
+
     # Import required modules for testing
     from database.db_manager import process_database
     from embedding.embed_manager import process_embeddings
     from query.query_manager import process_query
-    
+
     # Mock the logger
     mock_logger = Mock()
-    
-    # Step 1: Process database
+
+    # Step 1: Process database (use kb_name per new resolution system)
     db_args = Mock()
-    db_args.config_file = config_file
+    db_args.config_file = kb_name  # Use KB name instead of full path
     db_args.files = test_files
     db_args.language = 'en'
     db_args.force = False
@@ -73,23 +75,23 @@ query_role = You are a helpful assistant.
     
     # Step 2: Generate embeddings
     embed_args = Mock()
-    embed_args.config_file = config_file
+    embed_args.config_file = kb_name  # Use KB name
     embed_args.reset_database = False
     embed_args.verbose = True
     embed_args.debug = False
-    
+
     with patch('embedding.embed_manager.openai_client', mock_openai_client['sync']):
       with patch('embedding.embed_manager.async_openai_client', mock_openai_client['async']):
         with patch('embedding.embed_manager.get_optimal_faiss_index', return_value=mock_faiss_index):
           with patch('asyncio.run', return_value={1, 2, 3}):  # Mock successful processing
             embed_result = process_embeddings(embed_args, mock_logger)
-    
+
     assert "embeddings" in embed_result
     assert "saved to" in embed_result
-    
+
     # Step 3: Query the knowledgebase
     query_args = Mock()
-    query_args.config_file = config_file
+    query_args.config_file = kb_name  # Use KB name
     query_args.query_text = "What is machine learning?"
     query_args.query_file = ""
     query_args.context_only = False
