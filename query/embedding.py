@@ -29,17 +29,18 @@ os.makedirs(QUERY_CACHE_DIR, exist_ok=True)
 def get_cache_key(query_text: str, model: str) -> str:
   """
   Generate a cache key for query embeddings.
-  
+
   Args:
       query_text: The query text
       model: The embedding model name
-      
+
   Returns:
-      SHA256 hash as cache key
+      Cache key in format: {model}_{sha256_hash}
   """
-  # Create a unique key based on text and model
-  key_string = f"{model}:{query_text}"
-  return hashlib.sha256(key_string.encode()).hexdigest()
+  # Create a unique hash based on text
+  text_hash = hashlib.sha256(query_text.encode()).hexdigest()
+  # Return format that includes model name for cache organization
+  return f"{model}_{text_hash}"
 
 
 def get_cache_file_path(cache_key: str) -> str:

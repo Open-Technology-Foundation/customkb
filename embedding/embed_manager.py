@@ -186,15 +186,16 @@ def configure_cache_manager(kb: 'KnowledgeBase') -> None:
 def get_cache_key(text: str, model: str) -> str:
   """
   Generate a cache key for an embedding.
-  
+
   Args:
       text: The text to embed.
       model: The model used for embedding.
-      
+
   Returns:
-      A cache key string.
+      Cache key in format: {model}_{sha256_hash}
   """
-  text_hash = hashlib.md5(text.encode('utf-8')).hexdigest()
+  # Use SHA256 for consistency with other cache key generation
+  text_hash = hashlib.sha256(text.encode('utf-8')).hexdigest()
   return f"{model}_{text_hash}"
 
 def get_cached_embedding(text: str, model: str) -> list[float] | None:

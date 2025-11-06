@@ -47,8 +47,8 @@ class TestQueryCaching:
   def test_get_cached_query_embedding_miss(self, temp_data_manager):
     """Test cache miss for non-existent query embedding."""
     temp_dir = temp_data_manager.create_temp_dir()
-    
-    with patch('query.query_manager.CACHE_DIR', temp_dir):
+
+    with patch('query.embedding.QUERY_CACHE_DIR', temp_dir):
       result = get_cached_query_embedding("non-existent query", "test-model")
       assert result is None
   
@@ -56,15 +56,17 @@ class TestQueryCaching:
     """Test cache hit for existing query embedding."""
     temp_dir = temp_data_manager.create_temp_dir()
     test_embedding = [0.1, 0.2, 0.3]
-    
-    # Create cached file
+
+    # Create cached file in subdirectory (first 2 chars of cache_key)
     cache_key = "test_model_hash123"
-    cache_file = os.path.join(temp_dir, f"{cache_key}.json")
+    cache_subdir = os.path.join(temp_dir, cache_key[:2])
+    os.makedirs(cache_subdir, exist_ok=True)
+    cache_file = os.path.join(cache_subdir, f"{cache_key}.json")
     with open(cache_file, 'w') as f:
       json.dump(test_embedding, f)
     
-    with patch('query.query_manager.CACHE_DIR', temp_dir):
-      with patch('query.query_manager.get_cache_key', return_value=cache_key):
+    with patch('query.embedding.QUERY_CACHE_DIR', temp_dir):
+      with patch('query.embedding.get_cache_key', return_value=cache_key):
         with patch('time.time', return_value=1000):
           with patch('os.path.getmtime', return_value=999):  # Recent file
             result = get_cached_query_embedding("test query", "test-model")
@@ -74,15 +76,17 @@ class TestQueryCaching:
     """Test cache miss for expired query embedding."""
     temp_dir = temp_data_manager.create_temp_dir()
     test_embedding = [0.1, 0.2, 0.3]
-    
-    # Create cached file
+
+    # Create cached file in subdirectory (first 2 chars of cache_key)
     cache_key = "test_model_hash123"
-    cache_file = os.path.join(temp_dir, f"{cache_key}.json")
+    cache_subdir = os.path.join(temp_dir, cache_key[:2])
+    os.makedirs(cache_subdir, exist_ok=True)
+    cache_file = os.path.join(cache_subdir, f"{cache_key}.json")
     with open(cache_file, 'w') as f:
       json.dump(test_embedding, f)
-    
-    with patch('query.query_manager.CACHE_DIR', temp_dir):
-      with patch('query.query_manager.get_cache_key', return_value=cache_key):
+
+    with patch('query.embedding.QUERY_CACHE_DIR', temp_dir):
+      with patch('query.embedding.get_cache_key', return_value=cache_key):
         with patch('time.time', return_value=1000000):  # Much later time
           with patch('os.path.getmtime', return_value=1000):  # Old file
             result = get_cached_query_embedding("test query", "test-model")
@@ -93,13 +97,15 @@ class TestQueryCaching:
     """Test saving query embedding to cache."""
     temp_dir = temp_data_manager.create_temp_dir()
     test_embedding = [0.1, 0.2, 0.3]
-    
-    with patch('query.query_manager.CACHE_DIR', temp_dir):
-      with patch('query.query_manager.get_cache_key', return_value="test_key"):
+
+    with patch('query.embedding.QUERY_CACHE_DIR', temp_dir):
+      with patch('query.embedding.get_cache_key', return_value="test_key"):
         save_query_embedding_to_cache("test query", "test-model", test_embedding)
-        
-        # Check that file was created
-        cache_file = os.path.join(temp_dir, "test_key.json")
+
+        # Check that file was created in subdirectory
+        cache_key = "test_key"
+        cache_subdir = os.path.join(temp_dir, cache_key[:2])
+        cache_file = os.path.join(cache_subdir, f"{cache_key}.json")
         assert os.path.exists(cache_file)
         
         with open(cache_file, 'r') as f:
@@ -1114,7 +1120,7 @@ class TestQueryEnhancement:
     
     # Test caching with temporary directory
     with tempfile.TemporaryDirectory() as temp_dir:
-      with patch('query.query_manager.CACHE_DIR', temp_dir):
+      with patch('query.embedding.QUERY_CACHE_DIR', temp_dir):
         original = "original query"
         enhanced = "enhanced query with synonyms"
         

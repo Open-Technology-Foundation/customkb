@@ -184,17 +184,18 @@ def configure_cache_manager(kb: Any) -> None:
 def get_cache_key(text: str, model: str) -> str:
   """
   Generate a cache key for the embedding.
-  
+
   Args:
       text: The text to be embedded
       model: The embedding model name
-      
+
   Returns:
-      SHA256 hash as cache key
+      Cache key in format: {model}_{sha256_hash}
   """
-  # Create a unique key based on text and model
-  key_string = f"{model}:{text}"
-  return hashlib.sha256(key_string.encode()).hexdigest()
+  # Create a unique hash based on text
+  text_hash = hashlib.sha256(text.encode()).hexdigest()
+  # Return format that includes model name for cache organization
+  return f"{model}_{text_hash}"
 
 
 def get_cache_file_path(cache_key: str) -> str:
