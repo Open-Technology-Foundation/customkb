@@ -98,8 +98,8 @@ query_role = You are a helpful assistant.
     query_args.verbose = True
     query_args.debug = False
     
-    with patch('query.query_manager.faiss.read_index', return_value=mock_faiss_index):
-      with patch('query.query_manager.async_openai_client', mock_openai_client['async']):
+    with patch('query.search.faiss.read_index', return_value=mock_faiss_index):
+      with patch('query.response.async_openai_client', mock_openai_client['async']):
         query_result = process_query(query_args, mock_logger)
     
     assert isinstance(query_result, str)
@@ -166,7 +166,7 @@ query_model = gpt-4o
     query_args.verbose = True
     query_args.debug = False
     
-    with patch('query.query_manager.faiss.read_index', return_value=mock_faiss_index):
+    with patch('query.search.faiss.read_index', return_value=mock_faiss_index):
       result = process_query(query_args, mock_logger)
     
     assert isinstance(result, str)
@@ -431,7 +431,7 @@ class TestRealDataIntegration:
     query_args.verbose = True
     query_args.debug = False
     
-    with patch('query.query_manager.faiss.read_index', return_value=mock_faiss_index):
+    with patch('query.search.faiss.read_index', return_value=mock_faiss_index):
       with patch('query.query_manager.get_query_embedding') as mock_embedding:
         mock_embedding.return_value = np.array([[0.1] * 1536])
         
