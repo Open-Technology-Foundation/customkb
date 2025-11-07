@@ -1,6 +1,8 @@
 # Project-specific files
 BASH-CODING-STANDARD.md
 CLAUDE.md
+.claude/
+.git*
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
