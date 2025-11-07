@@ -701,29 +701,30 @@ query_temperature = 0.1
       assert kb.query_model == 'gpt-3.5-turbo'
       assert kb.query_temperature == 0.5
   
-  def test_domain_style_configuration(self, temp_data_manager):
+  def test_domain_style_configuration(self, temp_data_manager, monkeypatch):
     """Test domain-style configuration naming."""
-    kb_dir = temp_data_manager.create_temp_dir()
-    domain_config = os.path.join(kb_dir, "example.com.cfg")
-    
-    with open(domain_config, 'w') as f:
-      f.write("""[DEFAULT]
+    kb_name = "example.com"
+
+    config_content = """[DEFAULT]
 vector_model = text-embedding-3-large
 vector_dimensions = 3072
-""")
+"""
+
+    # Create properly structured KB directory
+    temp_vectordbs, kb_dir, domain_config = temp_data_manager.create_kb_directory(kb_name, config_content)
+    monkeypatch.setattr('config.config_manager.VECTORDBS', temp_vectordbs)
     
     from config.config_manager import KnowledgeBase, get_fq_cfg_filename
-    
-    # Test domain-style resolution
-    with patch('config.config_manager.VECTORDBS', kb_dir):
-      resolved_path = get_fq_cfg_filename("example.com")
-      assert resolved_path == domain_config
-      
-      # Test KnowledgeBase with domain-style name
-      kb = KnowledgeBase(domain_config)
-      assert kb.knowledge_base_name == "example.com"
-      assert kb.knowledge_base_db.endswith("example.com.db")
-      assert kb.knowledge_base_vector.endswith("example.com.faiss")
+
+    # Test domain-style resolution (VECTORDBS already monkeypatched)
+    resolved_path = get_fq_cfg_filename("example.com")
+    assert resolved_path == domain_config
+
+    # Test KnowledgeBase with domain-style name
+    kb = KnowledgeBase("example.com")  # Use KB name
+    assert kb.knowledge_base_name == "example.com"
+    assert kb.knowledge_base_db.endswith("example.com.db")
+    assert kb.knowledge_base_vector.endswith("example.com.faiss")
   
   def test_models_json_integration(self, temp_data_manager):
     """Test Models.json integration with configuration."""
