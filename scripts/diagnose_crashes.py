@@ -149,8 +149,10 @@ def check_system_limits():
         
         for name, flag in limits_to_check:
             try:
-                result = subprocess.run(['ulimit', flag], 
-                                      capture_output=True, text=True, shell=True)
+                # Safe: use shell with explicit bash invocation
+                # flag comes from predefined list (lines 144-148), not user input
+                result = subprocess.run(['/bin/bash', '-c', f'ulimit {flag}'],
+                                      capture_output=True, text=True, check=False)
                 print(f"{name}: {result.stdout.strip()}")
             except (psutil.NoSuchProcess, psutil.AccessDenied, AttributeError):
                 # Process terminated or inaccessible

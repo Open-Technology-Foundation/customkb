@@ -643,20 +643,19 @@ class KnowledgeBase:
         output_to: Path to save config to. If None, prints to stderr.
     """
     if output_to:
-      filehandle = open(output_to, 'w')
+      with open(output_to, 'w') as filehandle:
+        print(f"# {self.knowledge_base_name}", file=filehandle)
+        print("[DEFAULT]", file=filehandle)
+
+        attrs = vars(self)
+        for key, value in attrs.items():
+          print(f"{key} = {value}", file=filehandle)
     else:
       import sys
-      filehandle = sys.stderr
+      print(f"# {self.knowledge_base_name}", file=sys.stderr)
 
-    print(f"# {self.knowledge_base_name}", file=filehandle)
-    if output_to:
-      print("[DEFAULT]", file=filehandle)
-
-    attrs = vars(self)
-    for key, value in attrs.items():
-      print(f"{key} = {value}", file=filehandle)
-
-    if output_to:
-      filehandle.close()
+      attrs = vars(self)
+      for key, value in attrs.items():
+        print(f"{key} = {value}", file=sys.stderr)
 
 #fin

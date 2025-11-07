@@ -1,6 +1,21 @@
 # Ruff configuration for CustomKB
 # https://docs.astral.sh/ruff/
 
+# Line length (global setting)
+line-length = 127
+
+# Exclude directories
+exclude = [
+  ".mailer",
+  ".gudang",
+  ".venv",
+  "venv",
+  "__pycache__",
+  ".git",
+  "build",
+  "dist",
+]
+
 [lint]
 # Enable specific rule sets
 select = [
@@ -21,18 +36,6 @@ ignore = [
   "E501",  # Line too long (handled by formatter)
 ]
 
-# Exclude directories
-exclude = [
-  ".mailer",
-  ".gudang",
-  ".venv",
-  "venv",
-  "__pycache__",
-  ".git",
-  "build",
-  "dist",
-]
-
 [lint.per-file-ignores]
 # Allow unused imports in __init__.py files
 "__init__.py" = ["F401"]
@@ -40,10 +43,6 @@ exclude = [
 [format]
 # Use 2-space indentation (CustomKB standard, documented in CLAUDE.md)
 indent-style = "space"
-indent-width = 2
-
-# Line length
-line-length = 127
 
 # Quote style
 quote-style = "single"
