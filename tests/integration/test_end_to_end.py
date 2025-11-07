@@ -105,19 +105,20 @@ query_role = You are a helpful assistant.
     assert isinstance(query_result, str)
     assert len(query_result) > 0
   
-  def test_workflow_with_context_only_query(self, temp_data_manager, sample_texts, mock_openai_client, mock_faiss_index):
+  def test_workflow_with_context_only_query(self, temp_data_manager, sample_texts, mock_openai_client, mock_faiss_index, monkeypatch):
     """Test workflow ending with context-only query."""
-    # Set up test environment (similar to above but shorter)
-    kb_dir = temp_data_manager.create_temp_dir()
+    # Set up test environment with proper KB structure
     kb_name = "context_test_kb"
-    
-    config_file = os.path.join(kb_dir, f"{kb_name}.cfg")
-    with open(config_file, 'w') as f:
-      f.write("""[DEFAULT]
+
+    config_content = """[DEFAULT]
 vector_model = text-embedding-3-small
 vector_dimensions = 1536
 query_model = gpt-4o
-""")
+"""
+
+    # Create properly structured KB directory
+    temp_vectordbs, kb_dir, config_file = temp_data_manager.create_kb_directory(kb_name, config_content)
+    monkeypatch.setattr('config.config_manager.VECTORDBS', temp_vectordbs)
     
     # Create single test file
     test_file = os.path.join(kb_dir, "test.txt")
@@ -133,32 +134,32 @@ query_model = gpt-4o
     
     # Database step
     db_args = Mock()
-    db_args.config_file = config_file
+    db_args.config_file = kb_name  # Use KB name
     db_args.files = [test_file]
     db_args.language = 'en'
     db_args.force = False
     db_args.verbose = True
     db_args.debug = False
-    
+
     with patch('builtins.input', return_value='y'):
       process_database(db_args, mock_logger)
-    
+
     # Embedding step
     embed_args = Mock()
-    embed_args.config_file = config_file
+    embed_args.config_file = kb_name  # Use KB name
     embed_args.reset_database = False
     embed_args.verbose = True
     embed_args.debug = False
-    
+
     with patch('embedding.embed_manager.openai_client', mock_openai_client['sync']):
       with patch('embedding.embed_manager.async_openai_client', mock_openai_client['async']):
         with patch('embedding.embed_manager.get_optimal_faiss_index', return_value=mock_faiss_index):
           with patch('asyncio.run', return_value={1}):
             process_embeddings(embed_args, mock_logger)
-    
+
     # Context-only query step
     query_args = Mock()
-    query_args.config_file = config_file
+    query_args.config_file = kb_name  # Use KB name
     query_args.query_text = "Test query"
     query_args.query_file = ""
     query_args.context_only = True  # Context only
@@ -172,18 +173,19 @@ query_model = gpt-4o
     # Should contain context XML tags
     assert "<context" in result or "context" in result.lower()
   
-  def test_workflow_with_force_reprocessing(self, temp_data_manager, sample_texts, mock_openai_client, mock_faiss_index):
+  def test_workflow_with_force_reprocessing(self, temp_data_manager, sample_texts, mock_openai_client, mock_faiss_index, monkeypatch):
     """Test workflow with force reprocessing of existing data."""
-    kb_dir = temp_data_manager.create_temp_dir()
     kb_name = "force_test_kb"
-    
-    config_file = os.path.join(kb_dir, f"{kb_name}.cfg")
-    with open(config_file, 'w') as f:
-      f.write("""[DEFAULT]
+
+    config_content = """[DEFAULT]
 vector_model = text-embedding-3-small
 vector_dimensions = 1536
-""")
-    
+"""
+
+    # Create properly structured KB directory
+    temp_vectordbs, kb_dir, config_file = temp_data_manager.create_kb_directory(kb_name, config_content)
+    monkeypatch.setattr('config.config_manager.VECTORDBS', temp_vectordbs)
+
     test_file = os.path.join(kb_dir, "test.txt")
     with open(test_file, 'w') as f:
       f.write(sample_texts[0])
@@ -194,7 +196,7 @@ vector_dimensions = 1536
     
     # First processing
     db_args = Mock()
-    db_args.config_file = config_file
+    db_args.config_file = kb_name  # Use KB name
     db_args.files = [test_file]
     db_args.language = 'en'
     db_args.force = False
@@ -215,21 +217,22 @@ vector_dimensions = 1536
     third_result = process_database(db_args, mock_logger)
     assert "files processed" in third_result
   
-  def test_workflow_with_multiple_file_types(self, temp_data_manager, mock_openai_client, mock_faiss_index):
+  def test_workflow_with_multiple_file_types(self, temp_data_manager, mock_openai_client, mock_faiss_index, monkeypatch):
     """Test workflow with multiple file types (markdown, text, etc.)."""
-    kb_dir = temp_data_manager.create_temp_dir()
     kb_name = "multifile_kb"
-    
-    config_file = os.path.join(kb_dir, f"{kb_name}.cfg")
-    with open(config_file, 'w') as f:
-      f.write("""[DEFAULT]
+
+    config_content = """[DEFAULT]
 vector_model = text-embedding-3-small
 vector_dimensions = 1536
-""")
-    
+"""
+
+    # Create properly structured KB directory
+    temp_vectordbs, kb_dir, config_file = temp_data_manager.create_kb_directory(kb_name, config_content)
+    monkeypatch.setattr('config.config_manager.VECTORDBS', temp_vectordbs)
+
     # Create files of different types
     test_files = []
-    
+
     # Markdown file
     md_file = os.path.join(kb_dir, "readme.md")
     with open(md_file, 'w') as f:
@@ -254,7 +257,7 @@ vector_dimensions = 1536
     
     # Process all file types
     db_args = Mock()
-    db_args.config_file = config_file
+    db_args.config_file = kb_name  # Use KB name
     db_args.files = test_files
     db_args.language = 'en'
     db_args.force = False
