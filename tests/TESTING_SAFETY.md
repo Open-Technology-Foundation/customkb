@@ -321,3 +321,26 @@ When reporting test-related hangs, include:
 **Test Suite**: 589 tests (442 passing, 75% pass rate)
 
 #fin
+
+---
+
+## Known Issues
+
+### safe-test.sh Collection Hang (2025-11-07)
+
+**Symptom**: safe-test.sh hangs during test collection phase with ulimit memory restrictions.
+
+**Workaround**: Use `./run_tests.py --safe` instead, which uses Python's resource.setrlimit() instead of bash ulimit.
+
+**Example**:
+```bash
+# May hang during collection:
+./safe-test.sh tests/unit/test_config_manager.py -v
+
+# Works correctly:
+./run_tests.py --safe --unit
+source .venv/bin/activate && timeout 60 pytest tests/unit/test_config_manager.py -v
+```
+
+**Root cause**: Under investigation - appears related to ulimit -v interaction with test collection.
+

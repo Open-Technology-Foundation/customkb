@@ -1,18 +1,30 @@
 #!/usr/bin/env bash
 #
-# Safe Test Wrapper for CustomKB
+# Safe Test Wrapper for CustomKB - DEPRECATED
 #
-# This script wraps pytest execution with safety limits to prevent system hangs.
-# It's designed to be used instead of calling pytest directly.
+# ⚠️  WARNING: This script is DEPRECATED and can cause system hangs!
+# ⚠️  Use ./run_tests.py --safe instead
 #
-# Usage:
-#   ./safe-test.sh [pytest arguments]
+# REASON: ulimit -v memory restrictions cause pytest collection to hang,
+#         which can lead to system crashes. See CRASH_INCIDENT_4.md for details.
 #
-# Examples:
-#   ./safe-test.sh tests/unit/
-#   ./safe-test.sh tests/integration/test_end_to_end.py -v
-#   ./safe-test.sh -k "test_cache" -v
+# RECOMMENDED ALTERNATIVE:
+#   ./run_tests.py --safe [options]
 #
+# Or use pytest directly with timeout:
+#   source .venv/bin/activate && timeout 180 pytest tests/unit/ -v
+#
+# This script is kept for reference only.
+#
+
+echo "⚠️  WARNING: safe-test.sh is deprecated!"
+echo "⚠️  This script can cause system hangs due to ulimit -v restrictions."
+echo ""
+echo "Please use instead:"
+echo "  ./run_tests.py --safe [options]"
+echo ""
+echo "Or press Ctrl+C to cancel, Enter to continue anyway (not recommended)..."
+read -r
 
 set -euo pipefail
 
