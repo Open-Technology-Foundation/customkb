@@ -3,6 +3,9 @@ BASH-CODING-STANDARD.md
 CLAUDE.md
 .claude/
 .git*
+.archive
+.mailer
+.reviews
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
