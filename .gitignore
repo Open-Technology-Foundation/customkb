@@ -1,6 +1,8 @@
 # Project-specific files
 BASH-CODING-STANDARD.md
 CLAUDE.md
+AUDIT-*.md
+.bash_completion
 .claude/
 .git*
 .archive
@@ -114,6 +116,7 @@ celerybeat.pid
 
 # Environments
 .env
+.env.*
 .venv
 env/
 venv/
@@ -158,6 +161,11 @@ tmp/
 temp/
 .gudang/
 sessions/
+
+# Development/personal configs
+config/dev-*.cfg
+**/CLAUDE.md
+**/.bash_completion
 
 # Development leftovers
 .symlink
