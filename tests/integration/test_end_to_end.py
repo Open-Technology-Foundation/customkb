@@ -282,17 +282,20 @@ vector_dimensions = 1536
     assert "script.py" in sources
     assert "notes.txt" in sources
   
-  def test_workflow_error_recovery(self, temp_data_manager, sample_texts):
+  def test_workflow_error_recovery(self, temp_data_manager, sample_texts, monkeypatch):
     """Test workflow error recovery scenarios."""
-    kb_dir = temp_data_manager.create_temp_dir()
     kb_name = "error_test_kb"
-    
-    config_file = os.path.join(kb_dir, f"{kb_name}.cfg")
-    with open(config_file, 'w') as f:
-      f.write("""[DEFAULT]
+
+    config_content = """[DEFAULT]
 vector_model = text-embedding-3-small
 vector_dimensions = 1536
-""")
+"""
+
+    # Create properly structured KB directory
+    temp_vectordbs, kb_dir, config_file = temp_data_manager.create_kb_directory(kb_name, config_content)
+
+    # Monkeypatch VECTORDBS to use temp directory
+    monkeypatch.setattr('config.config_manager.VECTORDBS', temp_vectordbs)
     
     test_file = os.path.join(kb_dir, "test.txt")
     with open(test_file, 'w') as f:
@@ -305,7 +308,7 @@ vector_dimensions = 1536
     
     # Test database processing with missing file
     db_args = Mock()
-    db_args.config_file = config_file
+    db_args.config_file = kb_name  # Use KB name instead of full path
     db_args.files = [test_file, "/nonexistent/file.txt"]
     db_args.language = 'en'
     db_args.force = False
@@ -321,7 +324,7 @@ vector_dimensions = 1536
     
     # Test embedding with API errors
     embed_args = Mock()
-    embed_args.config_file = config_file
+    embed_args.config_file = kb_name  # Use KB name instead of full path
     embed_args.reset_database = False
     embed_args.verbose = True
     embed_args.debug = False
@@ -381,23 +384,27 @@ class TestCLIIntegration:
       except SystemExit:
         pass  # Expected due to missing config file
   
-  def test_cli_config_file_resolution(self, temp_data_manager):
+  def test_cli_config_file_resolution(self, temp_data_manager, monkeypatch):
     """Test CLI configuration file resolution."""
-    kb_dir = temp_data_manager.create_temp_dir()
-    config_file = os.path.join(kb_dir, "test.cfg")
-    with open(config_file, 'w') as f:
-      f.write("[DEFAULT]\nvector_model = test\n")
-    
+    kb_name = "test"
+
+    config_content = "[DEFAULT]\nvector_model = test\n"
+
+    # Create properly structured KB directory
+    temp_vectordbs, kb_dir, config_file = temp_data_manager.create_kb_directory(kb_name, config_content)
+
+    # Monkeypatch VECTORDBS to use temp directory
+    monkeypatch.setattr('config.config_manager.VECTORDBS', temp_vectordbs)
+
     from config.config_manager import get_fq_cfg_filename
-    
+
     # Test absolute path
     result = get_fq_cfg_filename(config_file)
     assert result == config_file
-    
-    # Test relative path
-    with patch('os.getcwd', return_value=kb_dir):
-      result = get_fq_cfg_filename("test.cfg")
-      assert result == config_file
+
+    # Test KB name resolution
+    result = get_fq_cfg_filename(kb_name)
+    assert result == config_file
 
 
 @pytest.mark.integration
@@ -480,16 +487,11 @@ class TestRealDataIntegration:
 class TestFullPathIntegration:
   """Test full path storage integration across components."""
   
-  def test_duplicate_filenames_workflow(self, temp_data_manager, sample_texts, mock_openai_client, mock_faiss_index):
+  def test_duplicate_filenames_workflow(self, temp_data_manager, sample_texts, mock_openai_client, mock_faiss_index, monkeypatch):
     """Test complete workflow with duplicate filenames in different directories."""
-    # Create test environment
-    kb_dir = temp_data_manager.create_temp_dir()
     kb_name = "fullpath_test"
-    
-    # Create configuration file
-    config_file = os.path.join(kb_dir, f"{kb_name}.cfg")
-    with open(config_file, 'w') as f:
-      f.write("""[DEFAULT]
+
+    config_content = """[DEFAULT]
 vector_model = text-embedding-3-small
 vector_dimensions = 1536
 vector_chunks = 100
@@ -498,7 +500,13 @@ db_max_tokens = 150
 query_model = gpt-4o
 query_max_tokens = 1000
 query_top_k = 10
-""")
+"""
+
+    # Create properly structured KB directory
+    temp_vectordbs, kb_dir, config_file = temp_data_manager.create_kb_directory(kb_name, config_content)
+
+    # Monkeypatch VECTORDBS to use temp directory
+    monkeypatch.setattr('config.config_manager.VECTORDBS', temp_vectordbs)
     
     # Create duplicate filenames in different directories
     dir1 = os.path.join(kb_dir, "module1")
@@ -525,7 +533,7 @@ query_top_k = 10
     
     # Process both files
     db_args = Mock()
-    db_args.config_file = config_file
+    db_args.config_file = kb_name  # Use KB name instead of full path
     db_args.files = [config1, config2]
     db_args.language = 'en'
     db_args.force = False
@@ -539,7 +547,7 @@ query_top_k = 10
     
     # Create embeddings
     embed_args = Mock()
-    embed_args.config_file = config_file
+    embed_args.config_file = kb_name  # Use KB name instead of full path
     embed_args.reset_database = False
     embed_args.verbose = True
     embed_args.debug = False
@@ -555,7 +563,7 @@ query_top_k = 10
     
     # Query for module1
     query_args = Mock()
-    query_args.config_file = config_file
+    query_args.config_file = kb_name  # Use KB name instead of full path
     query_args.query_text = "postgresql module1"
     query_args.context_only = True
     query_args.query_file = ''
@@ -585,19 +593,21 @@ query_top_k = 10
     assert "module2" in result
     assert "mysql" in result.lower()
   
-  def test_path_display_in_query_results(self, temp_data_manager, mock_openai_client, mock_faiss_index):
+  def test_path_display_in_query_results(self, temp_data_manager, mock_openai_client, mock_faiss_index, monkeypatch):
     """Test that paths are displayed correctly in query results."""
-    # Create deep directory structure
-    kb_dir = temp_data_manager.create_temp_dir()
     kb_name = "path_display_test"
-    
-    config_file = os.path.join(kb_dir, f"{kb_name}.cfg")
-    with open(config_file, 'w') as f:
-      f.write("""[DEFAULT]
+
+    config_content = """[DEFAULT]
 vector_model = text-embedding-3-small
 vector_dimensions = 1536
 query_model = gpt-4o
-""")
+"""
+
+    # Create properly structured KB directory
+    temp_vectordbs, kb_dir, config_file = temp_data_manager.create_kb_directory(kb_name, config_content)
+
+    # Monkeypatch VECTORDBS to use temp directory
+    monkeypatch.setattr('config.config_manager.VECTORDBS', temp_vectordbs)
     
     # Create deeply nested file
     deep_dir = os.path.join(kb_dir, "src", "components", "ui", "widgets", "forms")
@@ -616,7 +626,7 @@ query_model = gpt-4o
     
     # Process file
     db_args = Mock()
-    db_args.config_file = config_file
+    db_args.config_file = kb_name  # Use KB name instead of full path
     db_args.files = [deep_file]
     db_args.language = 'en'
     db_args.force = False
@@ -628,7 +638,7 @@ query_model = gpt-4o
     
     # Embed
     embed_args = Mock()
-    embed_args.config_file = config_file
+    embed_args.config_file = kb_name  # Use KB name instead of full path
     embed_args.reset_database = False
     embed_args.verbose = True
     embed_args.debug = False
@@ -642,7 +652,7 @@ query_model = gpt-4o
     
     # Query
     query_args = Mock()
-    query_args.config_file = config_file
+    query_args.config_file = kb_name  # Use KB name instead of full path
     query_args.query_text = "email validation"
     query_args.context_only = True
     query_args.query_file = ''
