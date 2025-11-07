@@ -7,8 +7,6 @@
 
 CustomKB transforms your documents into AI-powered, searchable knowledgebases with state-of-the-art embedding models, vector search, and language models to deliver contextually relevant answers from your data.
 
-**Latest:** Version 1.0.0 includes critical security fixes eliminating pickle deserialization vulnerabilities and SQL injection risks. See [CHANGELOG.md](CHANGELOG.md) for details.
-
 ## Table of Contents
 
 - [Key Features](#key-features)
@@ -939,12 +937,7 @@ GPL-3.0 License - see [LICENSE](LICENSE) file for details.
 
 **Copyright © 2024 Indonesian Open Technology Foundation**
 
-This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
-
-This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
-
 ---
 
 **Actively maintained by the [Indonesian Open Technology Foundation](https://github.com/Open-Technology-Foundation)**
 
-*Building open-source AI tools for everyone* 🚀
