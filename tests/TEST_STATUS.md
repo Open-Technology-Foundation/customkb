@@ -199,7 +199,37 @@ monkeypatch.setattr('config.config_manager.VECTORDBS', temp_vectordbs)
 
 **Estimated Impact**: +30-40 tests when all integration tests are updated
 
-**Status**: Infrastructure complete, pattern documented, ready for systematic application
+**Completed Work**:
+1. ✅ Added `TestDataManager.create_kb_directory()` helper method (Commit: `489a95a`)
+2. ✅ Demonstrated fix in test_complete_workflow_database_to_query
+3. ✅ Applied fix to 4 TestEndToEndWorkflow tests (Commit: `997593b`)
+   - test_complete_workflow_database_to_query
+   - test_workflow_with_context_only_query
+   - test_workflow_with_force_reprocessing
+   - test_workflow_with_multiple_file_types
+
+**Results**:
+- ✅ KB directory structure issues resolved
+- ✅ Tests now proceed past "KB not found" errors
+- ⚠️ Revealed additional mocking issues in integration tests
+  - `AttributeError: module 'query.query_manager' has no attribute 'faiss'`
+  - Mock client setup issues
+  - Test infrastructure needs further refinement
+
+**Status**: Infrastructure complete, pattern validated, additional test fixes needed
+
+**Next Steps for Integration Tests**:
+1. **Fix mocking issues** (faiss, API clients)
+   - Update patch paths to match actual import structure
+   - Use proper mock fixtures from conftest.py
+2. **Apply KB directory fix** to remaining 16+ tests in test_end_to_end.py
+3. **Apply to other integration files**:
+   - test_bm25_integration.py (~16 tests)
+   - test_reranking_integration.py (~4 tests)
+4. **Refine test infrastructure**:
+   - Create better mock fixtures
+   - Improve API client mocking
+   - Add integration-specific conftest helpers
 
 ---
 
