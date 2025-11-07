@@ -1,0 +1,38 @@
+#!/bin/bash
+#shellcheck disable=SC2155
+set -euo pipefail
+shopt -s inherit_errexit shift_verbose
+
+declare -r SCRIPT_PATH="$(realpath -e -- "$0")"
+declare -r SCRIPT_DIR="${SCRIPT_PATH%/*}"
+
+declare -r SCRIPT_NAME=$(basename -- "$SCRIPT_DIR")
+
+# Cleanup handler
+cleanup() {
+  local -i exitcode=${1:-0}
+  exit "$exitcode"
+}
+trap 'cleanup $?' SIGINT SIGTERM EXIT
+
+cd "$SCRIPT_DIR"
+
+cln -Nq
+
+declare -- version=$(./"$SCRIPT_NAME" version | cut -d' ' -f2)
+
+git add .
+
+git -c user.name='Biksu Okusi' -c user.email='biksu@okusi.id' commit -m "${1:-update $version}"
+
+# Check if remote is configured before pushing
+if git remote -v | grep -q origin; then
+  git push
+  echo "Repository: https://github.com/$(git remote get-url origin | sed 's|.*github.com[:/]||;s|\.git$||')"
+else
+  >&2 echo 'Warning: No git remote configured. Skipping push.'
+  >&2 echo 'To push manually, set up remote with: git remote add origin <url>'
+  >&2 echo 'Then run: git push -u origin main'
+fi
+
+#fin
