@@ -1,28 +1,75 @@
-anthropic==0.71.0
-colorlog==6.10.1
-# FAISS is installed separately based on your hardware configuration
-# Run: ./setup/install_faiss.sh (auto-detect)
-# Or install manually:
-#   CPU-only: pip install -r requirements-faiss-cpu.txt
-#   GPU (CUDA 12): pip install -r requirements-faiss-gpu-cu12.txt
-#   GPU (CUDA 11): pip install -r requirements-faiss-gpu-cu11.txt
-httpx==0.28.1
-langchain_text_splitters==1.0.0
-langdetect==1.0.9
-matplotlib==3.10.7
-nltk==3.9.2
-numpy==2.3.4
-openai==2.6.1
-pandas==2.3.3
-protobuf==6.33.0
-psutil==7.1.2
-pynvml==13.0.1
-pytest==8.4.2
-PyYAML==6.0.3
-rank_bm25==0.2.2
-rapidfuzz==3.14.1
-sentence_transformers==5.1.2
-spacy==3.8.7
-textblob==0.19.0
-torch==2.9.0
-tqdm==4.67.1
+# CustomKB Core Dependencies
+# Install with: pip install -r requirements.txt
+# Then install FAISS: ./setup/install_faiss.sh
+
+# =============================================================================
+# Core AI/ML Packages
+# =============================================================================
+anthropic>=0.66.0
+openai>=1.106.0
+sentence_transformers>=5.1.0
+torch>=2.6.0
+
+# =============================================================================
+# Vector & Search
+# =============================================================================
+# CRITICAL: numpy must be <2 for FAISS compatibility
+# FAISS (both CPU and GPU versions) require numpy<2
+numpy>=1.26.4,<2
+rank_bm25>=0.2.2
+
+# =============================================================================
+# NLP Processing
+# =============================================================================
+nltk>=3.9.1
+spacy>=3.7.5
+langchain_text_splitters>=0.3.11
+langdetect>=1.0.9
+
+# =============================================================================
+# Data Handling
+# =============================================================================
+pandas>=2.3.2
+protobuf>=5.29.5
+PyYAML>=6.0.2
+rapidfuzz>=3.14.0
+
+# =============================================================================
+# Utilities
+# =============================================================================
+colorlog>=6.9.0
+httpx>=0.28.1
+charset-normalizer>=3.0.0
+post_slug>=1.0.0
+psutil>=7.0.0
+nvidia-ml-py>=12.560.30
+tqdm>=4.67.1
+
+# =============================================================================
+# Testing (for development)
+# =============================================================================
+pytest>=8.4.1
+
+# =============================================================================
+# Optional Packages
+# =============================================================================
+# Uncomment if needed for your use case:
+# matplotlib>=3.9.0      # For visualization and plotting
+# textblob>=0.15.0       # For text sentiment analysis
+
+# =============================================================================
+# FAISS Installation (Required)
+# =============================================================================
+# FAISS is NOT included in this file and must be installed separately
+# based on your hardware configuration.
+#
+# Automatic installation (recommended):
+#   ./setup/install_faiss.sh
+#
+# Manual installation:
+#   CPU-only:        pip install -r requirements-faiss-cpu.txt
+#   GPU (CUDA 12):   pip install -r requirements-faiss-gpu-cu12.txt
+#   GPU (CUDA 11):   pip install -r requirements-faiss-gpu-cu11.txt
+#
+# Force specific variant:
+#   FAISS_VARIANT=cpu ./setup/install_faiss.sh

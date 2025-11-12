@@ -88,14 +88,12 @@ class TestBM25DatabaseIntegration:
     
     mock_kb.sql_connection.close()
   
-  def test_bm25_data_processing_during_ingestion(self, temp_data_manager, sample_texts):
+  def test_bm25_data_processing_during_ingestion(self, temp_data_manager, sample_texts, monkeypatch):
     """Test that BM25 tokens are generated during text ingestion."""
-    kb_dir = temp_data_manager.create_temp_dir()
-    config_file = os.path.join(kb_dir, 'bm25_ingest.cfg')
-    
+    kb_name = "bm25_ingest"
+
     # Create config with BM25 enabled
-    with open(config_file, 'w') as f:
-      f.write("""[DEFAULT]
+    config_content = """[DEFAULT]
 vector_model = text-embedding-3-small
 vector_dimensions = 1536
 query_model = gpt-4o
@@ -105,30 +103,34 @@ enable_hybrid_search = true
 vector_weight = 0.7
 bm25_k1 = 1.2
 bm25_b = 0.75
-""")
-    
+"""
+
+    # Create properly structured KB directory
+    temp_vectordbs, kb_dir, config_file = temp_data_manager.create_kb_directory(kb_name, config_content)
+    monkeypatch.setattr('config.config_manager.VECTORDBS', temp_vectordbs)
+
     # Create test document
     test_file = os.path.join(kb_dir, 'test_doc.txt')
     with open(test_file, 'w') as f:
       f.write(sample_texts[0])
-    
+
     # Process database
     mock_logger = Mock()
     db_args = Mock()
-    db_args.config_file = config_file
+    db_args.config_file = kb_name  # Use KB name, not full path
     db_args.files = [test_file]
     db_args.language = 'en'
     db_args.force = False
     db_args.verbose = True
     db_args.debug = False
-    
+
     with patch('builtins.input', return_value='y'):
       result = process_database(db_args, mock_logger)
-    
+
     assert "files added" in result
-    
+
     # Verify BM25 data was processed
-    kb = KnowledgeBase(config_file)
+    kb = KnowledgeBase(kb_name)  # Use KB name, not full path
     kb.sql_connection = sqlite3.connect(kb.knowledge_base_db)
     kb.sql_cursor = kb.sql_connection.cursor()
     
@@ -148,40 +150,42 @@ bm25_b = 0.75
     
     kb.sql_connection.close()
   
-  def test_bm25_backward_compatibility(self, temp_data_manager, sample_texts):
+  def test_bm25_backward_compatibility(self, temp_data_manager, sample_texts, monkeypatch):
     """Test that BM25 doesn't break existing functionality when disabled."""
-    kb_dir = temp_data_manager.create_temp_dir()
-    config_file = os.path.join(kb_dir, 'compat_test.cfg')
-    
+    kb_name = "compat_test"
+
     # Create config with BM25 disabled (default)
-    with open(config_file, 'w') as f:
-      f.write("""[DEFAULT]
+    config_content = """[DEFAULT]
 vector_model = text-embedding-3-small
 vector_dimensions = 1536
 query_model = gpt-4o
-""")
-    
+"""
+
+    # Create properly structured KB directory
+    temp_vectordbs, kb_dir, config_file = temp_data_manager.create_kb_directory(kb_name, config_content)
+    monkeypatch.setattr('config.config_manager.VECTORDBS', temp_vectordbs)
+
     test_file = os.path.join(kb_dir, 'test_doc.txt')
     with open(test_file, 'w') as f:
       f.write(sample_texts[0])
-    
+
     # Process database
     mock_logger = Mock()
     db_args = Mock()
-    db_args.config_file = config_file
+    db_args.config_file = kb_name  # Use KB name, not full path
     db_args.files = [test_file]
     db_args.language = 'en'
     db_args.force = False
     db_args.verbose = True
     db_args.debug = False
-    
+
     with patch('builtins.input', return_value='y'):
       result = process_database(db_args, mock_logger)
-    
+
     assert "files added" in result
-    
+
     # Verify that BM25 columns exist but are not populated
-    kb = KnowledgeBase(config_file)
+    kb = KnowledgeBase(kb_name)  # Use KB name, not full path
     kb.sql_connection = sqlite3.connect(kb.knowledge_base_db)
     kb.sql_cursor = kb.sql_connection.cursor()
     
@@ -471,8 +475,8 @@ bm25_b = 0.75
     kb.sql_connection.close()
   
   @pytest.mark.asyncio
-  @patch('query.query_manager.get_query_embedding')
-  @patch('query.query_manager.faiss.read_index')
+  @patch('query.embedding.get_query_embedding')
+  @patch('query.search.faiss.read_index')
   async def test_hybrid_search_integration(self, mock_read_index, mock_get_embedding):
     """Test hybrid search combining vector and BM25 results."""
     # Mock vector search components
@@ -513,8 +517,8 @@ bm25_b = 0.75
     
     kb.sql_connection.close()
   
-  @patch('query.query_manager.get_query_embedding')
-  @patch('query.query_manager.faiss.read_index')
+  @patch('query.embedding.get_query_embedding')
+  @patch('query.search.faiss.read_index')
   def test_query_process_with_hybrid_search(self, mock_read_index, mock_get_embedding):
     """Test complete query processing with hybrid search enabled."""
     # Mock components
@@ -639,31 +643,33 @@ class TestBM25TokenizationIntegration:
       if "REST-API" in content.lower():
         assert "rest-api" in tokens
   
-  def test_tokenization_consistency_across_database_operations(self, temp_data_manager, sample_texts):
+  def test_tokenization_consistency_across_database_operations(self, temp_data_manager, sample_texts, monkeypatch):
     """Test that tokenization is consistent across different database operations."""
-    kb_dir = temp_data_manager.create_temp_dir()
-    config_file = os.path.join(kb_dir, 'consistency_test.cfg')
-    
+    kb_name = "consistency_test"
+
     # Create config with BM25 enabled
-    with open(config_file, 'w') as f:
-      f.write("""[DEFAULT]
+    config_content = """[DEFAULT]
 vector_model = text-embedding-3-small
 vector_dimensions = 1536
 
 [ALGORITHMS]
 enable_hybrid_search = true
-""")
-    
+"""
+
+    # Create properly structured KB directory
+    temp_vectordbs, kb_dir, config_file = temp_data_manager.create_kb_directory(kb_name, config_content)
+    monkeypatch.setattr('config.config_manager.VECTORDBS', temp_vectordbs)
+
     # Create test document
     test_content = sample_texts[0]
     test_file = os.path.join(kb_dir, 'consistency_test.txt')
     with open(test_file, 'w') as f:
       f.write(test_content)
-    
+
     # Process through database
     mock_logger = Mock()
     db_args = Mock()
-    db_args.config_file = config_file
+    db_args.config_file = kb_name  # Use KB name, not full path
     db_args.files = [test_file]
     db_args.language = 'en'
     db_args.force = False
@@ -672,9 +678,9 @@ enable_hybrid_search = true
     
     with patch('builtins.input', return_value='y'):
       process_database(db_args, mock_logger)
-    
+
     # Get tokens from database
-    kb = KnowledgeBase(config_file)
+    kb = KnowledgeBase(kb_name)  # Use KB name, not full path
     kb.sql_connection = sqlite3.connect(kb.knowledge_base_db)
     kb.sql_cursor = kb.sql_connection.cursor()
     
@@ -703,22 +709,24 @@ enable_hybrid_search = true
 class TestBM25PerformanceIntegration:
   """Test BM25 performance characteristics in integration scenarios."""
   
-  def test_bm25_index_size_and_speed(self, temp_data_manager):
+  def test_bm25_index_size_and_speed(self, temp_data_manager, monkeypatch):
     """Test BM25 index size and loading speed with realistic data volumes."""
-    kb_dir = temp_data_manager.create_temp_dir()
-    config_file = os.path.join(kb_dir, 'performance_test.cfg')
-    
-    with open(config_file, 'w') as f:
-      f.write("""[DEFAULT]
+    kb_name = "performance_test"
+
+    config_content = """[DEFAULT]
 vector_model = text-embedding-3-small
 vector_dimensions = 1536
 
 [ALGORITHMS]
 enable_hybrid_search = true
-""")
-    
+"""
+
+    # Create properly structured KB directory
+    temp_vectordbs, kb_dir, config_file = temp_data_manager.create_kb_directory(kb_name, config_content)
+    monkeypatch.setattr('config.config_manager.VECTORDBS', temp_vectordbs)
+
     # Create database with substantial amount of data
-    kb = KnowledgeBase(config_file)
+    kb = KnowledgeBase(kb_name)  # Use KB name, not full path
     conn = sqlite3.connect(kb.knowledge_base_db)
     cursor = conn.cursor()
     
@@ -820,21 +828,23 @@ enable_hybrid_search = true
     
     kb.sql_connection.close()
   
-  def test_bm25_memory_usage_patterns(self, temp_data_manager):
+  def test_bm25_memory_usage_patterns(self, temp_data_manager, monkeypatch):
     """Test BM25 memory usage with larger datasets."""
-    kb_dir = temp_data_manager.create_temp_dir()
-    config_file = os.path.join(kb_dir, 'memory_test.cfg')
-    
-    with open(config_file, 'w') as f:
-      f.write("""[DEFAULT]
+    kb_name = "memory_test"
+
+    config_content = """[DEFAULT]
 vector_model = text-embedding-3-small
 
 [ALGORITHMS]
 enable_hybrid_search = true
-""")
-    
+"""
+
+    # Create properly structured KB directory
+    temp_vectordbs, kb_dir, config_file = temp_data_manager.create_kb_directory(kb_name, config_content)
+    monkeypatch.setattr('config.config_manager.VECTORDBS', temp_vectordbs)
+
     # Create moderately sized dataset
-    kb = KnowledgeBase(config_file)
+    kb = KnowledgeBase(kb_name)  # Use KB name, not full path
     conn = sqlite3.connect(kb.knowledge_base_db)
     cursor = conn.cursor()
     
@@ -1142,8 +1152,8 @@ bm25_max_results = 50
     kb.sql_connection.close()
   
   @pytest.mark.asyncio
-  @patch('query.query_manager.get_query_embedding')
-  @patch('query.query_manager.faiss.read_index')
+  @patch('query.embedding.get_query_embedding')
+  @patch('query.search.faiss.read_index')
   async def test_hybrid_search_with_bm25_limiting(self, mock_read_index, mock_get_embedding):
     """Test that hybrid search works correctly with BM25 result limiting."""
     # Create config with result limit

@@ -9,7 +9,6 @@ import re
 import glob
 from typing import Any
 
-from nltk.tokenize import word_tokenize
 from utils.logging_config import get_logger
 
 # This will be initialized in db_manager.py when importing spacy
@@ -36,6 +35,8 @@ def clean_text(text: str, stop_words: set[str] | None = None) -> str:
   text = NON_WORD_RE.sub(' ', text).strip()
 
   if stop_words:
+    # Lazy import to avoid loading NLTK unless needed
+    from nltk.tokenize import word_tokenize
     filtered_text = ' '.join(
       w for w in word_tokenize(text) if w not in stop_words
     )
@@ -99,16 +100,20 @@ def enhanced_clean_text(text: str, stop_words: set[str] | None = None,
   
   # Apply lemmatization and stopword removal
   if lemmatizer:
+    # Lazy import to avoid loading NLTK unless needed
+    from nltk.tokenize import word_tokenize
     tokens = word_tokenize(text)
     if stop_words:
       tokens = [lemmatizer.lemmatize(w) for w in tokens if w not in stop_words
                 and not all(c in '.,!?:;-' for c in w)]
     else:
-      tokens = [lemmatizer.lemmatize(w) for w in tokens 
+      tokens = [lemmatizer.lemmatize(w) for w in tokens
                 if not all(c in '.,!?:;-' for c in w)]
-    
+
     text = ' '.join(tokens)
   elif stop_words:
+    # Lazy import to avoid loading NLTK unless needed
+    from nltk.tokenize import word_tokenize
     text = ' '.join(w for w in word_tokenize(text) if w not in stop_words
                    and not all(c in '.,!?:;-' for c in w))
   
@@ -218,10 +223,11 @@ def tokenize_for_bm25(text: str, language: str = 'en') -> tuple[str, int]:
     iso_code = 'en'
     full_language = 'english'
   
-  # Tokenize using NLTK
+  # Tokenize using NLTK (lazy import to avoid loading unless needed)
   try:
+    from nltk.tokenize import word_tokenize
     tokens = word_tokenize(text, language=full_language)
-  except (LookupError, FileNotFoundError, OSError, AttributeError):
+  except (LookupError, FileNotFoundError, OSError, AttributeError, ImportError):
     # Fallback to basic split when NLTK fails (test environments or missing data)
     tokens = text.lower().split()
   
@@ -269,5 +275,89 @@ def get_env(var_name: str, default: Any, cast_type: Any = str) -> Any:
     return cast_type(value)
   except (ValueError, TypeError):
     return default
+
+def detect_file_encoding(file_path: str, sample_size: int = 65536) -> str:
+  """
+  Detect the encoding of a text file using charset-normalizer.
+
+  Args:
+      file_path: Path to the file to analyze.
+      sample_size: Number of bytes to read for detection (default 64KB).
+
+  Returns:
+      Detected encoding name (e.g., 'utf-8', 'windows-1252'), or 'utf-8' if detection fails.
+  """
+  try:
+    from charset_normalizer import from_path
+
+    # Read sample from file for detection
+    result = from_path(file_path, steps=1)
+
+    if result and result.best():
+      encoding = result.best().encoding
+      if encoding:
+        return encoding.lower()
+
+    # Fallback to utf-8 if detection fails
+    return 'utf-8'
+
+  except Exception as e:
+    # Log error but only once to avoid spam
+    logger.error(f"Encoding detection failed for {file_path}: {e}")
+    return 'utf-8'
+
+def read_text_file(file_path: str, config: dict | None = None) -> str:
+  """
+  Read a text file with automatic encoding detection.
+
+  Args:
+      file_path: Path to the text file to read.
+      config: Optional configuration dict with encoding settings:
+          - auto_detect_encoding: Enable/disable auto-detection (default: True)
+          - default_encoding: Fallback encoding (default: 'utf-8')
+          - encoding_fallbacks: List of encodings to try (default: ['utf-8', 'windows-1252', 'latin-1', 'cp1252'])
+
+  Returns:
+      The file contents as a string.
+
+  Raises:
+      FileNotFoundError: If file doesn't exist.
+      Exception: If file cannot be read with any encoding.
+  """
+  # Get config settings
+  if config is None:
+    config = {}
+
+  auto_detect = config.get('auto_detect_encoding', True)
+  default_encoding = config.get('default_encoding', 'utf-8')
+  fallback_encodings = config.get('encoding_fallbacks', ['utf-8', 'windows-1252', 'latin-1', 'cp1252'])
+
+  # Try auto-detection first if enabled
+  if auto_detect:
+    try:
+      detected_encoding = detect_file_encoding(file_path)
+      with open(file_path, 'r', encoding=detected_encoding) as f:
+        return f.read()
+    except Exception as e:
+      # Only log if detection was explicitly requested
+      logger.error(f"Failed to read {file_path} with detected encoding: {e}")
+
+  # Try fallback encodings
+  for encoding in fallback_encodings:
+    try:
+      with open(file_path, 'r', encoding=encoding) as f:
+        return f.read()
+    except (UnicodeDecodeError, LookupError):
+      continue
+
+  # Last resort: read with default encoding and error handling
+  try:
+    with open(file_path, 'r', encoding=default_encoding, errors='replace') as f:
+      content = f.read()
+      logger.error(f"File {file_path} read with errors='replace' using {default_encoding}")
+      return content
+  except Exception as e:
+    logger.error(f"Failed to read {file_path}: {e}")
+    raise
 
 #fin

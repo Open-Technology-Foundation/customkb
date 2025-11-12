@@ -39,8 +39,10 @@ import warnings
 from typing import Any
 from contextlib import contextmanager
 
+from post_slug import post_slug
+
 from utils.logging_config import get_logger, time_to_finish
-from utils.text_utils import get_files, split_filepath, enhanced_clean_text, nlp
+from utils.text_utils import get_files, split_filepath, enhanced_clean_text, nlp, read_text_file
 from config.config_manager import KnowledgeBase, get_fq_cfg_filename
 
 # Import from new refactored modules
@@ -198,6 +200,76 @@ language_codes = {
 
 # Reverse mapping: full name to ISO code
 language_names_to_codes = {v: k for k, v in language_codes.items()}
+
+def sanitize_filename(file_path: str, logger=None) -> tuple[bool, str, bool, str]:
+  """
+  Sanitize filename by replacing dangerous characters using post_slug.
+
+  Only sanitizes the basename (filename), leaving directory path unchanged.
+  If the sanitized filename already exists, returns False (skip file).
+
+  Args:
+      file_path: Full path to the file
+      logger: Optional logger instance
+
+  Returns:
+      Tuple of (success, new_path, was_renamed, message):
+        - success: True if sanitization succeeded or not needed, False if collision
+        - new_path: The sanitized file path (may be same as input)
+        - was_renamed: True if file was actually renamed
+        - message: Description of what happened
+  """
+  # Define dangerous characters (same as in security_utils.py)
+  dangerous_chars = ['<', '>', '|', '&', ';', '`', '$']
+
+  # Split path into components
+  directory = os.path.dirname(file_path)
+  full_basename = os.path.basename(file_path)
+
+  # Split basename into name and extension
+  # Handle multiple extensions like .pdf.md
+  parts = full_basename.split('.')
+  if len(parts) > 1:
+    basename = '.'.join(parts[:-1])  # Everything except last extension
+    extension = '.' + parts[-1]        # Last extension including dot
+  else:
+    basename = full_basename
+    extension = ''
+
+  # Check if basename contains dangerous characters
+  has_dangerous = any(char in basename for char in dangerous_chars)
+
+  if not has_dangerous:
+    # No dangerous characters, return original path
+    return True, file_path, False, 'No dangerous characters found'
+
+  # Sanitize the basename using post_slug with period separator and preserve case
+  sanitized_basename = post_slug(basename, '.', True)
+
+  if not sanitized_basename:
+    # post_slug returned empty string (error case)
+    return False, file_path, False, 'Failed to sanitize filename'
+
+  # Reconstruct the full filename
+  sanitized_filename = sanitized_basename + extension
+
+  # Construct new path
+  if directory:
+    new_path = os.path.join(directory, sanitized_filename)
+  else:
+    new_path = sanitized_filename
+
+  # Check if target path already exists
+  if os.path.exists(new_path) and new_path != file_path:
+    message = f'Sanitized filename already exists: {sanitized_filename}'
+    return False, file_path, False, message
+
+  # Path is same (shouldn't happen but check anyway)
+  if new_path == file_path:
+    return True, file_path, False, 'Filename already clean'
+
+  message = f'Will rename: {full_basename} → {sanitized_filename}'
+  return True, new_path, True, message
 
 def get_iso_code(language: str) -> str:
   """
@@ -618,34 +690,53 @@ def process_text_file(kb: KnowledgeBase, sourcefile: str, splitter: Any,
   """
   # Store the original language for comparison
   original_language = language
-  
+
+  from utils.logging_config import log_file_operation, log_operation_error
+
+  # Sanitize filename before any processing
+  success, new_path, was_renamed, message = sanitize_filename(sourcefile, logger)
+
+  if not success:
+    # Collision or sanitization error
+    logger.warning(f"Skipping file due to sanitization issue: {message}")
+    return False
+
+  if was_renamed:
+    # Rename file on disk
+    try:
+      os.rename(sourcefile, new_path)
+      logger.warning(f"Renamed file due to dangerous characters: {os.path.basename(sourcefile)} → {os.path.basename(new_path)}")
+      # Update sourcefile to use new path
+      sourcefile = new_path
+    except OSError as e:
+      logger.error(f"Failed to rename file {sourcefile}: {e}")
+      return False
+
   # Store full canonical absolute path instead of basename
   # This allows proper handling of files with same name in different directories
   sourcedoc_value = os.path.abspath(sourcefile)
-  
+
   # Check if file already exists in the database using full path
   kb.sql_cursor.execute("SELECT COUNT(*) FROM docs WHERE sourcedoc = ?", [sourcedoc_value])
   count = kb.sql_cursor.fetchone()[0]
-  
+
   if count > 0 and not force:
     logger.info(f"Skipping {sourcefile} (already in database, use --force to reprocess)")
     return False
-    
-  from utils.logging_config import log_file_operation, log_operation_error
-  
+
   # Log file processing start with enhanced context
-  log_file_operation(logger, "processing_start", sourcefile, 
+  log_file_operation(logger, "processing_start", sourcefile,
                     file_type=file_type, language=language, force=force)
 
   # Read file content with validation
   try:
     from utils.security_utils import validate_file_path
-    
+
     # Validate the source file path
     try:
       validated_sourcefile = validate_file_path(sourcefile)
     except ValueError as e:
-      log_operation_error(logger, "file_validation", e, 
+      log_operation_error(logger, "file_validation", e,
                          file_path=sourcefile, file_type=file_type)
       return False
     
@@ -667,8 +758,13 @@ def process_text_file(kb: KnowledgeBase, sourcefile: str, splitter: Any,
                          file_path=validated_sourcefile)
       return False
     
-    with open(validated_sourcefile, 'r', encoding='utf-8') as file:
-      content = file.read()
+    # Prepare encoding config from knowledgebase settings
+    encoding_config = {
+      'auto_detect_encoding': getattr(kb, 'auto_detect_encoding', True),
+      'default_encoding': getattr(kb, 'default_encoding', 'utf-8'),
+      'encoding_fallbacks': getattr(kb, 'encoding_fallbacks', ['utf-8', 'windows-1252', 'latin-1', 'cp1252'])
+    }
+    content = read_text_file(validated_sourcefile, encoding_config)
   except IOError as e:
     log_operation_error(logger, "file_read", e, 
                        file_path=validated_sourcefile, file_size=file_size)
@@ -694,7 +790,7 @@ def process_text_file(kb: KnowledgeBase, sourcefile: str, splitter: Any,
       logger.debug(f"Split {sourcefile} into {len(chunks)} chunks")
   except Exception as e:
     logger.error(f"Failed to split chunks for {sourcefile}: {e}")
-    return
+    return False
 
   # Detect language if enabled
   if detect_language:
@@ -722,14 +818,22 @@ def process_text_file(kb: KnowledgeBase, sourcefile: str, splitter: Any,
         language = detected_lang
         logger.info(f"Detected language '{language}' (confidence: {confidence:.2f}) for {os.path.basename(sourcefile)}")
   
-  # Check if language needs to be updated based on directory name (overrides detection)
+  # Check if language needs to be updated based on directory name
+  # Configuration controls whether directory name overrides detected language
+  directory_override_enabled = getattr(kb, 'directory_language_override', True)
+
   dirname = os.path.dirname(sourcefile)
   _, langkey, _, _ = split_filepath(dirname)
   if langkey in language_codes:
     # langkey is already an ISO code
     if langkey != language:
-      language = langkey  # Update to new ISO code
-      logger.info(f"Overriding with language from directory: {language=}")
+      if directory_override_enabled or not detect_language:
+        # Override if: (1) directory override is enabled, or (2) not using content detection
+        language = langkey  # Update to new ISO code
+        logger.info(f"Using language from directory: {language=}")
+      else:
+        # Directory override disabled and content detection active - keep detected language
+        logger.debug(f"Directory suggests language '{langkey}' but using detected '{language}' (directory_language_override=False)")
       
   
   # If language changed, re-initialize stopwords

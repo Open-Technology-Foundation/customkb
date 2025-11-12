@@ -439,7 +439,7 @@ class TestRealDataIntegration:
     query_args.debug = False
     
     with patch('query.search.faiss.read_index', return_value=mock_faiss_index):
-      with patch('query.query_manager.get_query_embedding') as mock_embedding:
+      with patch('query.embedding.get_query_embedding') as mock_embedding:
         mock_embedding.return_value = np.array([[0.1] * 1536])
         
         result = process_query(query_args, mock_logger)
@@ -576,17 +576,17 @@ query_top_k = 10
     query_args.verbose = True
     query_args.debug = False
     
-    with patch('query.query_manager.get_query_embeddings', return_value=Mock(data=[Mock(embedding=[0.11] * 1536)])):
+    with patch('query.embedding.get_query_embedding', return_value=np.array([[0.11] * 1536])):
       result = process_query(query_args, mock_logger)
-    
+
     # Should find module1 config
     assert "module1" in result
     assert "postgresql" in result.lower()
-    
+
     # Query for module2
     query_args.query_text = "mysql module2"
-    
-    with patch('query.query_manager.get_query_embeddings', return_value=Mock(data=[Mock(embedding=[0.19] * 1536)])):
+
+    with patch('query.embedding.get_query_embedding', return_value=np.array([[0.19] * 1536])):
       result = process_query(query_args, mock_logger)
     
     # Should find module2 config
@@ -665,7 +665,7 @@ query_model = gpt-4o
     query_args.verbose = True
     query_args.debug = False
     
-    with patch('query.query_manager.get_query_embeddings', return_value=Mock(data=[Mock(embedding=[0.14] * 1536)])):
+    with patch('query.embedding.get_query_embedding', return_value=np.array([[0.14] * 1536])):
       result = process_query(query_args, mock_logger)
     
     # Check for truncated path display
@@ -678,20 +678,22 @@ query_model = gpt-4o
 class TestConfigurationIntegration:
   """Test configuration integration across components."""
   
-  def test_environment_variable_override_integration(self, temp_data_manager, sample_texts):
+  def test_environment_variable_override_integration(self, temp_data_manager, sample_texts, monkeypatch):
     """Test that environment variables properly override config values across components."""
-    kb_dir = temp_data_manager.create_temp_dir()
-    config_file = os.path.join(kb_dir, "env_test.cfg")
-    
+    kb_name = "env_test"
+
     # Create config with default values
-    with open(config_file, 'w') as f:
-      f.write("""[DEFAULT]
+    config_content = """[DEFAULT]
 vector_model = text-embedding-3-small
 vector_dimensions = 1536
 query_model = gpt-4o
 query_temperature = 0.1
-""")
-    
+"""
+
+    # Create properly structured KB directory
+    temp_vectordbs, kb_dir, config_file = temp_data_manager.create_kb_directory(kb_name, config_content)
+    monkeypatch.setattr('config.config_manager.VECTORDBS', temp_vectordbs)
+
     # Test environment variable overrides
     env_overrides = {
       'VECTOR_MODEL': 'text-embedding-ada-002',
@@ -699,12 +701,12 @@ query_temperature = 0.1
       'QUERY_MODEL': 'gpt-3.5-turbo',
       'QUERY_TEMPERATURE': '0.5'
     }
-    
+
     from config.config_manager import KnowledgeBase
-    
+
     with patch.dict(os.environ, env_overrides):
-      kb = KnowledgeBase(config_file)
-      
+      kb = KnowledgeBase(kb_name)  # Use KB name, not full path
+
       # Verify overrides took effect
       assert kb.vector_model == 'text-embedding-ada-002'
       assert kb.vector_dimensions == 1024
@@ -795,29 +797,26 @@ query_model = claude-3-5-sonnet-20241022
     assert kb.knowledge_base_db == os.path.join(kb_dir, 'myproject.db')
     assert kb.knowledge_base_vector == os.path.join(kb_dir, 'myproject.faiss')
   
-  def test_case_2_kb_name_searches_vectordbs(self, temp_data_manager):
+  def test_case_2_kb_name_searches_vectordbs(self, temp_data_manager, monkeypatch):
     """Test Case 2: customkb query kbname 'query'"""
-    # Create VECTORDBS-like structure
-    vectordbs_dir = temp_data_manager.create_temp_dir()
-    kb_dir = os.path.join(vectordbs_dir, 'searchproject')
-    os.makedirs(kb_dir)
-    config_path = os.path.join(kb_dir, 'searchproject.cfg')
-    
-    with open(config_path, 'w') as f:
-      f.write("""[DEFAULT]
-knowledge_base_name = searchproject
+    kb_name = "searchproject"
+
+    config_content = """[DEFAULT]
 vector_model = text-embedding-3-small
 query_model = claude-3-5-sonnet-20241022
-""")
-    
+"""
+
+    # Create properly structured KB directory
+    temp_vectordbs, kb_dir, config_path = temp_data_manager.create_kb_directory(kb_name, config_content)
+
     # Test with mocked VECTORDBS
     from config.config_manager import get_fq_cfg_filename, KnowledgeBase
-    
-    with patch('config.config_manager.VECTORDBS', vectordbs_dir):
+
+    with patch('config.config_manager.VECTORDBS', temp_vectordbs):
       # Test resolution by name only
       result = get_fq_cfg_filename('searchproject')
       assert result == config_path
-      
+
       # Test KnowledgeBase creation
       kb = KnowledgeBase('searchproject')
       assert kb.knowledge_base_name == 'searchproject'

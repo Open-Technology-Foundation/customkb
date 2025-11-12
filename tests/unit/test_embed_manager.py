@@ -125,16 +125,15 @@ class TestCacheThreadManager:
     manager._cleanup()
     assert manager._executor is None
   
-  def test_configure_cache_manager_function(self):
+  def test_configure_cache_manager_function(self, mock_kb):
     """Test the global configure_cache_manager function."""
-    # Create mock KB with cache settings
-    mock_kb = Mock()
+    # Override cache settings
     mock_kb.cache_thread_pool_size = 6
     mock_kb.memory_cache_size = 8000
-    
+
     # Configure the global cache manager
     configure_cache_manager(mock_kb)
-    
+
     # Verify configuration was applied
     assert cache_manager._max_workers == 6
     assert cache_manager._memory_cache_size == 8000

@@ -416,19 +416,139 @@ def mock_spacy():
 
 
 @pytest.fixture
+def mock_kb(temp_data_manager):
+  """
+  Provide a comprehensive mock KnowledgeBase with all standard attributes.
+
+  This fixture creates a mock KB object with all commonly-used attributes pre-configured
+  with sensible defaults. Tests can override any attribute by setting it directly.
+
+  Example:
+      def test_something(mock_kb):
+          mock_kb.vector_model = "custom-model"
+          result = some_function(mock_kb)
+          assert result is not None
+
+  Returns:
+      Mock: A mock KnowledgeBase object with comprehensive attributes
+  """
+  kb = Mock()
+
+  # Create temporary paths
+  temp_dir = temp_data_manager.create_temp_dir()
+  kb_name = 'test_kb'
+
+  # Database/Path attributes
+  kb.knowledge_base_name = kb_name
+  kb.knowledge_base_db = os.path.join(temp_dir, f'{kb_name}.db')
+  kb.knowledge_base_vector = os.path.join(temp_dir, f'{kb_name}.faiss')
+
+  # Mock database connection and cursor
+  kb.sql_connection = Mock()
+  kb.sql_cursor = Mock()
+  kb.sql_cursor.fetchall = Mock(return_value=[])
+  kb.sql_cursor.fetchone = Mock(return_value=None)
+  kb.sql_cursor.execute = Mock()
+  kb.sql_cursor.executemany = Mock()
+  kb.sql_connection.commit = Mock()
+  kb.sql_connection.rollback = Mock()
+  kb.sql_connection.cursor = Mock(return_value=kb.sql_cursor)
+
+  # Vector/Embedding configuration
+  kb.vector_model = 'text-embedding-3-small'
+  kb.vector_dimensions = 1536
+  kb.vector_chunks = 200
+
+  # Query configuration
+  kb.query_model = 'gpt-4o-mini'
+  kb.query_top_k = 50
+  kb.query_context_scope = 4
+  kb.query_temperature = 0.0
+  kb.query_max_tokens = 4000
+  kb.query_role = 'You are a helpful assistant.'
+  kb.reference_format = 'xml'
+
+  # Language configuration
+  kb.language = 'en'
+  kb.language_detection_enabled = True
+  kb.language_detection_confidence = 0.9
+  kb.language_detection_sample_size = 1000
+  kb.directory_language_override = True
+
+  # Hybrid Search / BM25 configuration
+  kb.enable_hybrid_search = False
+  kb.bm25_k1 = 1.2
+  kb.bm25_b = 0.75
+  kb.bm25_min_token_length = 2
+  kb.bm25_rebuild_threshold = 1000
+  kb.bm25_max_results = 1000
+
+  # Reranking configuration
+  kb.enable_reranking = True
+  kb.reranking_model = 'cross-encoder/ms-marco-MiniLM-L-6-v2'
+  kb.reranking_device = 'cpu'
+  kb.reranking_batch_size = 32
+  kb.reranking_top_k = 20
+  kb.reranking_cache_size = 1000
+
+  # Categorization
+  kb.enable_categorization = False
+
+  # Performance / Caching
+  kb.cache_thread_pool_size = 4
+  kb.memory_cache_size = 10000
+  kb.embedding_batch_size = 100
+  kb.sql_batch_size = 500
+  kb.checkpoint_interval = 10
+  kb.commit_frequency = 1000
+
+  # Processing limits
+  kb.heading_search_limit = 200
+  kb.entity_extraction_limit = 500
+  kb.max_file_size_mb = 100
+  kb.max_query_length = 10000
+
+  # API configuration
+  kb.api_call_delay_seconds = 0.05
+  kb.api_max_retries = 20
+  kb.api_max_concurrency = 8
+
+  # Provider batch limits
+  kb.provider_batch_limits = {
+    'gemini-': 100,
+    'text-embedding-': 2048,
+  }
+
+  # Mock FAISS index
+  kb.faiss_index = Mock()
+  kb.faiss_index.ntotal = 0
+  kb.faiss_index.search = Mock(return_value=(
+    [[0.9, 0.8, 0.7]],  # distances
+    [[0, 1, 2]]          # indices
+  ))
+  kb.faiss_index.add_with_ids = Mock()
+  kb.faiss_index.reset = Mock()
+
+  # Backward compatibility attributes
+  kb.table_name = 'docs'
+
+  return kb
+
+
+@pytest.fixture
 def isolated_imports():
   """Ensure clean import state for each test."""
   # Store original sys.modules state
   original_modules = sys.modules.copy()
-  
+
   yield
-  
+
   # Remove any newly imported modules related to our project
   modules_to_remove = [
-    name for name in sys.modules 
+    name for name in sys.modules
     if name.startswith(('config.', 'database.', 'embedding.', 'query.', 'models.', 'utils.'))
   ]
-  
+
   for module_name in modules_to_remove:
     if module_name in sys.modules:
       del sys.modules[module_name]

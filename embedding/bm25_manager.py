@@ -160,17 +160,29 @@ def load_bm25_index(kb: 'KnowledgeBase') -> dict[str, Any] | None:
   # Legacy pickle format is no longer supported (removed for security)
   # Check if there's an old pickle file that needs migration
   if os.path.exists(bm25_path) and not os.path.exists(bm25_path.replace('.bm25', '.bm25.json')):
-    logger.error("=" * 70)
-    logger.error("LEGACY BM25 INDEX DETECTED")
-    logger.error("=" * 70)
-    logger.error(f"The BM25 index at {bm25_path} is in the old pickle format.")
-    logger.error("Pickle deserialization has been removed for security reasons.")
-    logger.error("")
-    logger.error("To migrate to the secure NPZ format, run:")
-    logger.error(f"  customkb bm25 <kb_name> --force")
-    logger.error("")
-    logger.error("This will rebuild the BM25 index in the new NPZ+JSON format.")
-    logger.error("=" * 70)
+    logger.warning("=" * 70)
+    logger.warning("LEGACY BM25 INDEX FORMAT DETECTED")
+    logger.warning("=" * 70)
+    logger.warning(f"The BM25 index at {bm25_path} uses the old pickle format.")
+    logger.warning("For security reasons, this format is no longer supported.")
+    logger.warning("")
+    logger.info("Auto-migration option: The index will be rebuilt automatically")
+    logger.info("during the next 'customkb bm25' operation, or you can rebuild now:")
+    logger.info(f"  customkb bm25 <kb_name> --force")
+    logger.warning("")
+    logger.warning("Note: BM25 hybrid search will be disabled until rebuild completes.")
+    logger.warning("=" * 70)
+
+    # Rename the legacy file to prevent repeated warnings
+    try:
+      legacy_backup = bm25_path + '.legacy.backup'
+      if not os.path.exists(legacy_backup):
+        import shutil
+        shutil.move(bm25_path, legacy_backup)
+        logger.info(f"Legacy index backed up to: {legacy_backup}")
+    except Exception as e:
+      logger.debug(f"Could not backup legacy index: {e}")
+
     return None
 
   logger.debug(f"BM25 index not found at {bm25_path}")
@@ -307,5 +319,37 @@ def ensure_bm25_index(kb: 'KnowledgeBase') -> bool:
     logger.info("No BM25 index found, building new index")
     bm25 = build_bm25_index(kb)
     return bm25 is not None
+
+
+def search_bm25(kb: 'KnowledgeBase', query_text: str, max_results: int = 10) -> list[tuple[int, float]]:
+  """
+  Search BM25 index with automatic index loading and validation.
+
+  This is a convenience wrapper around get_bm25_scores that handles
+  index loading and existence validation automatically.
+
+  Args:
+      kb: The KnowledgeBase instance.
+      query_text: The query text.
+      max_results: Maximum number of results to return.
+
+  Returns:
+      List of (doc_id, score) tuples sorted by score descending.
+      Returns empty list if index doesn't exist or search fails.
+  """
+  # Check if hybrid search is enabled
+  if not getattr(kb, 'enable_hybrid_search', False):
+    logger.debug("Hybrid search disabled")
+    return []
+
+  # Load BM25 index
+  bm25_data = load_bm25_index(kb)
+  if not bm25_data:
+    logger.warning("BM25 index not found. Run 'customkb bm25 <kb_name>' to build it.")
+    return []
+
+  # Perform search
+  return get_bm25_scores(kb, query_text, bm25_data, max_results)
+
 
 #fin

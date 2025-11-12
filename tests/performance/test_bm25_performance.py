@@ -1,6 +1,9 @@
 """
 Performance tests for BM25 hybrid search functionality.
 Tests BM25 index building, loading, searching, and memory usage under various loads.
+
+Note: These tests use adaptive thresholds that adjust based on system capabilities.
+See tests.utils.adaptive_thresholds for details.
 """
 
 import pytest
@@ -13,12 +16,13 @@ from unittest.mock import patch, Mock
 
 from config.config_manager import KnowledgeBase
 from embedding.bm25_manager import (
-  build_bm25_index, 
-  load_bm25_index, 
+  build_bm25_index,
+  load_bm25_index,
   get_bm25_scores
 )
 from query.query_manager import perform_hybrid_search
 from utils.text_utils import tokenize_for_bm25
+from tests.utils.adaptive_thresholds import get_adaptive_thresholds
 
 
 @pytest.mark.performance
@@ -28,13 +32,17 @@ class TestBM25IndexPerformance:
   
   def test_bm25_index_building_performance(self, temp_data_manager):
     """Test BM25 index building performance with varying dataset sizes."""
+    # Get adaptive thresholds
+    thresholds = get_adaptive_thresholds()
+    threshold_values = thresholds.get_thresholds()
+
     # Test different dataset sizes
     test_sizes = [100, 500, 1000, 2000]
-    
+
     for size in test_sizes:
       kb_dir = temp_data_manager.create_temp_dir()
       config_file = os.path.join(kb_dir, f'perf_test_{size}.cfg')
-      
+
       # Create config
       with open(config_file, 'w') as f:
         f.write("""[DEFAULT]
@@ -46,36 +54,40 @@ enable_hybrid_search = true
 bm25_k1 = 1.2
 bm25_b = 0.75
 """)
-      
+
       # Create test database
       kb = KnowledgeBase(config_file)
       self._create_test_database(kb, size)
-      
+
       # Measure index building time
       kb.sql_connection = sqlite3.connect(kb.knowledge_base_db)
       kb.sql_cursor = kb.sql_connection.cursor()
-      
+
       start_time = time.time()
       bm25_index = build_bm25_index(kb)
       build_time = time.time() - start_time
-      
+
       kb.sql_connection.close()
-      
+
       assert bm25_index is not None
-      
-      # Performance assertions based on dataset size
+
+      # Performance assertions using adaptive thresholds
       if size <= 500:
-        assert build_time < 2.0  # Small datasets should build quickly
+        threshold = threshold_values['bm25_build_small']
+        assert build_time < threshold, f"Small dataset build took {build_time:.3f}s (threshold: {threshold:.3f}s)"
       elif size <= 1000:
-        assert build_time < 5.0  # Medium datasets
+        threshold = threshold_values['bm25_build_medium']
+        assert build_time < threshold, f"Medium dataset build took {build_time:.3f}s (threshold: {threshold:.3f}s)"
       else:
-        assert build_time < 15.0  # Large datasets
-      
-      # Calculate throughput
+        threshold = threshold_values['bm25_build_large']
+        assert build_time < threshold, f"Large dataset build took {build_time:.3f}s (threshold: {threshold:.3f}s)"
+
+      # Calculate throughput (adjusted for system performance)
+      min_throughput = 50 / thresholds.load_factor
       docs_per_second = size / build_time
-      assert docs_per_second > 50  # Should process at least 50 docs/sec
-      
-      print(f"Built BM25 index for {size} docs in {build_time:.3f}s ({docs_per_second:.1f} docs/sec)")
+      assert docs_per_second > min_throughput, f"Throughput {docs_per_second:.1f} docs/sec below minimum {min_throughput:.1f}"
+
+      print(f"Built BM25 index for {size} docs in {build_time:.3f}s ({docs_per_second:.1f} docs/sec) [system load_factor: {thresholds.load_factor:.2f}]")
   
   def test_bm25_index_loading_performance(self, temp_data_manager):
     """Test BM25 index loading performance."""
@@ -112,10 +124,15 @@ enable_hybrid_search = true
     
     avg_load_time = sum(load_times) / len(load_times)
     max_load_time = max(load_times)
-    
-    # Loading should be fast and consistent
-    assert avg_load_time < 0.5  # Average under 500ms
-    assert max_load_time < 1.0   # Maximum under 1 second
+
+    # Loading should be fast and consistent (using adaptive thresholds)
+    thresholds = get_adaptive_thresholds()
+    threshold_values = thresholds.get_thresholds()
+
+    assert avg_load_time < threshold_values['avg_load_time'], \
+        f"Average load time {avg_load_time:.3f}s exceeds threshold {threshold_values['avg_load_time']:.3f}s"
+    assert max_load_time < threshold_values['max_load_time'], \
+        f"Max load time {max_load_time:.3f}s exceeds threshold {threshold_values['max_load_time']:.3f}s"
     
     print(f"BM25 index loading - Avg: {avg_load_time:.3f}s, Max: {max_load_time:.3f}s")
   

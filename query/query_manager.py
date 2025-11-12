@@ -85,8 +85,8 @@ from .processing import (
 
 logger = get_logger(__name__)
 
-# Initialize clients for backward compatibility
-initialize_clients()
+# Note: Clients are already initialized when response.py is imported (line 110)
+# No need to call initialize_clients() again here
 
 # Deprecation warning helper
 def _deprecation_warning(func_name: str, new_module: str):

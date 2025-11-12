@@ -20,9 +20,18 @@ from utils.logging_utils import get_logger, time_to_finish
 from config.config_manager import KnowledgeBase, get_fq_cfg_filename
 from database.db_manager import connect_to_database, close_database
 
-# Load FAISS with proper GPU initialization
-from utils.faiss_loader import get_faiss
-faiss, FAISS_GPU_AVAILABLE = get_faiss()
+# FAISS will be loaded lazily when needed (performance optimization)
+_faiss = None
+_FAISS_GPU_AVAILABLE = None
+
+
+def get_faiss_instance():
+  """Get FAISS instance, loading it lazily on first use."""
+  global _faiss, _FAISS_GPU_AVAILABLE
+  if _faiss is None:
+    from utils.faiss_loader import get_faiss
+    _faiss, _FAISS_GPU_AVAILABLE = get_faiss()
+  return _faiss, _FAISS_GPU_AVAILABLE
 
 # Import OpenAI client with validation
 from openai import OpenAI, AsyncOpenAI
@@ -87,9 +96,15 @@ os.makedirs(CACHE_DIR, exist_ok=True)
 # Configuration constants - these are now loaded from KnowledgeBase config
 
 # Thread-safe backward compatibility proxies
+# DEPRECATED: These will be removed in v1.1.0 (target: 2026-01-01)
+# Use cache_manager.get_from_memory_cache() and cache_manager.add_to_memory_cache() instead
 class ThreadSafeCacheProxy:
-  """Thread-safe proxy for backward compatibility with direct cache access."""
-  
+  """Thread-safe proxy for backward compatibility with direct cache access.
+
+  DEPRECATED: This class is deprecated and will be removed in v1.1.0.
+  Use cache_manager methods directly instead.
+  """
+
   def __init__(self, cache_manager: CacheThreadManager):
     self._cache_manager = cache_manager
   
@@ -129,8 +144,12 @@ class ThreadSafeCacheProxy:
       return len(self._cache_manager._memory_cache)
 
 class ThreadSafeCacheKeysProxy:
-  """Thread-safe proxy for backward compatibility with direct cache keys access."""
-  
+  """Thread-safe proxy for backward compatibility with direct cache keys access.
+
+  DEPRECATED: This class is deprecated and will be removed in v1.1.0.
+  Cache keys are managed automatically by cache_manager.
+  """
+
   def __init__(self, cache_manager: CacheThreadManager):
     self._cache_manager = cache_manager
   
@@ -163,6 +182,8 @@ class ThreadSafeCacheKeysProxy:
                   DeprecationWarning, stacklevel=2)
 
 # Backward compatibility - these use thread-safe proxies
+# DEPRECATED: Will be removed in v1.1.0 - use cache_manager directly
+# Note: Not a memory leak (singletons only), just technical debt
 embedding_memory_cache = ThreadSafeCacheProxy(cache_manager)
 embedding_memory_cache_keys = ThreadSafeCacheKeysProxy(cache_manager)
 
@@ -270,32 +291,35 @@ def save_embedding_to_cache(text: str, model: str, embedding: list[float], kb=No
   # Use shared thread pool - no resource leak
   cache_manager.submit_cache_task(save_to_disk)
 
-def get_optimal_faiss_index(dimensions: int, dataset_size: int, kb=None) -> faiss.Index:
+def get_optimal_faiss_index(dimensions: int, dataset_size: int, kb=None):
   """
   Create an optimal FAISS index based on dataset size.
-  
+
   Args:
       dimensions: The dimensions of the embedding vectors.
       dataset_size: The expected size of the dataset.
       kb: KnowledgeBase instance for configuration (optional).
-      
+
   Returns:
       A FAISS index optimized for the dataset.
   """
+  # Lazy load FAISS when actually needed
+  faiss, _ = get_faiss_instance()
+
   # Get configurable thresholds
   high_dim_threshold = getattr(kb, 'high_dimension_threshold', 1536) if kb else 1536
   small_dataset_threshold = getattr(kb, 'small_dataset_threshold', 1000) if kb else 1000
   medium_dataset_threshold = getattr(kb, 'medium_dataset_threshold', 100000) if kb else 100000
   ivf_centroid_multiplier = getattr(kb, 'ivf_centroid_multiplier', 4) if kb else 4
   max_centroids = getattr(kb, 'max_centroids', 256) if kb else 256
-  
-  # For high-dimensional vectors, use a flat index 
+
+  # For high-dimensional vectors, use a flat index
   # which doesn't require training and works with any dimensionality
   if dimensions > high_dim_threshold:
     logger.info(f"Using IndexFlatIP due to high dimensionality: {dimensions}")
     index = faiss.IndexFlatIP(dimensions)
     return faiss.IndexIDMap(index)
-    
+
   # For smaller datasets, use exact search
   if dataset_size < small_dataset_threshold:
     index = faiss.IndexFlatIP(dimensions)
@@ -314,7 +338,7 @@ def get_optimal_faiss_index(dimensions: int, dataset_size: int, kb=None) -> fais
     n_subquantizers = min(16, dimensions // 64)  # Ensure subquantizers fit dimensions
     index = faiss.IndexIVFPQ(quantizer, dimensions, n_centroids, n_subquantizers, 8, faiss.METRIC_INNER_PRODUCT)
     index.train_mode = True  # Enable training mode initially
-  
+
   return faiss.IndexIDMap(index)
 
 def calculate_optimal_batch_size(chunks: list[str], model: str, max_batch_size: int, kb=None) -> int:
@@ -522,7 +546,7 @@ async def get_embeddings_for_batch(kb: KnowledgeBase, chunks: list[str]) -> list
     logger.error(f"Error getting embeddings for batch: {e}")
     return []
 
-async def process_batch_and_update(kb: KnowledgeBase, index: faiss.IndexIDMap, 
+async def process_batch_and_update(kb: KnowledgeBase, index,
                                  chunks: list[str], ids: list[int]) -> set[int]:
   """
   Process a batch and update the database with success status.
@@ -555,23 +579,26 @@ async def process_batch_and_update(kb: KnowledgeBase, index: faiss.IndexIDMap,
     logger.error(f"Error processing batch: {e}")
     return set()
 
-async def process_all_batches_with_checkpoints(kb: KnowledgeBase, index: faiss.IndexIDMap, 
+async def process_all_batches_with_checkpoints(kb: KnowledgeBase, index,
                                           all_chunks: list[list[str]], all_ids: list[list[int]]) -> set[int]:
   """
   Process all batches of embeddings with checkpointing and concurrency.
-  
+
   Args:
       kb: The KnowledgeBase instance.
       index: The FAISS index.
       all_chunks: List of batches of text chunks.
       all_ids: List of batches of corresponding IDs.
-      
+
   Returns:
       Set of all successfully processed IDs.
   """
+  # Lazy load FAISS when needed
+  faiss, _ = get_faiss_instance()
+
   all_processed_ids = set()
   checkpoint_counter = 0
-  
+
   # Set concurrency limit based on dataset size
   # For larger datasets, process more batches concurrently
   dataset_size = sum(len(chunk_batch) for chunk_batch in all_chunks)
@@ -579,15 +606,15 @@ async def process_all_batches_with_checkpoints(kb: KnowledgeBase, index: faiss.I
   min_concurrency = getattr(kb, 'api_min_concurrency', 3)
   concurrency_limit = min(max_concurrency, max(min_concurrency, dataset_size // 1000))
   logger.info(f"Using concurrency limit of {concurrency_limit} for embedding API calls")
-  
+
   # Process batches in parallel with a semaphore to limit concurrent API calls
   semaphore = asyncio.Semaphore(concurrency_limit)
-  
+
   async def process_batch_with_semaphore(i, chunks, ids):
     async with semaphore:
       logger.info(f"Processing batch {i+1}/{len(all_chunks)}")
       return await process_batch_and_update(kb, index, chunks, ids)
-  
+
   # Create tasks for batch processing with the semaphore for concurrent processing
   # Process batches in smaller groups to allow checkpointing
   checkpoint_interval = getattr(kb, 'checkpoint_interval', 10)
@@ -595,22 +622,22 @@ async def process_all_batches_with_checkpoints(kb: KnowledgeBase, index: faiss.I
     # Get a group of batches to process
     batch_group = all_chunks[batch_group_idx:batch_group_idx + checkpoint_interval]
     id_group = all_ids[batch_group_idx:batch_group_idx + checkpoint_interval]
-    
+
     # Process this group of batches concurrently
     tasks = []
     for i, (chunks, ids) in enumerate(zip(batch_group, id_group)):
       tasks.append(process_batch_with_semaphore(batch_group_idx + i, chunks, ids))
-    
+
     # Wait for all tasks in this group to complete
     batch_results = await asyncio.gather(*tasks)
-    
+
     # Combine results
     for successful_ids in batch_results:
       all_processed_ids.update(successful_ids)
-    
+
     # Checkpoint after each group
     logger.info(f"Checkpoint: saving progress after {len(batch_group)} batches")
-    
+
     # Save FAISS index
     faiss.write_index(index, kb.knowledge_base_vector)
     
@@ -652,11 +679,14 @@ def process_embeddings(args: argparse.Namespace, logger) -> str:
   Returns:
       A status message indicating the number of embeddings created and saved.
   """
+  # Lazy load FAISS when needed
+  faiss, _ = get_faiss_instance()
+
   # Get configuration file
   config_file = get_fq_cfg_filename(args.config_file)
   if not config_file:
     return f"Error: Knowledge base '{args.config_file}' not found."
-    
+
   logger.info(f"{config_file=}")
   reset_database = args.reset_database
 
@@ -764,10 +794,18 @@ def process_embeddings(args: argparse.Namespace, logger) -> str:
   configured_batch_size = kb.vector_chunks
   optimal_batch_size = calculate_optimal_batch_size(sample_chunks, kb.vector_model, configured_batch_size, kb)
   
-  # Log if Google's limit is being applied
-  if kb.vector_model.startswith('gemini-') and optimal_batch_size > 100:
-    logger.info(f"Google API limit: reducing batch size from {optimal_batch_size} to 100")
-    optimal_batch_size = 100
+  # Apply provider-specific batch size limits (configurable)
+  # Google Gemini has a hard API limit of 100 items per batch
+  provider_batch_limits = getattr(kb, 'provider_batch_limits', {
+    'gemini-': 100,
+    'text-embedding-': 2048,  # OpenAI default
+  })
+
+  for provider_prefix, limit in provider_batch_limits.items():
+    if kb.vector_model.startswith(provider_prefix) and optimal_batch_size > limit:
+      logger.info(f"Provider API limit ({provider_prefix}): reducing batch size from {optimal_batch_size} to {limit}")
+      optimal_batch_size = limit
+      break
   
   logger.info(f"Using optimal batch size of {optimal_batch_size} (configured max: {configured_batch_size})")
   
@@ -827,7 +865,9 @@ def process_embeddings(args: argparse.Namespace, logger) -> str:
       index.index.train(train_embeddings_np)
       logger.info("Index training completed")
     else:
-      logger.error("Failed to get training embeddings - index may not work properly")
+      error_msg = "Failed to get training embeddings - index requires training data"
+      logger.error(error_msg)
+      return f"Error: {error_msg}. Cannot proceed with untrained index."
   
   # Process all batches using asyncio with checkpointing
   all_processed_ids = asyncio.run(process_all_batches_with_checkpoints(kb, index, all_chunks, all_ids))

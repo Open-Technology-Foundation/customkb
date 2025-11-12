@@ -26,15 +26,16 @@ try:
 except ImportError:
   GOOGLE_AI_AVAILABLE = False
 
-# Global clients
-openai_client = None
-async_openai_client = None
-anthropic_client = None
-async_anthropic_client = None
-google_client = None
-xai_client = None
-async_xai_client = None
-llama_client = None
+# Global clients (initialized lazily on first use)
+_openai_client = None
+_async_openai_client = None
+_anthropic_client = None
+_async_anthropic_client = None
+_google_client = None
+_xai_client = None
+_async_xai_client = None
+_llama_client = None
+_clients_initialized = False
 
 
 def load_and_validate_api_keys():
@@ -65,49 +66,121 @@ def load_and_validate_api_keys():
 
 
 def initialize_clients():
-  """Initialize AI clients with available API keys."""
-  global openai_client, async_openai_client, anthropic_client, async_anthropic_client, google_client, xai_client, async_xai_client, llama_client
-  
+  """Initialize AI clients with available API keys (lazy singleton pattern)."""
+  global _openai_client, _async_openai_client, _anthropic_client, _async_anthropic_client
+  global _google_client, _xai_client, _async_xai_client, _llama_client, _clients_initialized
+
+  # Return early if already initialized (singleton pattern)
+  if _clients_initialized:
+    return
+
   try:
     keys = load_and_validate_api_keys()
-    
+
     # Initialize OpenAI clients
     if 'openai' in keys:
-      openai_client = OpenAI(api_key=keys['openai'], timeout=300.0)  # 5 minute timeout
-      async_openai_client = AsyncOpenAI(api_key=keys['openai'], timeout=300.0)  # 5 minute timeout
+      _openai_client = OpenAI(api_key=keys['openai'], timeout=300.0)  # 5 minute timeout
+      _async_openai_client = AsyncOpenAI(api_key=keys['openai'], timeout=300.0)  # 5 minute timeout
       logger.debug("OpenAI clients initialized")
-    
+
     # Initialize Anthropic clients
     if 'anthropic' in keys:
-      anthropic_client = Anthropic(api_key=keys['anthropic'])
-      async_anthropic_client = AsyncAnthropic(api_key=keys['anthropic'])
+      _anthropic_client = Anthropic(api_key=keys['anthropic'])
+      _async_anthropic_client = AsyncAnthropic(api_key=keys['anthropic'])
       logger.debug("Anthropic clients initialized")
-    
+
     # Initialize xAI clients
     if 'xai' in keys:
-      xai_client = OpenAI(api_key=keys['xai'], base_url="https://api.x.ai/v1")
-      async_xai_client = AsyncOpenAI(api_key=keys['xai'], base_url="https://api.x.ai/v1")
+      _xai_client = OpenAI(api_key=keys['xai'], base_url="https://api.x.ai/v1")
+      _async_xai_client = AsyncOpenAI(api_key=keys['xai'], base_url="https://api.x.ai/v1")
       logger.debug("xAI clients initialized")
-    
+
     # Initialize Google AI client
     if 'google' in keys and GOOGLE_AI_AVAILABLE:
-      google_client = genai.Client(api_key=keys['google'])
+      _google_client = genai.Client(api_key=keys['google'])
       logger.debug("Google AI client initialized")
-    
+
     # Initialize Llama client (local)
     try:
-      llama_client = OpenAI(api_key='ollama', base_url='http://localhost:11434/v1')
+      _llama_client = OpenAI(api_key='ollama', base_url='http://localhost:11434/v1')
       logger.debug("Llama client initialized")
     except Exception as e:
       logger.debug(f"Llama client initialization failed: {e}")
-    
+
+    _clients_initialized = True
+
   except Exception as e:
     logger.error(f"Client initialization failed: {e}")
     raise AuthenticationError(f"Failed to initialize AI clients: {e}") from e
 
 
-# Initialize clients on module import
-initialize_clients()
+# Lazy getter functions for singleton client access
+def get_openai_client():
+  """Get OpenAI sync client, initializing if needed."""
+  if not _clients_initialized:
+    initialize_clients()
+  return _openai_client
+
+
+def get_async_openai_client():
+  """Get OpenAI async client, initializing if needed."""
+  if not _clients_initialized:
+    initialize_clients()
+  return _async_openai_client
+
+
+def get_anthropic_client():
+  """Get Anthropic sync client, initializing if needed."""
+  if not _clients_initialized:
+    initialize_clients()
+  return _anthropic_client
+
+
+def get_async_anthropic_client():
+  """Get Anthropic async client, initializing if needed."""
+  if not _clients_initialized:
+    initialize_clients()
+  return _async_anthropic_client
+
+
+def get_google_client():
+  """Get Google AI client, initializing if needed."""
+  if not _clients_initialized:
+    initialize_clients()
+  return _google_client
+
+
+def get_xai_client():
+  """Get xAI sync client, initializing if needed."""
+  if not _clients_initialized:
+    initialize_clients()
+  return _xai_client
+
+
+def get_async_xai_client():
+  """Get xAI async client, initializing if needed."""
+  if not _clients_initialized:
+    initialize_clients()
+  return _async_xai_client
+
+
+def get_llama_client():
+  """Get Llama (Ollama) client, initializing if needed."""
+  if not _clients_initialized:
+    initialize_clients()
+  return _llama_client
+
+
+# Backward compatibility: provide module-level access (deprecated, use getters)
+# Note: Direct access to these may return None until first getter call
+openai_client = _openai_client
+async_openai_client = _async_openai_client
+anthropic_client = _anthropic_client
+async_anthropic_client = _async_anthropic_client
+google_client = _google_client
+xai_client = _xai_client
+async_xai_client = _async_xai_client
+llama_client = _llama_client
 
 
 def _is_reasoning_model(model: str) -> bool:
@@ -295,28 +368,29 @@ Please provide a detailed technical response that:
   return templates.get(template_name, templates['default'])
 
 
-async def generate_openai_response(messages: list[dict[str, Any]], model: str, 
+async def generate_openai_response(messages: list[dict[str, Any]], model: str,
                                   temperature: float = 0.7, max_tokens: int = 2000) -> str:
   """
   Generate response using OpenAI models.
-  
+
   Args:
       messages: List of message dictionaries
       model: OpenAI model name
       temperature: Response randomness
       max_tokens: Maximum response length
-      
+
   Returns:
       Generated response text
   """
-  if not async_openai_client:
+  client = get_async_openai_client()
+  if not client:
     raise APIError("OpenAI client not initialized")
   
   try:
     # Check if this is a reasoning model
     if _is_reasoning_model(model):
       # Use reasoning parameter for o1 models
-      response = await async_openai_client.chat.completions.create(
+      response = await client.chat.completions.create(
         model=model,
         messages=messages,
         reasoning=True,
@@ -328,15 +402,15 @@ async def generate_openai_response(messages: list[dict[str, Any]], model: str,
       # Log message size for debugging
       total_chars = sum(len(msg.get('content', '')) for msg in messages)
       logger.info(f"Sending {total_chars} characters to GPT-5 model {model}")
-      
+
       # Warn if context is very large
       if total_chars > 100000:  # ~100KB
         logger.warning(f"Context size ({total_chars} chars) may exceed model limits. Consider reducing --top-k or --context-scope")
-      
+
       try:
         # GPT-5 requires reasoning_effort parameter
         # Use 'minimal' for faster responses (medium can timeout)
-        response = await async_openai_client.chat.completions.create(
+        response = await client.chat.completions.create(
           model=model,
           messages=messages,
           max_completion_tokens=max_tokens,
@@ -357,7 +431,7 @@ async def generate_openai_response(messages: list[dict[str, Any]], model: str,
         raise
     else:
       # Other models (GPT-4, GPT-3.5, etc) - ALL use max_completion_tokens now
-      response = await async_openai_client.chat.completions.create(
+      response = await client.chat.completions.create(
         model=model,
         messages=messages,
         temperature=temperature,
@@ -389,30 +463,31 @@ async def generate_anthropic_response(messages: list[dict[str, Any]], model: str
                                      temperature: float = 0.7, max_tokens: int = 2000) -> str:
   """
   Generate response using Anthropic Claude models.
-  
+
   Args:
       messages: List of message dictionaries
       model: Anthropic model name
       temperature: Response randomness
       max_tokens: Maximum response length
-      
+
   Returns:
       Generated response text
   """
-  if not async_anthropic_client:
+  client = get_async_anthropic_client()
+  if not client:
     raise APIError("Anthropic client not initialized")
-  
+
   try:
     # Extract system message
     system_message = ""
     user_messages = []
-    
+
     for msg in messages:
       if msg['role'] == 'system':
         system_message = msg['content']
       else:
         user_messages.append(msg)
-    
+
     # Create Anthropic request
     request_params = {
       'model': model,
@@ -420,11 +495,11 @@ async def generate_anthropic_response(messages: list[dict[str, Any]], model: str
       'temperature': temperature,
       'max_tokens': max_tokens
     }
-    
+
     if system_message:
       request_params['system'] = system_message
-    
-    response = await async_anthropic_client.messages.create(**request_params)
+
+    response = await client.messages.create(**request_params)
     
     return response.content[0].text
     
@@ -437,37 +512,38 @@ async def generate_google_response(messages: list[dict[str, Any]], model: str,
                                   temperature: float = 0.7, max_tokens: int = 2000) -> str:
   """
   Generate response using Google AI models.
-  
+
   Args:
       messages: List of message dictionaries
       model: Google model name
       temperature: Response randomness
       max_tokens: Maximum response length
-      
+
   Returns:
       Generated response text
   """
-  if not google_client:
+  client = get_google_client()
+  if not client:
     raise APIError("Google AI client not initialized")
-  
+
   try:
     # Convert messages to Google format
     prompt_parts = []
     for msg in messages:
       role = msg['role']
       content = msg['content']
-      
+
       if role == 'system':
         prompt_parts.append(f"System: {content}")
       elif role == 'user':
         prompt_parts.append(f"User: {content}")
       elif role == 'assistant':
         prompt_parts.append(f"Assistant: {content}")
-    
+
     prompt = "\n\n".join(prompt_parts)
-    
+
     # Generate response
-    response = google_client.models.generate_content(
+    response = client.models.generate_content(
       model=f"models/{model}",
       contents=prompt,
       generation_config={
@@ -487,21 +563,22 @@ async def generate_xai_response(messages: list[dict[str, Any]], model: str,
                                temperature: float = 0.7, max_tokens: int = 2000) -> str:
   """
   Generate response using xAI models.
-  
+
   Args:
       messages: List of message dictionaries
       model: xAI model name
       temperature: Response randomness
       max_tokens: Maximum response length
-      
+
   Returns:
       Generated response text
   """
-  if not async_xai_client:
+  client = get_async_xai_client()
+  if not client:
     raise APIError("xAI client not initialized")
-  
+
   try:
-    response = await async_xai_client.chat.completions.create(
+    response = await client.chat.completions.create(
       model=model,
       messages=messages,
       temperature=temperature,
@@ -519,17 +596,18 @@ async def generate_llama_response(messages: list[dict[str, Any]], model: str,
                                  temperature: float = 0.7, max_tokens: int = 2000) -> str:
   """
   Generate response using local Llama models via Ollama.
-  
+
   Args:
       messages: List of message dictionaries
       model: Llama model name
       temperature: Response randomness
       max_tokens: Maximum response length
-      
+
   Returns:
       Generated response text
   """
-  if not llama_client:
+  client = get_llama_client()
+  if not client:
     raise APIError("Llama client not initialized")
   
   try:

@@ -92,9 +92,11 @@ def validate_file_path(filepath: str, allowed_extensions: list[str] = None,
     if ext not in [e.lower() for e in allowed_extensions]:
       raise ValueError(f"Invalid file extension. Allowed: {allowed_extensions}")
   
-  # Check for dangerous characters (shell injection, command substitution)
+  # Check for dangerous characters in filename only (not directory path)
+  # Directory paths are user-controlled and may contain characters like &
   dangerous_chars = ['<', '>', '|', '&', ';', '`', '$']
-  if any(char in clean_path for char in dangerous_chars):
+  filename = os.path.basename(clean_path)
+  if any(char in filename for char in dangerous_chars):
     raise ValueError("File path contains dangerous characters")
   
   return clean_path

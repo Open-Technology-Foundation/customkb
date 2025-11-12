@@ -8,15 +8,16 @@ Usage:
   customkb <command> <knowledge_base> [options]
 
 Commands:
-  database     Process text files into knowledgebase
-  embed        Generate embeddings for stored text
-  query        Search knowledgebase with AI responses
-  edit         Edit knowledgebase configuration
-  optimize     Optimize performance and create indexes
+  database         Process text files into knowledgebase
+  embed            Generate embeddings for stored text
+  query            Search knowledgebase with AI responses
+  edit             Edit knowledgebase configuration
+  optimize         Optimize performance and create indexes
   verify-indexes   Check database index health
-  bm25         Build BM25 index for hybrid search
-  version      Show version information
-  help         Show this help message
+  bm25             Build BM25 index for hybrid search
+  convert-encoding Convert text files to UTF-8 encoding
+  version          Show version information
+  help             Show this help message
 
 Examples:
   customkb database knowledgebase docs/*.txt
@@ -49,15 +50,10 @@ project_root = Path(__file__).parent.absolute()
 if str(project_root) not in sys.path:
   sys.path.insert(0, str(project_root))
 
-# Import modules
+# Import core modules only (performance optimization - other modules loaded conditionally)
 from utils.logging_config import setup_logging, elapsed_time
 from config.config_manager import get_fq_cfg_filename, KnowledgeBase
-from database.db_manager import process_database
-from embedding.embed_manager import process_embeddings
-from query.query_manager import process_query
-from models.model_manager import get_canonical_model
-from utils.optimization_manager import process_optimize
-from database.index_manager import process_verify_indexes
+# Heavy modules (database, embedding, query) imported lazily when needed
 
 # Initialize module logger
 logger = None
@@ -358,6 +354,32 @@ Examples:
   categorize_parser.add_argument('-d', '--debug', action='store_true', help='Enable debug output')
   categorize_parser.set_defaults(verbose=True)
 
+  # CONVERT-ENCODING
+  convert_encoding_parser = subparsers.add_parser(
+    'convert-encoding',
+    description='Convert text files to UTF-8 encoding in-place',
+    formatter_class=argparse.RawDescriptionHelpFormatter,
+    epilog="""
+Examples:
+  customkb convert-encoding *.txt              # Convert all .txt files
+  customkb convert-encoding docs/ --recursive  # Convert all files in docs/
+  customkb convert-encoding *.txt --dry-run    # Preview without converting
+  customkb convert-encoding *.txt --no-backup  # Convert without backups
+    """
+  )
+  convert_encoding_parser.add_argument('files', nargs='+', help='Files or patterns to convert')
+  convert_encoding_parser.add_argument('--backup', dest='backup', action='store_true', default=True,
+                                      help='Create backups of original files (default)')
+  convert_encoding_parser.add_argument('--no-backup', dest='backup', action='store_false',
+                                      help='Do not create backups')
+  convert_encoding_parser.add_argument('--dry-run', action='store_true',
+                                      help='Preview changes without converting files')
+  convert_encoding_parser.add_argument('-r', '--recursive', action='store_true',
+                                      help='Process directories recursively')
+  convert_encoding_parser.add_argument('-v', '--verbose', action='store_true', default=True, help='Enable verbose output')
+  convert_encoding_parser.add_argument('-q', '--quiet', dest='verbose', action='store_false', help='Minimal output')
+  convert_encoding_parser.add_argument('-d', '--debug', action='store_true', help='Enable debug output')
+
   # HELP
   help_parser = subparsers.add_parser(
     'help',
@@ -386,7 +408,32 @@ Examples:
       version_info = f"CustomKB {get_version(args.build)}"
       print(version_info)
     sys.exit(0)
-  
+
+  # Handle convert-encoding command without KB requirement
+  if args.command == 'convert-encoding':
+    # Setup basic console logging
+    import logging
+    logging.basicConfig(
+      level=logging.DEBUG if args.debug else (logging.INFO if args.verbose else logging.WARNING),
+      format='customkb:%(levelname)s: %(message)s'
+    )
+    logger = logging.getLogger(__name__)
+
+    from utils.encoding_converter import convert_files_to_utf8, format_conversion_summary
+
+    results = convert_files_to_utf8(
+      file_patterns=args.files,
+      backup=args.backup,
+      dry_run=args.dry_run,
+      recursive=args.recursive
+    )
+
+    summary = format_conversion_summary(results)
+    print(summary)
+
+    # Exit with error code if any conversions failed
+    sys.exit(1 if results['failed'] > 0 else 0)
+
   # Handle optimize command when no config_file is provided
   if args.command == 'optimize' and not args.config_file:
     # Setup basic console logging for optimize command
@@ -397,12 +444,13 @@ Examples:
       datefmt='%Y-%m-%d %H:%M:%S'
     )
     logger = logging.getLogger(__name__)
-    
+
     logger.debug("Optimize command with no config_file")
     logger.debug(f"Args: {args}")
-    
+
     # Set target from config_file for the optimization manager
     args.target = args.config_file
+    from utils.optimization_manager import process_optimize
     result = process_optimize(args, logger)
     print(result)
     sys.exit(0)
@@ -421,9 +469,10 @@ Examples:
       datefmt='%Y-%m-%d %H:%M:%S'
     )
     logger = logging.getLogger(__name__)
-    
+
     # Set target from config_file for the optimization manager
     args.target = args.config_file
+    from utils.optimization_manager import process_optimize
     result = process_optimize(args, logger)
     print(result)
     sys.exit(0)
@@ -457,16 +506,20 @@ Examples:
   try:
     match args.command:
       case 'database':
+        from database.db_manager import process_database
         result = process_database(args, logger)
         print(result)  # Keep print for user output
         logger.debug(f"Database command completed: {result}")
 
       case 'embed':
+        from embedding.embed_manager import process_embeddings
         result = process_embeddings(args, logger)
         print(result)  # Keep print for user output
         logger.debug(f"Embed command completed: {result}")
 
       case 'query':
+        from query.query_manager import process_query
+        from models.model_manager import get_canonical_model
         # Set environment variables from command line arguments
         if args.model:
           args.model = get_canonical_model(args.model)['model']
@@ -510,6 +563,7 @@ Examples:
         logger.debug("BM25 command completed")
 
       case 'verify-indexes':
+        from database.index_manager import process_verify_indexes
         result = process_verify_indexes(args, logger)
         print(result)  # Keep print for user output
         logger.debug("Verify-indexes command completed")

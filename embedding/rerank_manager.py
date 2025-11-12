@@ -79,25 +79,14 @@ def get_cached_score(query: str, document: str) -> float | None:
     except Exception as e:
       logger.warning(f"Failed to load cached score from JSON: {e}")
 
-  # Backward compatibility: check for old pickle format
+  # Legacy pickle format is no longer supported (removed for security)
+  # If old pickle cache files exist, they will be ignored and naturally age out
   old_cache_file = os.path.join(CACHE_DIR, f"{cache_key}.pkl")
   if os.path.exists(old_cache_file):
-    try:
-      import pickle
-      with open(old_cache_file, 'rb') as f:
-        score = pickle.load(f)
-      # Migrate to JSON format
-      cache_score(query='', document='', score=score)  # Will save as JSON
-      # Remove old pickle file
-      os.remove(old_cache_file)
-      logger.info(f"Migrated rerank cache from pickle to JSON: {cache_key}")
-      # Promote to memory cache
-      _memory_cache[cache_key] = score
-      _enforce_memory_cache_size()
-      return score
-    except Exception as e:
-      logger.warning(f"Failed to migrate cached score from pickle: {e}")
-  
+    logger.debug(f"Ignoring legacy pickle cache file: {cache_key}.pkl")
+    logger.debug("Legacy pickle caches are no longer supported for security reasons.")
+    logger.debug("The cache will be regenerated automatically.")
+
   return None
 
 

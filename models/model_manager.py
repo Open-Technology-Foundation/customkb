@@ -13,6 +13,9 @@ from utils.logging_config import get_logger
 # Add this module-level variable for test compatibility
 models_file = os.path.join(os.path.dirname(__file__), "..", "Models.json")
 
+# Module-level cache for parsed Models.json (performance optimization)
+_models_cache: dict[str, Any] | None = None
+
 logger = get_logger(__name__)
 
 def get_canonical_model(model_name: str) -> dict[str, Any]:
@@ -41,13 +44,20 @@ def get_canonical_model(model_name: str) -> dict[str, Any]:
   if not model_name:
     raise ValueError("model_name must be a non-empty string")
 
-  # Use the module-level models_file variable (can be patched in tests)
-  try:
-    with open(models_file, 'r') as f:
-      models = json.load(f)
-  except FileNotFoundError:
-    logger.error(f"Models.json file not found at {models_file}")
-    raise FileNotFoundError(f"Models.json file not found at {models_file}")
+  # Check cache first (performance optimization)
+  global _models_cache
+  if _models_cache is not None:
+    models = _models_cache
+  else:
+    # Use the module-level models_file variable (can be patched in tests)
+    try:
+      with open(models_file, 'r') as f:
+        models = json.load(f)
+        # Populate cache for future calls
+        _models_cache = models
+    except FileNotFoundError:
+      logger.error(f"Models.json file not found at {models_file}")
+      raise FileNotFoundError(f"Models.json file not found at {models_file}")
 
   # Try direct lookup by model name
   if model_name in models:

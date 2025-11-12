@@ -251,6 +251,10 @@ class KnowledgeBase:
       'DEF_LANGUAGE_DETECTION_CONFIDENCE': (float, 0.95),
       'DEF_LANGUAGE_DETECTION_SAMPLE_SIZE': (int, 3072),
       'DEF_ADDITIONAL_STOPWORD_LANGUAGES': (list, ['indonesian', 'french', 'german', 'swedish']),
+      # Encoding detection configuration
+      'DEF_AUTO_DETECT_ENCODING': (bool, True),
+      'DEF_DEFAULT_ENCODING': (str, 'utf-8'),
+      'DEF_ENCODING_FALLBACKS': (list, ['utf-8', 'windows-1252', 'latin-1', 'cp1252']),
       # BM25/Hybrid search configuration
       'DEF_ENABLE_HYBRID_SEARCH': (bool, False),
       'DEF_VECTOR_WEIGHT': (float, 0.7),
@@ -492,7 +496,17 @@ class KnowledgeBase:
       # Handle list parameter specially
       stopword_langs_str = algorithms_section.get('additional_stopword_languages', fallback=','.join(self.DEF_ADDITIONAL_STOPWORD_LANGUAGES))
       self.additional_stopword_languages = [lang.strip() for lang in stopword_langs_str.split(',') if lang.strip()]
-      
+
+      # Encoding detection parameters
+      self.auto_detect_encoding = get_env('AUTO_DETECT_ENCODING',
+        algorithms_section.getboolean('auto_detect_encoding', fallback=self.DEF_AUTO_DETECT_ENCODING), bool)
+      self.default_encoding = get_env('DEFAULT_ENCODING',
+        algorithms_section.get('default_encoding', fallback=self.DEF_DEFAULT_ENCODING))
+
+      # Handle encoding fallbacks list parameter
+      encoding_fallbacks_str = algorithms_section.get('encoding_fallbacks', fallback=','.join(self.DEF_ENCODING_FALLBACKS))
+      self.encoding_fallbacks = [enc.strip() for enc in encoding_fallbacks_str.split(',') if enc.strip()]
+
       # BM25/Hybrid search configuration
       self.enable_hybrid_search = get_env('ENABLE_HYBRID_SEARCH',
         algorithms_section.getboolean('enable_hybrid_search', fallback=self.DEF_ENABLE_HYBRID_SEARCH), bool)
@@ -626,7 +640,10 @@ class KnowledgeBase:
       self.language_detection_confidence = kwargs.get('language_detection_confidence', self.DEF_LANGUAGE_DETECTION_CONFIDENCE)
       self.language_detection_sample_size = kwargs.get('language_detection_sample_size', self.DEF_LANGUAGE_DETECTION_SAMPLE_SIZE)
       self.additional_stopword_languages = kwargs.get('additional_stopword_languages', self.DEF_ADDITIONAL_STOPWORD_LANGUAGES)
-      
+      self.auto_detect_encoding = kwargs.get('auto_detect_encoding', self.DEF_AUTO_DETECT_ENCODING)
+      self.default_encoding = kwargs.get('default_encoding', self.DEF_DEFAULT_ENCODING)
+      self.encoding_fallbacks = kwargs.get('encoding_fallbacks', self.DEF_ENCODING_FALLBACKS)
+
       # BM25/Hybrid search configuration
       self.enable_hybrid_search = kwargs.get('enable_hybrid_search', self.DEF_ENABLE_HYBRID_SEARCH)
       self.vector_weight = kwargs.get('vector_weight', self.DEF_VECTOR_WEIGHT)

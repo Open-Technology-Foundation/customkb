@@ -69,7 +69,7 @@ reranking_device = cpu
       mock_load_model.return_value = mock_model
       
       # Mock vector search
-      with patch('query.query_manager.get_query_embedding') as mock_embed:
+      with patch('query.embedding.get_query_embedding') as mock_embed:
         mock_embed.return_value = Mock()  # Mock embedding
         
         with patch('faiss.read_index') as mock_faiss:
@@ -111,7 +111,7 @@ enable_reranking = false
     mock_args.debug = False
     
     with patch('embedding.rerank_manager.load_reranking_model') as mock_load_model:
-      with patch('query.query_manager.get_query_embedding') as mock_embed:
+      with patch('query.embedding.get_query_embedding') as mock_embed:
         mock_embed.return_value = Mock()
         
         with patch('faiss.read_index') as mock_faiss:
@@ -145,8 +145,8 @@ enable_reranking = false
     # Mock reranking to raise an error
     with patch('embedding.rerank_manager.load_reranking_model') as mock_load_model:
       mock_load_model.side_effect = Exception("Model loading failed")
-      
-      with patch('query.query_manager.get_query_embedding') as mock_embed:
+
+      with patch('query.embedding.get_query_embedding') as mock_embed:
         mock_embed.return_value = Mock()
         
         with patch('faiss.read_index') as mock_faiss:

@@ -103,92 +103,72 @@ class TestInitTextSplitter:
 class TestExtractMetadata:
   """Test metadata extraction functionality."""
   
-  def test_basic_metadata(self):
+  def test_basic_metadata(self, mock_kb):
     """Test extraction of basic metadata."""
     text = "This is a sample text for testing metadata extraction."
-    mock_kb = Mock()
-    mock_kb.heading_search_limit = 200
-    mock_kb.entity_extraction_limit = 500
     metadata = extract_metadata(text, "/path/to/test.txt", mock_kb)
-    
+
     assert metadata["source"] == "/path/to/test.txt"
     assert metadata["char_length"] == len(text)
     assert metadata["word_count"] == len(text.split())
     assert metadata["file_type"] == "txt"
-  
-  def test_heading_extraction(self):
+
+  def test_heading_extraction(self, mock_kb):
     """Test extraction of headings from text."""
     markdown_text = "# Main Heading\nThis is some content under the heading."
-    mock_kb = Mock()
-    mock_kb.heading_search_limit = 200
     metadata = extract_metadata(markdown_text, "test.md", mock_kb)
-    
+
     assert metadata.get("heading") == "Main Heading"
     assert metadata.get("section_type") == "heading"
-  
-  def test_code_block_detection(self):
+
+  def test_code_block_detection(self, mock_kb):
     """Test detection of code blocks."""
     code_text = "Here's some code:\n```python\nprint('hello')\n```"
-    mock_kb = Mock()
-    mock_kb.heading_search_limit = 200
-    mock_kb.entity_extraction_limit = 500
     metadata = extract_metadata(code_text, "test.md", mock_kb)
-    
+
     assert metadata.get("section_type") == "code_block"
-  
-  def test_list_detection(self):
+
+  def test_list_detection(self, mock_kb):
     """Test detection of different list types."""
     bullet_text = "Items:\n- First item\n- Second item"
-    mock_kb = Mock()
-    mock_kb.heading_search_limit = 200
-    mock_kb.entity_extraction_limit = 500
     metadata = extract_metadata(bullet_text, "test.md", mock_kb)
     assert metadata.get("section_type") == "bullet_list"
-    
+
     numbered_text = "Steps:\n1. First step\n2. Second step"
     metadata = extract_metadata(numbered_text, "test.md", mock_kb)
     assert metadata.get("section_type") == "numbered_list"
   
-  def test_document_section_detection(self):
+  def test_document_section_detection(self, mock_kb):
     """Test detection of document sections."""
     intro_text = "Introduction\nThis document provides an overview of the system."
-    mock_kb = Mock()
-    mock_kb.heading_search_limit = 200
-    mock_kb.entity_extraction_limit = 500
     metadata = extract_metadata(intro_text, "test.md", mock_kb)
-    
+
     assert metadata.get("document_section") == "introduction"
   
   @patch('database.db_manager.logger')
   @patch('database.db_manager.nlp')
-  def test_entity_extraction_with_spacy(self, mock_nlp, mock_logger):
+  def test_entity_extraction_with_spacy(self, mock_nlp, mock_logger, mock_kb):
     """Test named entity extraction when spaCy is available."""
     # Mock spaCy NLP pipeline
     mock_entity = Mock()
     mock_entity.text = "OpenAI"
     mock_entity.label_ = "ORG"
-    
+
     mock_doc = Mock()
     mock_doc.ents = [mock_entity]
     mock_nlp.return_value = mock_doc
-    
+
     text = "OpenAI is a company working on AI."
-    mock_kb = Mock()
-    mock_kb.heading_search_limit = 200
-    mock_kb.entity_extraction_limit = 500
     metadata = extract_metadata(text, "test.txt", mock_kb)
-    
+
     assert "entities" in metadata
     assert "ORG" in metadata["entities"]
     assert "OpenAI" in metadata["entities"]["ORG"]
-  
+
   @patch('database.db_manager.nlp', None)
-  def test_no_entity_extraction_without_spacy(self):
+  def test_no_entity_extraction_without_spacy(self, mock_kb):
     """Test that entity extraction is skipped when spaCy is not available."""
     text = "OpenAI is a company working on AI."
-    mock_kb = Mock()
-    mock_kb.heading_search_limit = 200
-    mock_kb.entity_extraction_limit = 500
     metadata = extract_metadata(text, "test.txt", mock_kb)
     
     assert "entities" not in metadata

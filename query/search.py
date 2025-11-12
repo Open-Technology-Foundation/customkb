@@ -198,11 +198,29 @@ async def perform_vector_search(kb: Any, query_embedding: np.ndarray,
     
     # Perform search
     distances, indices = kb.faiss_index.search(query_embedding, top_k)
-    
-    # Convert distances to similarity scores
-    # For L2 distance, convert to similarity (higher is better)
-    similarities = 1.0 / (1.0 + distances[0])
-    
+
+    # Convert distances to similarity scores based on metric type
+    # Detect index metric by checking the underlying index type
+    index = kb.faiss_index
+    # Unwrap IndexIDMap if present
+    if hasattr(index, 'index'):
+      inner_index = index.index
+    else:
+      inner_index = index
+
+    # Check if using Inner Product (IP) or L2 distance
+    uses_ip_metric = (
+      'IP' in type(inner_index).__name__ or
+      (hasattr(inner_index, 'metric_type') and inner_index.metric_type == 1)  # 1 = METRIC_INNER_PRODUCT
+    )
+
+    if uses_ip_metric:
+      # For Inner Product, higher scores are already better (no conversion needed)
+      similarities = distances[0]
+    else:
+      # For L2 distance, convert to similarity (higher is better)
+      similarities = 1.0 / (1.0 + distances[0])
+
     # Create results list
     results = []
     for idx, similarity in zip(indices[0], similarities):

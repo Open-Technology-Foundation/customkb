@@ -16,8 +16,9 @@ try:
   HAS_LANGDETECT = True
 except ImportError:
   HAS_LANGDETECT = False
-  
+
 from database.db_manager import get_iso_code
+from utils.text_utils import read_text_file
 
 logger = logging.getLogger(__name__)
 
@@ -60,9 +61,9 @@ def detect_file_language(
     return _detection_cache[cache_key], 1.0
   
   try:
-    # Read sample from file
-    with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
-      sample_text = f.read(sample_size)
+    # Read sample from file with automatic encoding detection
+    full_text = read_text_file(file_path)
+    sample_text = full_text[:sample_size]
     
     if len(sample_text.strip()) < 20:  # Too short for reliable detection
       logger.debug(f"File {file_path} too short for language detection")

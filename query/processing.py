@@ -12,7 +12,7 @@ import argparse
 from typing import Any
 
 from utils.logging_config import get_logger
-from utils.text_utils import clean_text
+from utils.text_utils import clean_text, read_text_file
 from config.config_manager import KnowledgeBase, get_fq_cfg_filename
 from database.db_manager import connect_to_database, close_database
 from utils.exceptions import QueryError, ProcessingError
@@ -35,9 +35,9 @@ def read_context_file(file_path: str) -> tuple[str, str]:
       Tuple of (file_content, file_name)
   """
   try:
-    with open(file_path, 'r', encoding='utf-8') as f:
-      content = f.read()
-    
+    # Read file with automatic encoding detection
+    content = read_text_file(file_path)
+
     # Get just the filename for reference
     file_name = os.path.basename(file_path)
     
