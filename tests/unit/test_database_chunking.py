@@ -460,6 +460,73 @@ class TestChunkValidation(unittest.TestCase):
     self.assertTrue(result)
 
 
+class TestTokenCounter(unittest.TestCase):
+  """Test token counting functionality with tiktoken."""
+
+  def test_get_token_counter_returns_callable(self):
+    """Test that get_token_counter returns a callable function."""
+    from database.chunking import get_token_counter
+    counter = get_token_counter()
+    self.assertTrue(callable(counter))
+
+  def test_token_counter_counts_tokens(self):
+    """Test that token counter returns integer counts."""
+    from database.chunking import get_token_counter
+    counter = get_token_counter()
+
+    result = counter("Hello world")
+    self.assertIsInstance(result, int)
+    self.assertGreater(result, 0)
+
+  def test_token_counter_empty_string(self):
+    """Test token counter with empty string."""
+    from database.chunking import get_token_counter
+    counter = get_token_counter()
+
+    result = counter("")
+    self.assertEqual(result, 0)
+
+  def test_token_counter_longer_text(self):
+    """Test that longer text produces more tokens."""
+    from database.chunking import get_token_counter
+    counter = get_token_counter()
+
+    short_text = "Hello"
+    long_text = "Hello world, this is a much longer sentence with more tokens."
+
+    short_count = counter(short_text)
+    long_count = counter(long_text)
+
+    self.assertGreater(long_count, short_count)
+
+  def test_token_counter_vs_character_count(self):
+    """Test that token count differs from character count."""
+    from database.chunking import get_token_counter
+    counter = get_token_counter()
+
+    text = "This is a test sentence with multiple words."
+    token_count = counter(text)
+    char_count = len(text)
+
+    # Token count should be less than character count for normal text
+    self.assertLess(token_count, char_count)
+
+  def test_token_counter_caching(self):
+    """Test that token counter caches encoding for performance."""
+    from database.chunking import get_token_counter, _tiktoken_encodings
+
+    # First call should populate cache
+    counter1 = get_token_counter("cl100k_base")
+    cache_size_after_first = len(_tiktoken_encodings)
+
+    # Second call should reuse cached encoding
+    counter2 = get_token_counter("cl100k_base")
+    cache_size_after_second = len(_tiktoken_encodings)
+
+    # Cache should not grow
+    self.assertEqual(cache_size_after_first, cache_size_after_second)
+
+
 if __name__ == '__main__':
   unittest.main()
 

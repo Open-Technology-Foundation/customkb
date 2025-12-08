@@ -273,19 +273,62 @@ async def perform_bm25_search(kb: Any, query_text: str,
     return []
 
 
-def merge_search_results(vector_results: list[tuple[int, float]], 
-                        bm25_results: list[tuple[int, float]],
-                        vector_weight: float = 0.7,
-                        bm25_weight: float = 0.3) -> list[tuple[int, float]]:
+def merge_search_results_rrf(vector_results: list[tuple[int, float]],
+                             bm25_results: list[tuple[int, float]],
+                             k: int = 60) -> list[tuple[int, float]]:
   """
-  Merge vector and BM25 search results with weighted scoring.
-  
+  Merge results using Reciprocal Rank Fusion (RRF).
+
+  RRF is more robust than weighted averaging because it uses rank positions
+  rather than raw scores, making it invariant to score scale differences
+  between rankers.
+
+  Formula: RRF_score(d) = sum(1 / (k + rank_i(d))) for each ranker i
+
+  Args:
+      vector_results: Vector search results (doc_id, score), sorted by relevance
+      bm25_results: BM25 search results (doc_id, score), sorted by relevance
+      k: Ranking constant (default 60, standard in literature)
+          Higher k = more weight to lower-ranked documents
+
+  Returns:
+      Merged results sorted by RRF score (doc_id, rrf_score)
+  """
+  rrf_scores: dict[int, float] = {}
+
+  # Add vector search contributions (results should already be sorted by score)
+  for rank, (doc_id, _) in enumerate(vector_results, 1):
+    rrf_scores[doc_id] = rrf_scores.get(doc_id, 0.0) + 1.0 / (k + rank)
+
+  # Add BM25 contributions
+  for rank, (doc_id, _) in enumerate(bm25_results, 1):
+    rrf_scores[doc_id] = rrf_scores.get(doc_id, 0.0) + 1.0 / (k + rank)
+
+  # Sort by RRF score descending
+  merged_results = sorted(rrf_scores.items(), key=lambda x: x[1], reverse=True)
+
+  logger.debug(f"RRF merged {len(vector_results)} vector + {len(bm25_results)} BM25 "
+              f"= {len(merged_results)} total results")
+
+  return merged_results
+
+
+def merge_search_results_weighted(vector_results: list[tuple[int, float]],
+                                  bm25_results: list[tuple[int, float]],
+                                  vector_weight: float = 0.7,
+                                  bm25_weight: float = 0.3) -> list[tuple[int, float]]:
+  """
+  Merge vector and BM25 search results with weighted scoring (legacy method).
+
+  Note: RRF (merge_search_results_rrf) is generally preferred as it's more
+  robust to score scale differences between rankers.
+
   Args:
       vector_results: Vector search results
-      bm25_results: BM25 search results  
+      bm25_results: BM25 search results
       vector_weight: Weight for vector scores
       bm25_weight: Weight for BM25 scores
-      
+
   Returns:
       Merged and sorted list of (doc_id, combined_score) tuples
   """
@@ -293,53 +336,82 @@ def merge_search_results(vector_results: list[tuple[int, float]],
   total_weight = vector_weight + bm25_weight
   vector_weight /= total_weight
   bm25_weight /= total_weight
-  
+
   # Convert to dictionaries for easy lookup
   vector_scores = {doc_id: score for doc_id, score in vector_results}
   bm25_scores = {doc_id: score for doc_id, score in bm25_results}
-  
+
   # Get all unique document IDs
   all_doc_ids = set(vector_scores.keys()) | set(bm25_scores.keys())
-  
+
   # Normalize scores to [0, 1] range
   if vector_scores:
     max_vector_score = max(vector_scores.values())
-    vector_scores = {doc_id: score / max_vector_score 
-                    for doc_id, score in vector_scores.items()}
-  
+    if max_vector_score > 0:
+      vector_scores = {doc_id: score / max_vector_score
+                      for doc_id, score in vector_scores.items()}
+
   if bm25_scores:
     max_bm25_score = max(bm25_scores.values())
-    bm25_scores = {doc_id: score / max_bm25_score 
-                  for doc_id, score in bm25_scores.items()}
-  
+    if max_bm25_score > 0:
+      bm25_scores = {doc_id: score / max_bm25_score
+                    for doc_id, score in bm25_scores.items()}
+
   # Combine scores
   combined_results = []
   for doc_id in all_doc_ids:
     vector_score = vector_scores.get(doc_id, 0.0)
     bm25_score = bm25_scores.get(doc_id, 0.0)
-    
-    combined_score = (vector_weight * vector_score + 
+
+    combined_score = (vector_weight * vector_score +
                      bm25_weight * bm25_score)
-    
+
     combined_results.append((doc_id, combined_score))
-  
+
   # Sort by combined score (descending)
   combined_results.sort(key=lambda x: x[1], reverse=True)
-  
-  logger.debug(f"Merged {len(vector_results)} vector + {len(bm25_results)} BM25 "
+
+  logger.debug(f"Weighted merged {len(vector_results)} vector + {len(bm25_results)} BM25 "
               f"= {len(combined_results)} total results")
-  
+
   return combined_results
 
 
-async def perform_hybrid_search(kb: Any, query_text: str, 
+def merge_search_results(vector_results: list[tuple[int, float]],
+                        bm25_results: list[tuple[int, float]],
+                        vector_weight: float = 0.7,
+                        bm25_weight: float = 0.3,
+                        fusion_method: str = "rrf",
+                        rrf_k: int = 60) -> list[tuple[int, float]]:
+  """
+  Merge vector and BM25 search results using specified fusion method.
+
+  Args:
+      vector_results: Vector search results
+      bm25_results: BM25 search results
+      vector_weight: Weight for vector scores (used with 'weighted' method)
+      bm25_weight: Weight for BM25 scores (used with 'weighted' method)
+      fusion_method: Fusion algorithm - 'rrf' (recommended) or 'weighted'
+      rrf_k: RRF ranking constant (default 60)
+
+  Returns:
+      Merged and sorted list of (doc_id, combined_score) tuples
+  """
+  if fusion_method == "rrf":
+    return merge_search_results_rrf(vector_results, bm25_results, k=rrf_k)
+  else:
+    return merge_search_results_weighted(vector_results, bm25_results,
+                                         vector_weight, bm25_weight)
+
+
+async def perform_hybrid_search(kb: Any, query_text: str,
                                query_embedding: np.ndarray,
                                top_k: int = 10,
                                categories: list[str] = None,
                                rerank: bool = False) -> list[tuple[int, float]]:
   """
   Perform hybrid search combining vector similarity and BM25 keyword search.
-  
+
   Args:
       kb: KnowledgeBase instance
       query_text: Original query text
@@ -347,25 +419,32 @@ async def perform_hybrid_search(kb: Any, query_text: str,
       top_k: Number of top results to return
       categories: Optional category filter
       rerank: Whether to apply reranking
-      
+
   Returns:
       List of (doc_id, score) tuples sorted by relevance
   """
   try:
     # Perform vector search
     vector_results = await perform_vector_search(kb, query_embedding, top_k)
-    
+
     # Perform BM25 search if enabled
     bm25_results = await perform_bm25_search(kb, query_text, top_k)
-    
+
     # Merge results if we have both
     if vector_results and bm25_results:
-      # Get hybrid search weights from config
+      # Get fusion method and parameters from config
+      fusion_method = getattr(kb, 'hybrid_fusion_method', 'rrf')
       vector_weight = getattr(kb, 'hybrid_vector_weight', 0.7)
       bm25_weight = getattr(kb, 'hybrid_bm25_weight', 0.3)
-      
-      results = merge_search_results(vector_results, bm25_results, 
-                                   vector_weight, bm25_weight)
+      rrf_k = getattr(kb, 'rrf_k', 60)
+
+      results = merge_search_results(
+        vector_results, bm25_results,
+        vector_weight=vector_weight,
+        bm25_weight=bm25_weight,
+        fusion_method=fusion_method,
+        rrf_k=rrf_k
+      )
     elif vector_results:
       results = vector_results
     elif bm25_results:
@@ -373,11 +452,11 @@ async def perform_hybrid_search(kb: Any, query_text: str,
     else:
       logger.warning("No search results found")
       return []
-    
+
     # Apply category filtering if specified
     if categories:
       results = await filter_results_by_category(kb, results, categories)
-    
+
     # Apply reranking if enabled
     if rerank and getattr(kb, 'enable_reranking', False):
       try:
@@ -386,13 +465,13 @@ async def perform_hybrid_search(kb: Any, query_text: str,
         logger.debug("Applied reranking to search results")
       except Exception as e:
         logger.warning(f"Reranking failed: {e}")
-    
+
     # Limit to top_k results
     results = results[:top_k]
-    
+
     logger.info(f"Hybrid search completed: {len(results)} results")
     return results
-    
+
   except Exception as e:
     logger.error(f"Hybrid search failed: {e}")
     raise SearchError(f"Search error: {e}") from e

@@ -159,8 +159,14 @@ def get_optimized_settings(memory_gb: float = None) -> dict:
         'max_chunk_overlap': str(int(200 * batch_factor)),
         'heading_search_limit': str(int(500 * batch_factor)),
         'entity_extraction_limit': str(int(1000 * batch_factor)),
+        # Hybrid search configuration
         # Disable hybrid search for systems under 64GB to prevent crashes
         'enable_hybrid_search': 'true' if memory_gb >= 64 else 'false',
+        # RRF is more robust than weighted averaging for score fusion
+        'hybrid_fusion_method': 'rrf',
+        'rrf_k': '60',  # Standard RRF ranking constant
+        'vector_weight': '0.7',  # Used with 'weighted' fusion method
+        'bm25_weight': '0.3',    # Used with 'weighted' fusion method
         'bm25_rebuild_threshold': str(int(5000 * batch_factor)),
         # Conservative BM25 limit to prevent memory exhaustion
         'bm25_max_results': str(min(750, int(1000 * memory_factor))),

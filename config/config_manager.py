@@ -257,7 +257,10 @@ class KnowledgeBase:
       'DEF_ENCODING_FALLBACKS': (list, ['utf-8', 'windows-1252', 'latin-1', 'cp1252']),
       # BM25/Hybrid search configuration
       'DEF_ENABLE_HYBRID_SEARCH': (bool, False),
-      'DEF_VECTOR_WEIGHT': (float, 0.7),
+      'DEF_HYBRID_FUSION_METHOD': (str, 'rrf'),  # 'rrf' (recommended) or 'weighted'
+      'DEF_RRF_K': (int, 60),  # RRF ranking constant (higher = more weight to lower ranks)
+      'DEF_VECTOR_WEIGHT': (float, 0.7),  # Used with 'weighted' fusion method
+      'DEF_BM25_WEIGHT': (float, 0.3),  # Used with 'weighted' fusion method
       'DEF_BM25_K1': (float, 1.2),
       'DEF_BM25_B': (float, 0.75),
       'DEF_BM25_MIN_TOKEN_LENGTH': (int, 2),
@@ -510,8 +513,16 @@ class KnowledgeBase:
       # BM25/Hybrid search configuration
       self.enable_hybrid_search = get_env('ENABLE_HYBRID_SEARCH',
         algorithms_section.getboolean('enable_hybrid_search', fallback=self.DEF_ENABLE_HYBRID_SEARCH), bool)
-      self.vector_weight = get_env('VECTOR_WEIGHT',
+      self.hybrid_fusion_method = get_env('HYBRID_FUSION_METHOD',
+        algorithms_section.get('hybrid_fusion_method', fallback=self.DEF_HYBRID_FUSION_METHOD))
+      self.rrf_k = get_env('RRF_K',
+        algorithms_section.getint('rrf_k', fallback=self.DEF_RRF_K), int)
+      self.hybrid_vector_weight = get_env('VECTOR_WEIGHT',
         algorithms_section.getfloat('vector_weight', fallback=self.DEF_VECTOR_WEIGHT), float)
+      self.hybrid_bm25_weight = get_env('BM25_WEIGHT',
+        algorithms_section.getfloat('bm25_weight', fallback=self.DEF_BM25_WEIGHT), float)
+      # Legacy alias
+      self.vector_weight = self.hybrid_vector_weight
       self.bm25_k1 = get_env('BM25_K1',
         algorithms_section.getfloat('bm25_k1', fallback=self.DEF_BM25_K1), float)
       self.bm25_b = get_env('BM25_B',

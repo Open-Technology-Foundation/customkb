@@ -12,7 +12,9 @@ from unittest.mock import Mock, patch, MagicMock
 from query.search import (
     get_context_range,
     fetch_document_by_id,
-    merge_search_results
+    merge_search_results,
+    merge_search_results_rrf,
+    merge_search_results_weighted
 )
 from utils.exceptions import DatabaseError
 
@@ -399,6 +401,161 @@ class TestEdgeCases:
         # Both should work
         assert len(result1) == 2
         assert len(result2) == 2
+
+
+class TestRRFMerge:
+    """Test Reciprocal Rank Fusion merge function."""
+
+    def test_rrf_basic(self):
+        """Test basic RRF merging of vector and BM25 results."""
+        vector_results = [(1, 0.9), (2, 0.7), (3, 0.5)]
+        bm25_results = [(2, 10.0), (3, 8.0), (4, 6.0)]
+
+        result = merge_search_results_rrf(vector_results, bm25_results)
+
+        # Should have 4 unique documents
+        assert len(result) == 4
+
+        # Doc 2 and 3 should be highest (appear in both)
+        top_doc_ids = {result[0][0], result[1][0]}
+        assert 2 in top_doc_ids or 3 in top_doc_ids
+
+    def test_rrf_sorted_by_score(self):
+        """Test that RRF results are sorted by score descending."""
+        vector_results = [(1, 0.5), (2, 0.9)]
+        bm25_results = [(1, 5.0), (3, 15.0)]
+
+        result = merge_search_results_rrf(vector_results, bm25_results)
+
+        # Scores should be in descending order
+        for i in range(len(result) - 1):
+            assert result[i][1] >= result[i + 1][1]
+
+    def test_rrf_documents_in_both_rank_higher(self):
+        """Test that documents appearing in both result sets rank higher."""
+        # Doc 1 appears in both, docs 2,3 only in one each
+        vector_results = [(1, 0.9), (2, 0.8)]
+        bm25_results = [(1, 10.0), (3, 8.0)]
+
+        result = merge_search_results_rrf(vector_results, bm25_results)
+
+        # Doc 1 should be first since it appears in both lists
+        assert result[0][0] == 1
+
+    def test_rrf_empty_vector_results(self):
+        """Test RRF with empty vector results."""
+        vector_results = []
+        bm25_results = [(1, 10.0), (2, 8.0)]
+
+        result = merge_search_results_rrf(vector_results, bm25_results)
+
+        # Should still have BM25 results
+        assert len(result) == 2
+
+    def test_rrf_empty_bm25_results(self):
+        """Test RRF with empty BM25 results."""
+        vector_results = [(1, 0.9), (2, 0.7)]
+        bm25_results = []
+
+        result = merge_search_results_rrf(vector_results, bm25_results)
+
+        # Should still have vector results
+        assert len(result) == 2
+
+    def test_rrf_both_empty(self):
+        """Test RRF with both results empty."""
+        result = merge_search_results_rrf([], [])
+
+        assert result == []
+
+    def test_rrf_custom_k(self):
+        """Test RRF with custom k parameter."""
+        vector_results = [(1, 0.9), (2, 0.7)]
+        bm25_results = [(1, 10.0), (3, 8.0)]
+
+        # Default k=60
+        result1 = merge_search_results_rrf(vector_results, bm25_results, k=60)
+
+        # Higher k gives more weight to lower-ranked results
+        result2 = merge_search_results_rrf(vector_results, bm25_results, k=1)
+
+        # Both should work and have same documents
+        assert len(result1) == len(result2) == 3
+
+    def test_rrf_formula_correctness(self):
+        """Test that RRF formula is correctly implemented."""
+        # Simple case: single doc in each list at rank 1
+        vector_results = [(1, 0.9)]
+        bm25_results = [(2, 10.0)]
+
+        result = merge_search_results_rrf(vector_results, bm25_results, k=60)
+
+        # Doc 1: 1/(60+1) = 0.01639...
+        # Doc 2: 1/(60+1) = 0.01639...
+        # Both should have same score since both are at rank 1
+        assert abs(result[0][1] - result[1][1]) < 0.001
+
+    def test_rrf_rank_based_not_score_based(self):
+        """Test that RRF uses ranks, not raw scores."""
+        # Different raw scores but same ranks
+        vector_results = [(1, 1000.0), (2, 1.0)]  # Huge score difference
+        bm25_results = [(3, 1000.0), (4, 1.0)]
+
+        result = merge_search_results_rrf(vector_results, bm25_results)
+
+        # Despite huge score differences, rank-1 docs should have same RRF score
+        # Doc 1 and 3 are both at rank 1
+        doc1_score = next(s for d, s in result if d == 1)
+        doc3_score = next(s for d, s in result if d == 3)
+        assert abs(doc1_score - doc3_score) < 0.001
+
+
+class TestMergeSearchResultsFusionMethod:
+    """Test the main merge function with different fusion methods."""
+
+    def test_merge_default_uses_rrf(self):
+        """Test that default fusion method is RRF."""
+        vector_results = [(1, 0.9), (2, 0.7)]
+        bm25_results = [(1, 10.0), (3, 8.0)]
+
+        # Default should use RRF
+        result = merge_search_results(vector_results, bm25_results)
+
+        # Should have 3 unique documents
+        assert len(result) == 3
+
+    def test_merge_explicit_rrf(self):
+        """Test explicit RRF fusion method."""
+        vector_results = [(1, 0.9), (2, 0.7)]
+        bm25_results = [(1, 10.0), (3, 8.0)]
+
+        result = merge_search_results(vector_results, bm25_results,
+                                      fusion_method="rrf")
+
+        assert len(result) == 3
+
+    def test_merge_weighted_method(self):
+        """Test weighted fusion method."""
+        vector_results = [(1, 0.9), (2, 0.7)]
+        bm25_results = [(1, 10.0), (3, 8.0)]
+
+        result = merge_search_results(vector_results, bm25_results,
+                                      fusion_method="weighted")
+
+        assert len(result) == 3
+        # Weighted method normalizes scores to [0, 1]
+        for doc_id, score in result:
+            assert 0.0 <= score <= 1.0
+
+    def test_merge_rrf_with_custom_k(self):
+        """Test RRF with custom k parameter via main function."""
+        vector_results = [(1, 0.9), (2, 0.7)]
+        bm25_results = [(1, 10.0), (3, 8.0)]
+
+        result = merge_search_results(vector_results, bm25_results,
+                                      fusion_method="rrf", rrf_k=30)
+
+        assert len(result) == 3
 
 
 if __name__ == "__main__":

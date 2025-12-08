@@ -38,6 +38,8 @@ def main():
         print(f"  Embedding batch size: {opts['PERFORMANCE']['embedding_batch_size']:>7}")
         print(f"  File batch size: {opts['PERFORMANCE']['file_processing_batch_size']:>11}")
         print(f"  Hybrid search: {opts['ALGORITHMS']['enable_hybrid_search']:>13}")
+        print(f"  Fusion method: {opts['ALGORITHMS'].get('hybrid_fusion_method', 'rrf'):>13}")
+        print(f"  RRF k: {opts['ALGORITHMS'].get('rrf_k', '60'):>21}")
         print(f"  Reranking device: {opts['ALGORITHMS']['reranking_device']:>10}")
         print(f"  FAISS GPU batch: {opts['ALGORITHMS'].get('faiss_gpu_batch_size', 'N/A'):>11}")
         print(f"  FAISS use float16: {opts['ALGORITHMS'].get('faiss_gpu_use_float16', 'N/A'):>9}")

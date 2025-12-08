@@ -6,7 +6,7 @@ This module handles breaking down documents into manageable chunks
 for processing and embedding.
 """
 
-from typing import Any
+from typing import Any, Callable
 from pathlib import Path
 
 from langchain_text_splitters import (
@@ -19,6 +19,47 @@ from utils.logging_config import get_logger
 from utils.exceptions import ChunkingError, ProcessingError
 
 logger = get_logger(__name__)
+
+# Cache for tiktoken encodings
+_tiktoken_encodings: dict[str, Any] = {}
+
+
+def get_token_counter(encoding_name: str = "cl100k_base") -> Callable[[str], int]:
+  """
+  Get a token counting function using tiktoken.
+
+  Uses cl100k_base encoding by default, which is used by:
+  - text-embedding-ada-002
+  - text-embedding-3-small
+  - text-embedding-3-large
+  - gpt-4, gpt-3.5-turbo
+
+  Args:
+      encoding_name: Tiktoken encoding name (default: cl100k_base)
+
+  Returns:
+      Function that counts tokens in a string
+  """
+  global _tiktoken_encodings
+
+  # Return cached encoding if available
+  if encoding_name in _tiktoken_encodings:
+    encoding = _tiktoken_encodings[encoding_name]
+    return lambda text: len(encoding.encode(text))
+
+  try:
+    import tiktoken
+    encoding = tiktoken.get_encoding(encoding_name)
+    _tiktoken_encodings[encoding_name] = encoding
+    logger.debug(f"Initialized tiktoken encoding: {encoding_name}")
+    return lambda text: len(encoding.encode(text))
+  except ImportError:
+    logger.warning("tiktoken not installed, falling back to word-based estimation")
+    # Fallback: ~1.3 tokens per word is a reasonable approximation
+    return lambda text: int(len(text.split()) * 1.3)
+  except Exception as e:
+    logger.warning(f"Failed to load tiktoken encoding {encoding_name}: {e}")
+    return lambda text: int(len(text.split()) * 1.3)
 
 
 # File type detection patterns
@@ -83,14 +124,16 @@ def detect_file_type(filename: str) -> str:
 def init_text_splitter(kb: Any, file_type: str = 'text') -> Any:
   """
   Initialize appropriate text splitter based on file type.
-  
+
+  Uses tiktoken for accurate token counting instead of character length.
+
   Args:
       kb: KnowledgeBase configuration
       file_type: Type of file being processed
-      
+
   Returns:
       Configured text splitter instance
-      
+
   Raises:
       ChunkingError: If splitter initialization fails
   """
@@ -100,53 +143,57 @@ def init_text_splitter(kb: Any, file_type: str = 'text') -> Any:
     max_overlap = getattr(kb, 'max_chunk_overlap', 100)
     min_tokens = getattr(kb, 'db_min_tokens', 100)
     chunk_overlap = min(max_overlap, min_tokens // 2)
-    
+
+    # Get token counter (uses tiktoken with fallback)
+    token_counter = get_token_counter()
+
     if file_type == 'markdown':
-      logger.debug(f"Initializing Markdown splitter (chunk_size={chunk_size})")
+      logger.debug(f"Initializing Markdown splitter (chunk_size={chunk_size} tokens)")
       return MarkdownTextSplitter(
         chunk_size=chunk_size,
         chunk_overlap=chunk_overlap,
-        length_function=len
+        length_function=token_counter
       )
-    
+
     elif file_type == 'code':
       # For code files, use language-specific splitter if available
-      logger.debug(f"Initializing code splitter (chunk_size={chunk_size})")
+      logger.debug(f"Initializing code splitter (chunk_size={chunk_size} tokens)")
       return RecursiveCharacterTextSplitter(
         chunk_size=chunk_size,
         chunk_overlap=chunk_overlap,
         separators=["\n\n", "\n", " ", ""],
-        length_function=len
+        length_function=token_counter
       )
-    
+
     elif file_type == 'html':
-      logger.debug(f"Initializing HTML splitter (chunk_size={chunk_size})")
+      logger.debug(f"Initializing HTML splitter (chunk_size={chunk_size} tokens)")
       return RecursiveCharacterTextSplitter.from_language(
         language=Language.HTML,
         chunk_size=chunk_size,
-        chunk_overlap=chunk_overlap
+        chunk_overlap=chunk_overlap,
+        length_function=token_counter
       )
-    
+
     elif file_type == 'json' or file_type == 'yaml':
       # For structured data, preserve structure where possible
-      logger.debug(f"Initializing structured data splitter (chunk_size={chunk_size})")
+      logger.debug(f"Initializing structured data splitter (chunk_size={chunk_size} tokens)")
       return RecursiveCharacterTextSplitter(
         chunk_size=chunk_size,
         chunk_overlap=chunk_overlap,
         separators=["\n\n", "\n", ",", " ", ""],
-        length_function=len
+        length_function=token_counter
       )
-    
+
     else:
       # Default text splitter
-      logger.debug(f"Initializing default text splitter (chunk_size={chunk_size})")
+      logger.debug(f"Initializing default text splitter (chunk_size={chunk_size} tokens)")
       return RecursiveCharacterTextSplitter(
         chunk_size=chunk_size,
         chunk_overlap=chunk_overlap,
         separators=["\n\n", "\n", ". ", " ", ""],
-        length_function=len
+        length_function=token_counter
       )
-  
+
   except Exception as e:
     logger.error(f"Failed to initialize text splitter: {e}")
     raise ChunkingError(f"Text splitter initialization failed: {e}") from e
@@ -155,16 +202,18 @@ def init_text_splitter(kb: Any, file_type: str = 'text') -> Any:
 def get_language_specific_splitter(file_path: str, kb: Any) -> Any | None:
   """
   Get a language-specific code splitter if available.
-  
+
+  Uses tiktoken for accurate token counting.
+
   Args:
       file_path: Path to the file
       kb: KnowledgeBase configuration
-      
+
   Returns:
       Language-specific splitter or None
   """
   extension = Path(file_path).suffix.lower()
-  
+
   if extension in LANGUAGE_MAP:
     try:
       language = LANGUAGE_MAP[extension]
@@ -173,18 +222,22 @@ def get_language_specific_splitter(file_path: str, kb: Any) -> Any | None:
       max_overlap = getattr(kb, 'max_chunk_overlap', 100)
       min_tokens = getattr(kb, 'db_min_tokens', 100)
       chunk_overlap = min(max_overlap, min_tokens // 2)
-      
-      logger.debug(f"Creating {language} splitter for {extension}")
-      
+
+      # Get token counter (uses tiktoken with fallback)
+      token_counter = get_token_counter()
+
+      logger.debug(f"Creating {language} splitter for {extension} (chunk_size={chunk_size} tokens)")
+
       return RecursiveCharacterTextSplitter.from_language(
         language=language,
         chunk_size=chunk_size,
-        chunk_overlap=chunk_overlap
+        chunk_overlap=chunk_overlap,
+        length_function=token_counter
       )
     except Exception as e:
       logger.warning(f"Failed to create language-specific splitter: {e}")
       return None
-  
+
   return None
 
 
