@@ -409,13 +409,12 @@ async def generate_openai_response(messages: list[dict[str, Any]], model: str,
 
       try:
         # GPT-5 requires reasoning_effort parameter
-        # Use 'minimal' for faster responses (medium can timeout)
+        # Use 'low' for faster responses (valid: none, low, medium, high, xhigh)
         response = await client.chat.completions.create(
           model=model,
           messages=messages,
           max_completion_tokens=max_tokens,
-          reasoning_effort='minimal',  # Required for GPT-5 - minimal is faster
-          verbosity='low'  # Low verbosity for faster responses
+          reasoning_effort='low',  # Required for GPT-5 - low is faster
         )
         # Debug logging
         logger.info(f"GPT-5 response received: finish_reason={response.choices[0].finish_reason if response.choices else 'no choices'}")
