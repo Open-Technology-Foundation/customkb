@@ -68,12 +68,14 @@ def build_bm25_index(kb: 'KnowledgeBase') -> BM25Okapi | None:
     idf_scores = [bm25.idf[term] for term in idf_terms]
 
     # Save arrays with NPZ (efficient binary format)
+    # doc_freqs is a list of dicts needed by get_scores()
     np.savez(
       bm25_path,
       idf_terms=np.array(idf_terms, dtype=object),
       idf_scores=np.array(idf_scores, dtype=np.float32),
       doc_len=np.array(bm25.doc_len, dtype=np.int32),
-      doc_ids=np.array(doc_ids, dtype=np.int32)
+      doc_ids=np.array(doc_ids, dtype=np.int32),
+      doc_freqs=np.array(bm25.doc_freqs, dtype=object)
     )
 
     # Save metadata with JSON (human-readable, secure)
@@ -139,6 +141,14 @@ def load_bm25_index(kb: 'KnowledgeBase') -> dict[str, Any] | None:
       bm25.corpus_size = metadata['corpus_size']
       bm25.k1 = metadata['k1']
       bm25.b = metadata['b']
+
+      # Restore doc_freqs (required for get_scores())
+      if 'doc_freqs' in npz_data:
+        bm25.doc_freqs = npz_data['doc_freqs'].tolist()
+      else:
+        # Old index format missing doc_freqs - needs rebuild
+        logger.warning("BM25 index missing doc_freqs. Run 'customkb bm25 <kb_name> --force' to rebuild.")
+        return None
 
       # Convert doc_ids back to list
       doc_ids = npz_data['doc_ids'].tolist()

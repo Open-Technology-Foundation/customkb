@@ -140,7 +140,7 @@ def rebuild_bm25_index(args: argparse.Namespace, logger) -> str:
   """
   try:
     from config.config_manager import get_fq_cfg_filename, KnowledgeBase
-    from database.db_manager import connect_to_database, close_database
+    from database.connection import connect_to_database, close_database
     from embedding.bm25_manager import build_bm25_index, load_bm25_index
     
     # Get configuration file
