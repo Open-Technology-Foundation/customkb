@@ -37,10 +37,10 @@ def get_current_schema_version(kb: Any) -> int:
       # Migration table doesn't exist, assume version 0
       return 0
     
-    # Get current version
+    # Get current version (excluding rolled-back migrations)
     kb.sql_cursor.execute("""
-      SELECT MAX(version) FROM schema_migrations 
-      WHERE applied_at IS NOT NULL
+      SELECT MAX(version) FROM schema_migrations
+      WHERE applied_at IS NOT NULL AND rollback_at IS NULL
     """)
     
     result = kb.sql_cursor.fetchone()

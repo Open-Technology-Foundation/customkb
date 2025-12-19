@@ -147,7 +147,7 @@ class CacheThreadManager:
     with self._lock:
       total_requests = self._metrics['cache_hits'] + self._metrics['cache_misses']
       hit_ratio = self._metrics['cache_hits'] / total_requests if total_requests > 0 else 0
-      
+
       return {
         'cache_hits': self._metrics['cache_hits'],
         'cache_misses': self._metrics['cache_misses'],
@@ -155,10 +155,31 @@ class CacheThreadManager:
         'cache_size': len(self._memory_cache),
         'max_cache_size': self._memory_cache_size,
         'cache_evictions': self._metrics['cache_evictions'],
+        'cache_adds': self._metrics['cache_adds'],
         'memory_usage_mb': self._metrics['memory_usage_mb'],
         'memory_limit_mb': self._max_memory_mb,
         'thread_pool_tasks': self._metrics['thread_pool_tasks']
       }
+
+  def reset_metrics(self):
+    """Reset all performance metrics to zero."""
+    with self._lock:
+      self._metrics = {
+        'cache_hits': 0,
+        'cache_misses': 0,
+        'cache_adds': 0,
+        'cache_evictions': 0,
+        'thread_pool_tasks': 0,
+        'memory_usage_mb': 0.0
+      }
+
+  def clear_cache(self):
+    """Clear all cached embeddings from memory."""
+    with self._lock:
+      self._memory_cache.clear()
+      self._memory_cache_keys.clear()
+      self._embedding_size_bytes.clear()
+      self._metrics['memory_usage_mb'] = 0.0
 
 
 # Global cache manager instance

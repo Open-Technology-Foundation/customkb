@@ -249,34 +249,49 @@ def format_messages_for_responses_api(messages: list[dict[str, Any]]) -> list[di
 def _extract_content_from_response(data: dict[str, Any]) -> str:
   """
   Extract content from API response data.
-  
+
   Args:
       data: Response data from API
-      
+
   Returns:
       Extracted content string
   """
   try:
-    # OpenAI format
+    # Handle None or empty dict
+    if data is None or data == {}:
+      return ""
+
+    # OpenAI Responses API format (newer)
+    if 'output' in data:
+      for output_item in data['output']:
+        if output_item.get('type') == 'message' and 'content' in output_item:
+          for content_item in output_item['content']:
+            # Check for output_text type or plain text field
+            if content_item.get('type') == 'output_text' and 'text' in content_item:
+              return content_item['text']
+            elif 'text' in content_item:
+              return content_item['text']
+
+    # OpenAI Chat Completions format
     if 'choices' in data:
       if data['choices'] and 'message' in data['choices'][0]:
         return data['choices'][0]['message'].get('content', '')
       elif data['choices'] and 'text' in data['choices'][0]:
         return data['choices'][0]['text']
-    
+
     # Anthropic format
     if 'content' in data:
       if isinstance(data['content'], list) and data['content']:
         return data['content'][0].get('text', '')
       elif isinstance(data['content'], str):
         return data['content']
-    
+
     # Direct content
     if isinstance(data, str):
       return data
-    
+
     return str(data)
-    
+
   except Exception as e:
     logger.error(f"Failed to extract content from response: {e}")
     return ""
