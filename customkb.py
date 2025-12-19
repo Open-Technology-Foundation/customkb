@@ -518,7 +518,7 @@ Examples:
         logger.debug(f"Embed command completed: {result}")
 
       case 'query':
-        from query.query_manager import process_query
+        from query.processing import process_query
         from models.model_manager import get_canonical_model
         # Set environment variables from command line arguments
         if args.model:

@@ -112,13 +112,15 @@ def load_bm25_index(kb: 'KnowledgeBase') -> dict[str, Any] | None:
       Dictionary containing BM25 data if successful, None otherwise.
   """
   bm25_path = get_bm25_index_path(kb)
-  metadata_path = bm25_path.replace('.bm25', '.bm25.json')
+  # np.savez() automatically adds .npz extension, so the actual file is *.bm25.npz
+  npz_path = bm25_path + '.npz'
+  metadata_path = bm25_path + '.json'
 
   # Try loading NPZ format first (version 2.0)
-  if os.path.exists(bm25_path) and os.path.exists(metadata_path):
+  if os.path.exists(npz_path) and os.path.exists(metadata_path):
     try:
       # Load arrays from NPZ
-      npz_data = np.load(bm25_path, allow_pickle=True)
+      npz_data = np.load(npz_path, allow_pickle=True)
 
       # Load metadata from JSON
       with open(metadata_path, 'r') as f:
@@ -159,7 +161,7 @@ def load_bm25_index(kb: 'KnowledgeBase') -> dict[str, Any] | None:
 
   # Legacy pickle format is no longer supported (removed for security)
   # Check if there's an old pickle file that needs migration
-  if os.path.exists(bm25_path) and not os.path.exists(bm25_path.replace('.bm25', '.bm25.json')):
+  if os.path.exists(bm25_path) and not os.path.exists(metadata_path):
     logger.warning("=" * 70)
     logger.warning("LEGACY BM25 INDEX FORMAT DETECTED")
     logger.warning("=" * 70)
@@ -185,7 +187,7 @@ def load_bm25_index(kb: 'KnowledgeBase') -> dict[str, Any] | None:
 
     return None
 
-  logger.debug(f"BM25 index not found at {bm25_path}")
+  logger.debug(f"BM25 index not found at {npz_path}")
   return None
 
 def get_bm25_index_path(kb: 'KnowledgeBase') -> str:
