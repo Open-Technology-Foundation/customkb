@@ -25,11 +25,11 @@ class TestOptimizationManager:
     
     def test_get_system_memory_gb_fallback(self):
         """Test memory detection fallback to /proc/meminfo."""
+        from unittest.mock import mock_open
+
+        meminfo_content = 'MemTotal:       16777216 kB\nMemFree:        1234567 kB\n'
         with patch('psutil.virtual_memory', side_effect=ImportError):
-            with patch('builtins.open', Mock(return_value=[
-                'MemTotal:       16777216 kB\n',
-                'MemFree:        1234567 kB\n'
-            ])):
+            with patch('builtins.open', mock_open(read_data=meminfo_content)):
                 result = get_system_memory_gb()
                 assert result == 16.0
     

@@ -235,18 +235,17 @@ class TestGetCanonicalModel:
   
   def test_models_file_path_resolution(self):
     """Test that models file path is correctly resolved relative to script."""
-    # Test that the path resolution logic works
-    with patch('os.path.dirname') as mock_dirname:
-      with patch('os.path.join') as mock_join:
-        with patch('os.path.abspath') as mock_abspath:
-          mock_dirname.return_value = "/project/models"
-          mock_abspath.return_value = "/project/models/model_manager.py"
-          mock_join.return_value = "/project/Models.json"
-          
-          # Import to trigger path calculation
-          
-          # Should call dirname twice (once for file, once for parent)
-          assert mock_dirname.call_count >= 1
+    from models import model_manager
+
+    # Verify the models_file path exists and points to a valid location
+    # (either the actual file or a path ending with Models.json)
+    assert model_manager.models_file.endswith('Models.json')
+
+    # The path should be absolute or relative to the models directory
+    import os
+    models_dir = os.path.dirname(model_manager.__file__)
+    expected_path = os.path.join(models_dir, "..", "Models.json")
+    assert model_manager.models_file == expected_path
   
   def _create_models_file(self, temp_data_manager, models_data):
     """Helper to create a temporary Models.json file."""

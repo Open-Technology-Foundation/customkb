@@ -75,16 +75,71 @@ def test_cleanup():
   Automatic cleanup after each test to prevent memory accumulation.
   """
   yield
-  
+
   # Force garbage collection after each test
   gc.collect()
-  
+
   # Clear any matplotlib figures
   try:
     import matplotlib.pyplot as plt
     plt.close('all')
   except ImportError:
     # matplotlib not installed, skip
+    pass
+
+
+@pytest.fixture(autouse=True)
+def clear_module_caches():
+  """
+  Clear module-level caches before each test to ensure test isolation.
+  This prevents cached data from one test affecting another.
+  """
+  # Clear model_manager cache
+  try:
+    import models.model_manager as mm
+    mm._models_cache = None
+  except (ImportError, AttributeError):
+    pass
+
+  # Clear query_manager caches
+  try:
+    import query.query_manager as qm
+    if hasattr(qm, '_query_cache'):
+      qm._query_cache = {}
+    if hasattr(qm, '_enhancement_cache'):
+      qm._enhancement_cache = {}
+    if hasattr(qm, '_embedding_cache'):
+      qm._embedding_cache = {}
+  except (ImportError, AttributeError):
+    pass
+
+  # Clear embed_manager caches
+  try:
+    import embedding.embed_manager as em
+    if hasattr(em, '_model_cache'):
+      em._model_cache = {}
+  except (ImportError, AttributeError):
+    pass
+
+  # Reset cache_manager to clean state
+  try:
+    from embedding.cache import cache_manager
+    cache_manager.clear_cache()
+    cache_manager.reset_metrics()
+    # Reset configuration to defaults
+    cache_manager._max_memory_mb = 500
+    cache_manager._memory_cache_size = 10000
+    cache_manager._max_workers = 4
+  except (ImportError, AttributeError):
+    pass
+
+  yield
+
+  # Clear again after test
+  try:
+    import models.model_manager as mm
+    mm._models_cache = None
+  except (ImportError, AttributeError):
     pass
 
 
@@ -497,6 +552,7 @@ def mock_kb(temp_data_manager):
   # Performance / Caching
   kb.cache_thread_pool_size = 4
   kb.memory_cache_size = 10000
+  kb.cache_memory_limit_mb = 500
   kb.embedding_batch_size = 100
   kb.sql_batch_size = 500
   kb.checkpoint_interval = 10

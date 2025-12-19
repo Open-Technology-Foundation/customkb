@@ -333,16 +333,20 @@ class TestMergeSearchResults:
 
     def test_merge_maintains_float_precision(self):
         """Test that merging maintains float precision."""
-        vector_results = [(1, 0.999999)]
-        bm25_results = [(2, 0.000001)]
+        # RRF score is 1/(k+rank), so we need different ranks to get different scores
+        # Use multiple items so they get different ranks
+        vector_results = [(1, 0.999999), (2, 0.888888)]  # IDs 1 and 2
+        bm25_results = [(3, 0.000001)]                    # ID 3
 
         result = merge_search_results(vector_results, bm25_results)
 
-        # Should maintain precision
-        assert len(result) == 2
+        # Should have all 3 items
+        assert len(result) == 3
 
-        # Scores should be different
-        assert result[0][1] != result[1][1]
+        # Results with different ranks should have different scores
+        # Item with rank 1 (appears first in both or one list) vs item with rank 2
+        scores = [r[1] for r in result]
+        assert len(set(scores)) > 1  # At least 2 different scores
 
 
 class TestEdgeCases:

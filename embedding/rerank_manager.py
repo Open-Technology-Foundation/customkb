@@ -336,10 +336,10 @@ def clear_reranking_cache():
   """Clear all reranking caches."""
   global _memory_cache
   _memory_cache.clear()
-  
-  # Clear disk cache
+
+  # Clear disk cache (both old .pkl and new .json formats)
   for file in os.listdir(CACHE_DIR):
-    if file.endswith('.pkl'):
+    if file.endswith('.pkl') or file.endswith('.json'):
       try:
         os.remove(os.path.join(CACHE_DIR, file))
       except Exception as e:

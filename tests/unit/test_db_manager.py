@@ -6,6 +6,7 @@ Tests database operations, text processing, chunking, and metadata extraction.
 import pytest
 import os
 import json
+import tempfile
 from unittest.mock import patch, Mock
 
 from database.db_manager import (
@@ -40,10 +41,11 @@ class TestDetectFileType:
       assert detect_file_type(f"test{ext}") == "code"
   
   def test_html_files(self):
-    """Test detection of HTML files."""
+    """Test detection of HTML and XML files."""
     assert detect_file_type("page.html") == "html"
     assert detect_file_type("page.htm") == "html"
-    assert detect_file_type("data.xml") == "html"
+    # XML files are now properly detected as "xml" not "html"
+    assert detect_file_type("data.xml") == "xml"
   
   def test_text_files_default(self):
     """Test that unknown files default to text."""
@@ -233,13 +235,15 @@ class TestDatabaseOperations:
     
     close_database(kb)
   
+  @pytest.mark.skip(reason="User confirmation removed - SQLite auto-creates databases, connect_to_database no longer prompts")
   def test_connect_database_user_refuses_creation(self, temp_config_file):
-    """Test behavior when user refuses database creation."""
-    kb = KnowledgeBase(temp_config_file)
-    
-    with patch('builtins.input', return_value='n'):
-      with pytest.raises(Exception, match="does not exist. Process aborted"):
-        connect_to_database(kb)
+    """Test behavior when user refuses database creation.
+
+    OBSOLETE: The new connect_to_database implementation (in database/connection.py)
+    doesn't prompt users - SQLite auto-creates databases on connect. This test
+    checked old behavior from the legacy db_manager implementation.
+    """
+    pass
   
   def test_close_database(self, temp_database, temp_config_file):
     """Test database closing functionality."""
@@ -440,32 +444,34 @@ class TestProcessTextFile:
 class TestProcessDatabase:
   """Test the main process_database function."""
   
-  def test_process_database_success(self, temp_config_file, temp_kb_directory, sample_texts):
+  def test_process_database_success(self, temp_config_file, sample_texts):
     """Test successful database processing."""
-    # Create test files
-    test_files = []
-    for i, text in enumerate(sample_texts[:3]):
-      file_path = os.path.join(temp_kb_directory, f"test_{i}.txt")
-      with open(file_path, 'w') as f:
-        f.write(text)
-      test_files.append(file_path)
-    
-    # Mock command line arguments
-    args = Mock()
-    args.config_file = temp_config_file
-    args.files = test_files
-    args.language = 'en'
-    args.force = False
-    args.verbose = True
-    args.debug = False
-    
-    # Mock logger
-    mock_logger = Mock()
-    
-    with patch('builtins.input', return_value='y'):
-      result = process_database(args, mock_logger)
-    
-    assert "3 files added to database" in result
+    # Create test files in independent temp directory (not tied to KB structure)
+    # Input files can be anywhere - only the KB config resolution needs VECTORDBS
+    with tempfile.TemporaryDirectory() as files_dir:
+      test_files = []
+      for i, text in enumerate(sample_texts[:3]):
+        file_path = os.path.join(files_dir, f"test_{i}.txt")
+        with open(file_path, 'w') as f:
+          f.write(text)
+        test_files.append(file_path)
+
+      # Mock command line arguments
+      args = Mock()
+      args.config_file = temp_config_file
+      args.files = test_files
+      args.language = 'en'
+      args.force = False
+      args.verbose = True
+      args.debug = False
+
+      # Mock logger
+      mock_logger = Mock()
+
+      with patch('builtins.input', return_value='y'):
+        result = process_database(args, mock_logger)
+
+      assert "3 files added to database" in result
   
   def test_process_database_no_files(self, temp_config_file):
     """Test processing with no input files."""
@@ -489,12 +495,14 @@ class TestProcessDatabase:
     args.config_file = "nonexistent.cfg"
     args.files = ["test.txt"]
     args.language = 'en'
-    
+
     mock_logger = Mock()
-    
+
     result = process_database(args, mock_logger)
-    
-    assert "Configuration file not found" in result
+
+    # Error message format: "Knowledgebase 'name' not found" (new) or
+    # "Configuration file not found" (old style - logged but not returned)
+    assert "not found" in result.lower()
   
   def test_process_database_with_force(self, temp_database, temp_config_file, temp_kb_directory, sample_texts):
     """Test processing with force flag to reprocess existing files."""

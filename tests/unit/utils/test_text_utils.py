@@ -71,10 +71,10 @@ class TestCleanText:
     """Test normalization of whitespace."""
     text = "Multiple    spaces   and\n\nnewlines"
     result = clean_text(text)
-    
-    assert "    " not in result
-    assert "\n\n" not in result
-    assert len(result.split()) == 3
+
+    assert "    " not in result  # Multiple spaces collapsed
+    assert "\n\n" not in result  # Multiple newlines collapsed
+    assert len(result.split()) == 4  # 4 words: multiple, spaces, and, newlines
 
 
 class TestEnhancedCleanText:
@@ -121,38 +121,38 @@ class TestEnhancedCleanText:
     assert "technology" in result
     assert "company" in result
   
-  @patch('utils.text_utils.word_tokenize')
+  @patch('nltk.tokenize.word_tokenize')
   def test_lemmatization(self, mock_tokenize):
     """Test lemmatization functionality."""
     # Mock lemmatizer to avoid NLTK data issues
     lemmatizer = Mock()
     lemmatizer.lemmatize.side_effect = lambda w: {'cats': 'cat', 'running': 'run'}.get(w, w)
-    
+
     text = "The cats are running quickly"
-    # Mock tokenization to avoid NLTK data issues
+    # Mock tokenization to avoid NLTK data issues (word_tokenize is imported locally)
     mock_tokenize.return_value = ["the", "cats", "are", "running", "quickly"]
-    
+
     result = enhanced_clean_text(text, lemmatizer=lemmatizer)
-    
+
     # Lemmatization should be applied
     assert "cat" in result  # cats -> cat
     assert "run" in result  # running -> run
     assert "quickly" in result
-  
-  @patch('utils.text_utils.word_tokenize')
+
+  @patch('nltk.tokenize.word_tokenize')
   def test_stopword_removal_with_lemmatization(self, mock_tokenize):
     """Test stopword removal combined with lemmatization."""
     # Mock lemmatizer to avoid NLTK data issues
     lemmatizer = Mock()
     lemmatizer.lemmatize.side_effect = lambda w: {'cats': 'cat', 'running': 'run'}.get(w, w)
     stop_words = {'the', 'are', 'is'}
-    
+
     text = "The cats are running"
-    # Mock tokenization to avoid NLTK data issues
+    # Mock tokenization to avoid NLTK data issues (word_tokenize is imported locally)
     mock_tokenize.return_value = ["the", "cats", "are", "running"]
-    
+
     result = enhanced_clean_text(text, stop_words=stop_words, lemmatizer=lemmatizer)
-    
+
     # Stopwords should be removed
     assert "the" not in result.split()
     assert "are" not in result.split()
@@ -383,12 +383,13 @@ class TestFindFile:
     os.makedirs(sub_dir)
     symlink_file = os.path.join(sub_dir, "link.txt")
     os.symlink(original_file, symlink_file)
-    
+
     # Search for the symlink
     result = find_file("link.txt", temp_dir, followsymlinks=True)
-    
+
+    # find_file uses os.path.realpath which resolves symlinks to their targets
     assert result is not None
-    assert "link.txt" in result
+    assert "original.txt" in result  # Symlink resolves to original file
   
   def test_realpath_resolution(self, temp_data_manager):
     """Test that result is resolved to real path."""
@@ -460,10 +461,10 @@ class TestGetEnv:
   
   def test_complex_type_casting_error(self):
     """Test type casting error with complex types."""
-    with patch.dict(os.environ, {'COMPLEX_VAR': 'test'}):
-      # Try to cast string to list (should fail)
-      result = get_env('COMPLEX_VAR', [], list)
-      assert result == []  # Should return default
+    with patch.dict(os.environ, {'COMPLEX_VAR': 'not_a_number'}):
+      # Try to cast non-numeric string to int (should fail and return default)
+      result = get_env('COMPLEX_VAR', 42, int)
+      assert result == 42  # Should return default on ValueError
 
 
 class TestBM25Tokenization:
@@ -473,13 +474,15 @@ class TestBM25Tokenization:
     """Test basic BM25 tokenization."""
     text = "Machine learning algorithms are powerful tools"
     tokens, length = tokenize_for_bm25(text)
-    
+
+    # Check tokens are present (note: "are" is NOT in essential stopwords)
     assert "machine" in tokens
     assert "learning" in tokens
     assert "algorithms" in tokens
+    assert "are" in tokens  # Not a stopword
     assert "powerful" in tokens
     assert "tools" in tokens
-    assert length == 5
+    assert length == 6  # All 6 words remain
   
   def test_stopword_removal(self):
     """Test that essential stopwords are removed."""
@@ -525,17 +528,20 @@ class TestBM25Tokenization:
     """Test that single characters are removed (except digits)."""
     text = "a b c 1 2 machine learning"
     tokens, length = tokenize_for_bm25(text)
-    
+
+    # tokens is a space-separated string, so check token list
+    token_list = tokens.split()
+
     # Single letters should be removed
-    assert "a" not in tokens
-    assert "b" not in tokens
-    assert "c" not in tokens
+    assert "a" not in token_list
+    assert "b" not in token_list
+    assert "c" not in token_list
     # Single digits should be kept
-    assert "1" in tokens
-    assert "2" in tokens
+    assert "1" in token_list
+    assert "2" in token_list
     # Multi-character words should be kept
-    assert "machine" in tokens
-    assert "learning" in tokens
+    assert "machine" in token_list
+    assert "learning" in token_list
   
   def test_duplicate_removal(self):
     """Test that duplicate tokens are removed while preserving order."""
@@ -626,15 +632,15 @@ class TestBM25Tokenization:
     assert "visit" in tokens
     assert "https" in tokens
   
-  @patch('utils.text_utils.word_tokenize')
+  @patch('nltk.tokenize.word_tokenize')
   def test_tokenization_fallback(self, mock_tokenize):
     """Test fallback tokenization when NLTK fails."""
-    # Mock NLTK tokenize to raise an error
+    # Mock NLTK tokenize to raise an error (word_tokenize is imported locally)
     mock_tokenize.side_effect = LookupError("Resource not found")
-    
+
     text = "Machine learning algorithms"
     tokens, length = tokenize_for_bm25(text)
-    
+
     # Should fall back to basic split
     assert "machine" in tokens
     assert "learning" in tokens

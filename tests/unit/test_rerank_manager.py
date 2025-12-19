@@ -64,14 +64,14 @@ class TestRerankingCache:
     query = "persistent query"
     doc = "persistent document"
     score = 0.92
-    
+
     # Clear and cache
     clear_reranking_cache()
     cache_score(query, doc, score)
-    
-    # Check disk file exists
+
+    # Check disk file exists (uses .json format now)
     cache_key = get_reranking_cache_key(query, doc)
-    cache_file = os.path.join(CACHE_DIR, f"{cache_key}.pkl")
+    cache_file = os.path.join(CACHE_DIR, f"{cache_key}.json")
     assert os.path.exists(cache_file)
     
     # Clear memory cache and verify disk cache works
@@ -88,18 +88,22 @@ class TestBatchPredict:
   
   def test_batch_predict_success(self):
     """Test successful batch prediction."""
-    # Mock model
+    # Mock model - use side_effect to return correct number of scores per batch
     mock_model = Mock()
-    mock_model.predict.return_value = [0.8, 0.6, 0.9]
-    
+    # With batch_size=2 and 3 pairs: first batch (2 items), second batch (1 item)
+    mock_model.predict.side_effect = [
+      [0.8, 0.6],  # First batch: 2 scores
+      [0.9]        # Second batch: 1 score
+    ]
+
     pairs = [
       ("query1", "doc1"),
       ("query2", "doc2"),
       ("query3", "doc3")
     ]
-    
+
     scores = batch_predict(mock_model, pairs, batch_size=2)
-    
+
     assert len(scores) == 3
     assert scores == [0.8, 0.6, 0.9]
     assert mock_model.predict.call_count == 2  # Two batches (2 + 1)

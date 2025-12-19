@@ -96,10 +96,13 @@ class TestSchemaVersion(unittest.TestCase):
   @patch('database.migrations.logger')
   def test_get_version_error(self, mock_logger):
     """Test version retrieval with database error."""
-    self.kb.sql_cursor.execute = Mock(side_effect=sqlite3.Error("Query failed"))
-    
+    # Use mock cursor for error testing (can't mock execute on real cursor)
+    mock_cursor = Mock()
+    mock_cursor.execute = Mock(side_effect=sqlite3.Error("Query failed"))
+    self.kb.sql_cursor = mock_cursor
+
     version = get_current_schema_version(self.kb)
-    
+
     # Should return 0 on error
     self.assertEqual(version, 0)
     mock_logger.warning.assert_called()
@@ -152,11 +155,14 @@ class TestMigrationTable(unittest.TestCase):
   
   def test_create_migration_table_error(self):
     """Test error handling in table creation."""
-    self.kb.sql_cursor.execute = Mock(side_effect=sqlite3.Error("Creation failed"))
-    
+    # Use mock cursor for error testing (can't mock execute on real cursor)
+    mock_cursor = Mock()
+    mock_cursor.execute = Mock(side_effect=sqlite3.Error("Creation failed"))
+    self.kb.sql_cursor = mock_cursor
+
     with self.assertRaises(DatabaseError) as cm:
       create_migration_table(self.kb)
-    
+
     self.assertIn("Migration table creation failed", str(cm.exception))
   
   def test_record_migration(self):
@@ -201,19 +207,15 @@ class TestMigrationTable(unittest.TestCase):
   def test_record_migration_error(self):
     """Test error handling in migration recording."""
     create_migration_table(self.kb)
-    
-    # Make execute fail on INSERT
-    original_execute = self.kb.sql_cursor.execute
-    def failing_execute(query, params=None):
-      if "INSERT" in query:
-        raise sqlite3.Error("Insert failed")
-      return original_execute(query, params)
-    
-    self.kb.sql_cursor.execute = failing_execute
-    
+
+    # Use mock cursor for error testing (can't mock execute on real cursor)
+    mock_cursor = Mock()
+    mock_cursor.execute = Mock(side_effect=sqlite3.Error("Insert failed"))
+    self.kb.sql_cursor = mock_cursor
+
     with self.assertRaises(DatabaseError) as cm:
       record_migration(self.kb, 1, "test", "Test")
-    
+
     self.assertIn("Migration recording failed", str(cm.exception))
 
 
@@ -266,38 +268,41 @@ class TestBM25Migration(unittest.TestCase):
     self.assertIsNotNone(result)
   
   def test_migrate_for_bm25_already_exists(self):
-    """Test BM25 migration when column already exists."""
-    # Add column first
+    """Test BM25 migration when columns already exist."""
+    # Add both BM25 columns first
     self.kb.sql_cursor.execute("ALTER TABLE docs ADD COLUMN bm25_tokens TEXT")
+    self.kb.sql_cursor.execute("ALTER TABLE docs ADD COLUMN doc_length INTEGER DEFAULT 0")
     self.kb.sql_connection.commit()
-    
+
     result = migrate_for_bm25(self.kb)
-    
+
     # Should return False (no migration needed)
     self.assertFalse(result)
   
   def test_migrate_for_bm25_records_migration(self):
     """Test that BM25 migration is recorded."""
     migrate_for_bm25(self.kb)
-    
+
     # Check migration was recorded
     self.kb.sql_cursor.execute("""
       SELECT version, name FROM schema_migrations
       WHERE version = 1
     """)
     result = self.kb.sql_cursor.fetchone()
-    
+
     self.assertIsNotNone(result)
-    self.assertEqual(result[1], "add_bm25_tokens")
+    self.assertEqual(result[1], "add_bm25_columns")  # Matches implementation
   
   def test_migrate_for_bm25_error(self):
     """Test error handling in BM25 migration."""
-    # Make table info query fail
-    self.kb.sql_cursor.execute = Mock(side_effect=sqlite3.Error("Query failed"))
-    
+    # Use mock cursor for error testing (can't mock execute on real cursor)
+    mock_cursor = Mock()
+    mock_cursor.execute = Mock(side_effect=sqlite3.Error("Query failed"))
+    self.kb.sql_cursor = mock_cursor
+
     with self.assertRaises(DatabaseError) as cm:
       migrate_for_bm25(self.kb)
-    
+
     self.assertIn("Failed to migrate for BM25", str(cm.exception))
   
   def test_migrate_for_bm25_custom_table(self):
@@ -383,11 +388,14 @@ class TestCategoryMigration(unittest.TestCase):
   
   def test_migrate_add_categories_error(self):
     """Test error handling in category migration."""
-    self.kb.sql_cursor.execute = Mock(side_effect=sqlite3.Error("Query failed"))
-    
+    # Use mock cursor for error testing (can't mock execute on real cursor)
+    mock_cursor = Mock()
+    mock_cursor.execute = Mock(side_effect=sqlite3.Error("Query failed"))
+    self.kb.sql_cursor = mock_cursor
+
     with self.assertRaises(DatabaseError) as cm:
       migrate_add_categories(self.kb)
-    
+
     self.assertIn("Failed to add category columns", str(cm.exception))
 
 
@@ -622,10 +630,13 @@ class TestMigrationStatus(unittest.TestCase):
   
   def test_check_status_error(self):
     """Test status check error handling."""
-    self.kb.sql_cursor.execute = Mock(side_effect=Exception("Query failed"))
-    
+    # Use mock cursor for error testing (can't mock execute on real cursor)
+    mock_cursor = Mock()
+    mock_cursor.execute = Mock(side_effect=Exception("Query failed"))
+    self.kb.sql_cursor = mock_cursor
+
     status = check_migration_status(self.kb)
-    
+
     # Should include error in status
     self.assertIn('error', status)
     self.assertIn("Query failed", status['error'])

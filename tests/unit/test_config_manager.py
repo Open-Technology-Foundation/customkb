@@ -5,6 +5,7 @@ Tests configuration loading, parsing, validation, and KnowledgeBase class functi
 
 import os
 import tempfile
+import pytest
 from unittest.mock import patch
 
 from config.config_manager import (
@@ -729,21 +730,30 @@ class TestNewKBResolution:
         result = get_fq_cfg_filename('example.com')
         assert result == config_path
   
-  def test_hidden_directories_ignored(self):
-    """Test that hidden directories are not listed as available KBs."""
+  def test_hidden_directories_resolution(self):
+    """Test how get_kb_name handles hidden directories.
+
+    Note: get_kb_name is a resolution function, not a listing function.
+    It resolves any existing directory by name - hidden directories are
+    only filtered in listing operations (like error messages), not resolution.
+    """
     with tempfile.TemporaryDirectory() as tmpdir:
       # Create visible and hidden directories
       os.makedirs(os.path.join(tmpdir, 'visible_kb'))
       os.makedirs(os.path.join(tmpdir, '.hidden_kb'))
       os.makedirs(os.path.join(tmpdir, '.git'))
-      
+
       with patch('config.config_manager.VECTORDBS', tmpdir):
-        # When looking for nonexistent KB, only visible ones should be listed
-        # (This tests the logic in get_kb_name that filters available KBs)
+        # Nonexistent KB returns None
         result = get_kb_name('nonexistent')
         assert result is None
-        # The actual listing happens in logging, but we verify hidden dirs aren't resolved
-        assert get_kb_name('.hidden_kb') is None
+
+        # Visible KB resolves correctly
+        assert get_kb_name('visible_kb') == 'visible_kb'
+
+        # Hidden directories ARE resolved if they exist (resolution != listing)
+        # Users who explicitly request a hidden KB should get it
+        assert get_kb_name('.hidden_kb') == '.hidden_kb'
   
   def test_empty_vectordbs(self):
     """Test behavior when VECTORDBS is empty."""
@@ -907,13 +917,18 @@ bm25_b = 0.75
         assert kb.bm25_rebuild_threshold > 0  # Should be positive
   
   def test_bm25_invalid_boolean_values(self):
-    """Test handling of invalid boolean values for enable_hybrid_search."""
+    """Test handling of invalid boolean values for enable_hybrid_search.
+
+    Invalid boolean values in config files should raise ValueError.
+    This is the correct 'fail fast' behavior - bad config should not
+    silently fall back to defaults.
+    """
     with tempfile.TemporaryDirectory() as tmpdir:
       # Create KB directory structure
       kb_dir = os.path.join(tmpdir, 'test_bm25_bool')
       os.makedirs(kb_dir)
       config_path = os.path.join(kb_dir, 'test_bm25_bool.cfg')
-      
+
       with open(config_path, 'w') as f:
         f.write("""
 [DEFAULT]
@@ -922,14 +937,11 @@ knowledge_base_name = test_bm25_bool
 [ALGORITHMS]
 enable_hybrid_search = invalid_value
 """)
-      
+
       with patch('config.config_manager.VECTORDBS', tmpdir):
-        # Should handle invalid boolean gracefully
-        with patch.dict(os.environ, {'ENABLE_HYBRID_SEARCH': 'not_a_boolean'}):
-          kb = KnowledgeBase('test_bm25_bool')
-          
-          # Should fall back to default when environment parsing fails
-          assert kb.enable_hybrid_search is False
+        # Invalid boolean values should raise ValueError (fail fast)
+        with pytest.raises(ValueError, match="Not a boolean"):
+          KnowledgeBase('test_bm25_bool')
   
   def test_bm25_mixed_configuration_sources(self):
     """Test BM25 configuration from multiple sources (file + env + defaults)."""

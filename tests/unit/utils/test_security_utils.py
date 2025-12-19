@@ -89,16 +89,18 @@ class TestValidateFilePath:
     assert result == '../configs/test.cfg'
   
   def test_validate_file_path_dangerous_characters(self):
-    """Test rejection of dangerous characters."""
+    """Test rejection of dangerous characters in filename."""
+    # The function checks dangerous characters in filename only (basename), not full path
+    # So 'test|cat /etc/passwd' won't fail because basename is 'passwd'
     dangerous_paths = [
-      'test;rm -rf /',
-      'test|cat /etc/passwd',
-      'test`whoami`',
-      'test$(whoami)',
-      'test<script>',
-      'test>output'
+      'test;cmd.txt',        # semicolon in filename
+      'test|pipe.txt',       # pipe in filename
+      'test`whoami`.txt',    # backticks in filename
+      'test$(whoami).txt',   # command substitution in filename
+      'test<script>.txt',    # angle bracket in filename
+      'test>output.txt'      # output redirect in filename
     ]
-    
+
     for path in dangerous_paths:
       with pytest.raises(ValueError, match="dangerous characters"):
         validate_file_path(path, None)

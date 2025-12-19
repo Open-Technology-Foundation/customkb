@@ -24,7 +24,7 @@ class TestIndexManager:
         self.db_path = self.temp_db.name
         self.temp_db.close()
         
-        # Create test table
+        # Create test table with all columns needed for indexes
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         cursor.execute("""
@@ -35,7 +35,10 @@ class TestIndexManager:
                 keyphrase TEXT,
                 processed INTEGER,
                 sourcedoc TEXT,
-                sid INTEGER
+                sid INTEGER,
+                language TEXT,
+                originaltext TEXT,
+                metadata TEXT
             )
         """)
         conn.commit()
