@@ -3,4 +3,4 @@
 # Requires: NVIDIA Driver >= R530
 # Install with: pip install -r requirements-faiss-gpu-cu12.txt
 
-faiss-gpu-cu12==1.12.0
+faiss-gpu-cu12>=1.12.0
