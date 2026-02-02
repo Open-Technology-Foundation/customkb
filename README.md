@@ -2,8 +2,8 @@
 
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
-[![Version](https://img.shields.io/badge/version-1.0.0-green.svg)](https://github.com/Open-Technology-Foundation/customkb)
-[![Security](https://img.shields.io/badge/security-hardened-brightgreen.svg)](CHANGELOG.md#security)
+[![Version](https://img.shields.io/badge/version-1.1.0-green.svg)](https://github.com/Open-Technology-Foundation/customkb)
+[![Security](https://img.shields.io/badge/security-hardened-brightgreen.svg)](README.md#security)
 
 CustomKB transforms your documents into AI-powered, searchable knowledgebases with state-of-the-art embedding models, vector search, and language models to deliver contextually relevant answers from your data.
 
@@ -96,7 +96,7 @@ cd customkb
 
 ```bash
 python -m venv .venv
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
@@ -335,21 +335,23 @@ api_max_retries = 20           # Retry attempts for failed calls
 #### Language Models (LLMs)
 
 **OpenAI**
-- GPT-4o, GPT-4o-mini (128k context)
+- GPT-5.x series (5, 5-mini, 5-nano, 5-pro, 5.1, 5.2)
 - GPT-4.1, GPT-4.1-mini, GPT-4.1-nano (1M context)
-- o3, o3-mini, o3-pro (advanced reasoning)
-- o4-mini (multimodal reasoning)
+- GPT-4o, GPT-4o-mini (128k context)
+- o3, o4-mini (advanced reasoning)
 
 **Anthropic**
-- Claude Sonnet 4.5, Haiku 4.5 (200k context, extended thinking)
-- Claude Opus 4.1, Sonnet 4.0 (200k context)
+- Claude Opus 4.5 (200k context, extended thinking)
+- Claude Sonnet 4.5, Haiku 4.5 (200k context)
+- Claude Opus 4.1 (200k context)
 
 **Google**
-- Gemini 2.5 Pro/Flash/Lite (thinking models, 1M+ context)
+- Gemini 3.x Pro/Flash (preview)
+- Gemini 2.5 Pro/Flash/Flash-Lite (thinking models, 1M+ context)
 - Gemini 1.5 Pro/Flash-8B
 
 **xAI**
-- Grok 4.0, Grok 4.0-fast (256k-2M context, reasoning)
+- Grok 4, Grok 4-fast (256k-2M context, reasoning)
 
 **Local (Ollama)**
 - Llama 3.3 (8B-70B)
@@ -432,7 +434,7 @@ Supported languages: English, French, German, Spanish, Italian, Portuguese, Dutc
 
 CustomKB implements enterprise-grade security measures to protect your data and systems.
 
-### Security Features (v1.0.0)
+### Security Features
 
 **Safe Serialization**
 - ✓ Zero pickle deserialization vulnerabilities
@@ -466,7 +468,7 @@ When deploying CustomKB in production:
 1. **API Keys**: Store in environment variables, never in code or config files
 2. **File Permissions**: Restrict knowledgebase directories to application user only
 3. **Network Access**: Run on localhost or behind authentication proxy
-4. **Updates**: Regularly check [CHANGELOG.md](CHANGELOG.md) for security patches
+4. **Updates**: Regularly check for security patches
 5. **Backups**: Enable automatic backups before migrations
 
 ### Reporting Security Issues
@@ -481,7 +483,7 @@ If you discover a security vulnerability:
    - Suggested remediation (if any)
 4. Allow reasonable time for patching before public disclosure
 
-See [CHANGELOG.md](CHANGELOG.md) for detailed security update history.
+See commit history for detailed security update information.
 
 ## Performance Optimization
 
@@ -823,7 +825,7 @@ We welcome contributions from the community! Whether you're fixing bugs, adding 
 ### Stay Updated
 
 - **Releases**: Watch the repository for release notifications
-- **Changelog**: See [CHANGELOG.md](CHANGELOG.md) for version history
+- **Changelog**: See commit history for version details
 - **Security**: Check [Security](#security) section for vulnerability reporting
 
 ### Connect
@@ -914,9 +916,10 @@ text-embedding-3-small   → OpenAI small (1536 dims)
 text-embedding-3-large   → OpenAI large (3072 dims)
 gemini-embedding-001     → Google Gemini (configurable dims)
 
-# LLM models
-gpt-4o                   → OpenAI GPT-4 Omni
-gpt-4o-mini              → OpenAI GPT-4 Omni Mini (cost-effective)
+# LLM models (examples)
+gpt-5-mini               → OpenAI GPT-5 Mini (latest)
+gpt-4o-mini              → OpenAI GPT-4o Mini (cost-effective)
+claude-opus-4-5          → Anthropic Claude Opus 4.5
 claude-sonnet-4-5        → Anthropic Claude Sonnet 4.5
 gemini-2.5-flash         → Google Gemini 2.5 Flash
 grok-4                   → xAI Grok 4
@@ -935,7 +938,7 @@ grok-4                   → xAI Grok 4
 
 GPL-3.0 License - see [LICENSE](LICENSE) file for details.
 
-**Copyright © 2024 Indonesian Open Technology Foundation**
+**Copyright © 2025 Indonesian Open Technology Foundation**
 
 ---
 
