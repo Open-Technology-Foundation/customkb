@@ -70,7 +70,7 @@ reranking_device = cpu
       mock_load_model.return_value = mock_model
 
       # Mock vector search
-      with patch('query.embedding.get_query_embedding') as mock_embed:
+      with patch('query.processing.get_query_embedding') as mock_embed:
         mock_embed.return_value = Mock()  # Mock embedding
 
         with patch('faiss.read_index') as mock_faiss:
@@ -112,7 +112,7 @@ enable_reranking = false
     mock_args.debug = False
 
     with patch('embedding.rerank_manager.load_reranking_model') as mock_load_model, \
-         patch('query.embedding.get_query_embedding') as mock_embed:
+         patch('query.processing.get_query_embedding') as mock_embed:
       mock_embed.return_value = Mock()
 
       with patch('faiss.read_index') as mock_faiss:
@@ -120,11 +120,11 @@ enable_reranking = false
 
         # Create mock KB database
         with patch('os.path.exists', return_value=True), \
-             patch('query.query_manager.perform_hybrid_search') as mock_search:
+             patch('query.processing.perform_hybrid_search') as mock_search:
           mock_search.return_value = [(1, 0.5), (2, 0.6)]
 
-          with patch('query.query_manager.connect_to_database'), \
-               patch('query.query_manager.process_reference_batch') as mock_process:
+          with patch('query.processing.connect_to_database'), \
+               patch('query.processing.process_reference_batch') as mock_process:
             mock_process.return_value = []
 
             await process_query_async(mock_args, logger)
@@ -147,19 +147,19 @@ enable_reranking = false
     with patch('embedding.rerank_manager.load_reranking_model') as mock_load_model:
       mock_load_model.side_effect = Exception("Model loading failed")
 
-      with patch('query.embedding.get_query_embedding') as mock_embed:
+      with patch('query.processing.get_query_embedding') as mock_embed:
         mock_embed.return_value = Mock()
 
         with patch('faiss.read_index') as mock_faiss:
           mock_faiss.return_value = Mock()
 
           with patch('os.path.exists', return_value=True), \
-               patch('query.query_manager.perform_hybrid_search') as mock_search:
+               patch('query.processing.perform_hybrid_search') as mock_search:
             original_results = [(1, 0.5), (2, 0.6)]
             mock_search.return_value = original_results
 
-            with patch('query.query_manager.connect_to_database'), \
-                 patch('query.query_manager.process_reference_batch') as mock_process:
+            with patch('query.processing.connect_to_database'), \
+                 patch('query.processing.process_reference_batch') as mock_process:
               mock_process.return_value = [
                 [1, "doc1.txt", 0, "Test content", 0.5, "{}"]
               ]

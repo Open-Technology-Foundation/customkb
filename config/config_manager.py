@@ -116,6 +116,12 @@ def get_fq_cfg_filename(cfgfile: str) -> str | None:
       >>> get_fq_cfg_filename('/path/to/okusimail.cfg')
       '/var/lib/vectordbs/okusimail/okusimail.cfg'
   """
+  # If the input already ends in .cfg and exists on disk, return it directly.
+  # This supports absolute paths, relative paths, and sibling-directory references.
+  if cfgfile.endswith('.cfg') and os.path.isfile(cfgfile):
+    logger.debug(f"Using existing config file path: '{cfgfile}'")
+    return cfgfile
+
   # Get clean KB name
   kb_name = get_kb_name(cfgfile)
   if not kb_name:
