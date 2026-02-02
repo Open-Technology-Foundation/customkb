@@ -1,0 +1,11 @@
+# Introduction to Machine Learning
+
+Machine learning is a subset of artificial intelligence that enables computers to learn and improve from experience without being explicitly programmed.
+
+## Key Concepts
+
+- **Supervised Learning**: Learning with labeled examples
+- **Unsupervised Learning**: Finding patterns in unlabeled data  
+- **Reinforcement Learning**: Learning through interaction and rewards
+
+Machine learning algorithms can identify patterns in data and make predictions or decisions based on those patterns.

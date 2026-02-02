@@ -1,0 +1,6 @@
+# FAISS GPU requirements for CUDA 12.x
+# For systems with NVIDIA GPU and CUDA 12.x support
+# Requires: NVIDIA Driver >= R530
+# Install with: pip install -r requirements-faiss-gpu-cu12.txt
+
+faiss-gpu-cu12>=1.12.0

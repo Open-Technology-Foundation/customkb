@@ -1,0 +1,53 @@
+# Ruff configuration for CustomKB
+# https://docs.astral.sh/ruff/
+
+# Line length (global setting)
+line-length = 127
+
+# Exclude directories
+exclude = [
+  ".mailer",
+  ".gudang",
+  ".venv",
+  "venv",
+  "__pycache__",
+  ".git",
+  "build",
+  "dist",
+]
+
+[lint]
+# Enable specific rule sets
+select = [
+  "E",   # pycodestyle errors
+  "W",   # pycodestyle warnings
+  "F",   # Pyflakes
+  "I",   # isort
+  "N",   # pep8-naming
+  "UP",  # pyupgrade
+  "B",   # flake8-bugbear
+  "C4",  # flake8-comprehensions
+  "SIM", # flake8-simplify
+]
+
+# Ignore specific rules
+ignore = [
+  "E402",  # Module level import not at top (needed for env vars in customkb.py)
+  "E501",  # Line too long (handled by formatter)
+]
+
+[lint.per-file-ignores]
+# Allow unused imports in __init__.py files
+"__init__.py" = ["F401"]
+
+[format]
+# Use 2-space indentation (CustomKB standard, documented in CLAUDE.md)
+indent-style = "space"
+
+# Quote style
+quote-style = "single"
+
+[lint.isort]
+known-first-party = ["config", "database", "embedding", "query", "models", "utils", "categorize"]
+
+#fin

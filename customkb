@@ -1,0 +1,57 @@
+#!/bin/bash
+#shellcheck disable=SC2155,SC1091,SC2034,SC2015
+# customkb bootstrap
+
+set -euo pipefail
+
+declare -r SCRIPT_PATH="$(realpath -e -- "$0")"
+declare -r SCRIPT_DIR="${SCRIPT_PATH%/*}" 
+declare -r SCRIPT_NAME="${SCRIPT_PATH##*/}"
+declare -r VERSION=$(python3 -c "import sys; sys.path.insert(0, '$SCRIPT_DIR'); from version import VERSION; print(VERSION)")
+declare -r VERSION_FULL=$(python3 -c "import sys; sys.path.insert(0, '$SCRIPT_DIR'); from version import VERSION_FULL; print(VERSION_FULL)")
+
+# GPU Environment Configuration for CustomKB
+# Source this file before running CustomKB for optimal GPU performance
+# Force GPU 0 (L4)
+export CUDA_VISIBLE_DEVICES=0
+# L4 compute capability
+export TORCH_CUDA_ARCH_LIST="8.9"
+# Optimize CUDA memory allocation
+export PYTORCH_ALLOC_CONF=max_split_size_mb:512
+# Enable TF32 for better performance on newer GPUs
+export TORCH_ALLOW_TF32_ON_CUDA=1
+export TORCH_ALLOW_TF32_ON_CUDNN=1
+# FAISS GPU memory settings
+export FAISS_GPU_USE_FLOAT16=1
+
+if [[ ! -d "$SCRIPT_DIR"/.venv ]]; then
+  >&2 echo "$SCRIPT_NAME: error: Virtual environment not found at $SCRIPT_DIR/.venv"
+  exit 1
+fi
+# Activate .venv
+source "$SCRIPT_DIR"/.venv/bin/activate
+
+# Add cuDNN library path for reranking model
+export LD_LIBRARY_PATH="$SCRIPT_DIR"/.venv/lib/python3.12/site-packages/nvidia/cudnn/lib:"${LD_LIBRARY_PATH:-}"
+
+export  ANTHROPIC_API_KEY \
+        EDITOR \
+        GOOGLE_API_KEY \
+        GOOGLE_TRANSLATE_API_KEY \
+        GROK_API_KEY \
+        NLTK_DATA \
+        OPENAI_API_KEY \
+        OPENAI_ORGANIZATION_ID \
+        VECTORDBS
+
+[[ -f /etc/environment ]] && source /etc/environment || :
+
+# Source envvars from .env if exists
+[[ -f "$SCRIPT_DIR"/.env ]] && source "$SCRIPT_DIR"/.env || :
+
+# CUDA check removed - now handled in Python with proper initialization
+
+# Execute Python script with all passed arguments
+"$SCRIPT_DIR"/.venv/bin/python3 "$SCRIPT_DIR"/"$SCRIPT_NAME".py "$@"
+
+#fin

@@ -1,0 +1,13 @@
+# Natural Language Processing
+
+Natural Language Processing (NLP) combines computational linguistics with statistical machine learning and deep learning models.
+
+## Applications
+
+NLP enables computers to process and analyze large amounts of natural language data for:
+- Text analysis and sentiment detection
+- Language translation
+- Chatbots and conversational AI
+- Information extraction from documents
+
+The field has advanced significantly with transformer architectures and large language models.

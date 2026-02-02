@@ -1,0 +1,653 @@
+"""
+Global test configuration and fixtures for CustomKB test suite.
+"""
+
+import gc
+import os
+import sqlite3
+import sys
+import tempfile
+from pathlib import Path
+from unittest.mock import AsyncMock, Mock, patch
+
+import psutil
+import pytest
+
+# Add project root to Python path for imports
+project_root = Path(__file__).parent.parent
+sys.path.insert(0, str(project_root))
+
+from tests.fixtures.mock_data import MockDataGenerator, TestDataManager
+from utils.resource_manager import ResourceGuard, cleanup_caches
+
+
+@pytest.fixture
+def mock_db_connection():
+  """
+  Provide a fully mocked database connection with all necessary methods.
+  """
+  conn = Mock()
+  conn.commit = Mock()
+  conn.close = Mock()
+  conn.rollback = Mock()
+
+  cursor = Mock()
+  cursor.fetchall = Mock(return_value=[])
+  cursor.fetchone = Mock(return_value=None)
+  cursor.execute = Mock()
+  cursor.executemany = Mock()
+  cursor.close = Mock()
+
+  conn.cursor = Mock(return_value=cursor)
+
+  return conn, cursor
+
+
+@pytest.fixture(scope="session", autouse=True)
+def session_resource_guard():
+  """
+  Session-level resource guard to monitor memory usage across all tests.
+  """
+  # Set conservative memory limit for tests (2GB)
+  guard = ResourceGuard(memory_limit_gb=2.0)
+
+  # Register cleanup handlers
+  guard.register_cleanup("caches", cleanup_caches)
+  guard.register_cleanup("gc", lambda: gc.collect())
+
+  # Log initial state
+  initial_memory = psutil.Process().memory_info().rss / 1024 / 1024
+  print(f"\nTest session starting. Initial memory: {initial_memory:.1f}MB")
+
+  yield guard
+
+  # Final cleanup
+  guard.force_cleanup()
+  gc.collect()
+
+  final_memory = psutil.Process().memory_info().rss / 1024 / 1024
+  print(f"\nTest session ending. Final memory: {final_memory:.1f}MB "
+        f"(delta: {final_memory - initial_memory:+.1f}MB)")
+
+
+@pytest.fixture(autouse=True)
+def test_cleanup():
+  """
+  Automatic cleanup after each test to prevent memory accumulation.
+  """
+  yield
+
+  # Force garbage collection after each test
+  gc.collect()
+
+  # Clear any matplotlib figures
+  try:
+    import matplotlib.pyplot as plt
+    plt.close('all')
+  except ImportError:
+    # matplotlib not installed, skip
+    pass
+
+
+@pytest.fixture(autouse=True)
+def clear_module_caches():
+  """
+  Clear module-level caches before each test to ensure test isolation.
+  This prevents cached data from one test affecting another.
+  """
+  # Clear model_manager cache
+  try:
+    import models.model_manager as mm
+    mm._models_cache = None
+  except (ImportError, AttributeError):
+    pass
+
+  # Clear query_manager caches
+  try:
+    import query.query_manager as qm
+    if hasattr(qm, '_query_cache'):
+      qm._query_cache = {}
+    if hasattr(qm, '_enhancement_cache'):
+      qm._enhancement_cache = {}
+    if hasattr(qm, '_embedding_cache'):
+      qm._embedding_cache = {}
+  except (ImportError, AttributeError):
+    pass
+
+  # Clear embed_manager caches
+  try:
+    import embedding.embed_manager as em
+    if hasattr(em, '_model_cache'):
+      em._model_cache = {}
+  except (ImportError, AttributeError):
+    pass
+
+  # Reset cache_manager to clean state
+  try:
+    from embedding.cache import cache_manager
+    cache_manager.clear_cache()
+    cache_manager.reset_metrics()
+    # Reset configuration to defaults
+    cache_manager._max_memory_mb = 500
+    cache_manager._memory_cache_size = 10000
+    cache_manager._max_workers = 4
+  except (ImportError, AttributeError):
+    pass
+
+  yield
+
+  # Clear again after test
+  try:
+    import models.model_manager as mm
+    mm._models_cache = None
+  except (ImportError, AttributeError):
+    pass
+
+
+@pytest.fixture(scope="session")
+def mock_env_vars():
+  """Set up mock environment variables for testing."""
+  with patch.dict(os.environ, {
+    'OPENAI_API_KEY': 'sk-test' + 'x' * 40,  # Valid format but fake key
+    'ANTHROPIC_API_KEY': 'sk-ant-test' + 'x' * 90,  # Valid format but fake key
+    'VECTORDBS': tempfile.mkdtemp(prefix='test_vectordbs_'),
+    'NLTK_DATA': '/usr/share/nltk_data'  # Use actual NLTK data path
+  }):
+    yield
+
+
+@pytest.fixture
+def temp_data_manager():
+  """Provide a test data manager for temporary files with enhanced cleanup."""
+  manager = TestDataManager()
+  try:
+    yield manager
+  finally:
+    # Ensure cleanup happens even if test fails
+    manager.cleanup()
+    # Extra cleanup for any missed temp files
+    gc.collect()
+
+
+@pytest.fixture
+def mock_data_generator():
+  """Provide mock data generator."""
+  return MockDataGenerator()
+
+
+@pytest.fixture
+def sample_config_content(mock_data_generator):
+  """Generate sample configuration content."""
+  return mock_data_generator.create_sample_config()
+
+
+@pytest.fixture
+def sample_texts(mock_data_generator):
+  """Generate sample text documents."""
+  return mock_data_generator.create_sample_texts()
+
+
+@pytest.fixture
+def temp_kb_directory(temp_data_manager, monkeypatch):
+  """Create a temporary knowledgebase directory within VECTORDBS."""
+  # Create temporary VECTORDBS if not already set
+  temp_vectordbs = tempfile.mkdtemp(prefix='test_vectordbs_')
+  temp_data_manager.temp_dirs.append(temp_vectordbs)
+
+  # Create KB directory
+  kb_name = 'test_kb'
+  kb_dir = os.path.join(temp_vectordbs, kb_name)
+  os.makedirs(kb_dir)
+
+  # Create logs directory
+  logs_dir = os.path.join(kb_dir, 'logs')
+  os.makedirs(logs_dir, exist_ok=True)
+
+  # Monkeypatch VECTORDBS
+  monkeypatch.setattr('config.config_manager.VECTORDBS', temp_vectordbs)
+
+  return kb_dir
+
+
+@pytest.fixture
+def temp_config_file(temp_data_manager, sample_config_content, monkeypatch):
+  """Create a temporary KB structure and return KB name."""
+  # Create temporary VECTORDBS
+  temp_vectordbs = tempfile.mkdtemp(prefix='test_vectordbs_')
+  temp_data_manager.temp_dirs.append(temp_vectordbs)
+
+  # Create KB directory structure
+  kb_name = 'test_kb'
+  kb_dir = os.path.join(temp_vectordbs, kb_name)
+  os.makedirs(kb_dir)
+
+  # Create config file
+  config_path = os.path.join(kb_dir, f'{kb_name}.cfg')
+  with open(config_path, 'w') as f:
+    f.write(sample_config_content)
+
+  # Create logs directory
+  logs_dir = os.path.join(kb_dir, 'logs')
+  os.makedirs(logs_dir)
+
+  temp_data_manager.temp_files.append(config_path)
+
+  # Monkeypatch VECTORDBS for all tests using this fixture
+  monkeypatch.setattr('config.config_manager.VECTORDBS', temp_vectordbs)
+
+  # Return the KB name for the new resolution system
+  return kb_name
+
+
+@pytest.fixture
+def temp_kb_setup(temp_data_manager, sample_config_content):
+  """Create a complete KB setup in temporary VECTORDBS."""
+  import tempfile
+
+  # Create temporary VECTORDBS directory
+  temp_vectordbs = tempfile.mkdtemp(prefix='test_vectordbs_')
+  temp_data_manager.temp_dirs.append(temp_vectordbs)
+
+  # Create KB directory structure
+  kb_name = 'test_kb'
+  kb_dir = os.path.join(temp_vectordbs, kb_name)
+  os.makedirs(kb_dir)
+
+  # Create config file
+  config_path = os.path.join(kb_dir, f'{kb_name}.cfg')
+  with open(config_path, 'w') as f:
+    f.write(sample_config_content)
+
+  # Create logs directory
+  logs_dir = os.path.join(kb_dir, 'logs')
+  os.makedirs(logs_dir)
+
+  # Return KB info
+  return {
+    'kb_name': kb_name,
+    'kb_dir': kb_dir,
+    'config_path': config_path,
+    'vectordbs': temp_vectordbs
+  }
+
+
+@pytest.fixture
+def temp_database(temp_kb_directory, sample_texts):
+  """Create a temporary SQLite database with sample data (includes BM25 columns)."""
+  db_path = os.path.join(temp_kb_directory, "test_kb.db")
+
+  conn = None
+  try:
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+
+    # Create table with BM25 columns for backward compatibility
+    cursor.execute('''
+    CREATE TABLE docs (
+      id INTEGER PRIMARY KEY,
+      sid INTEGER,
+      sourcedoc VARCHAR(255),
+      originaltext TEXT,
+      embedtext TEXT,
+      embedded INTEGER DEFAULT 0,
+      language TEXT default "en",
+      metadata TEXT,
+      keyphrase_processed INTEGER default 0,
+      bm25_tokens TEXT,
+      doc_length INTEGER DEFAULT 0
+    )
+    ''')
+
+    # Insert sample data
+    mock_gen = MockDataGenerator()
+    rows = mock_gen.create_database_rows(sample_texts[:5])  # Use first 5 texts
+
+    for row in rows:
+      # Extend row to include BM25 columns (empty by default)
+      # Row format: (id, sid, sourcedoc, originaltext, embedtext, embedded, language, metadata)
+      # Need to add: keyphrase_processed, bm25_tokens, doc_length
+      extended_row = row + (0, "", 0)  # keyphrase_processed, bm25_tokens, doc_length
+      cursor.execute(
+        "INSERT INTO docs (id, sid, sourcedoc, originaltext, embedtext, embedded, language, metadata, keyphrase_processed, bm25_tokens, doc_length) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+        extended_row
+      )
+
+    conn.commit()
+  finally:
+    if conn:
+      conn.close()
+
+  return db_path
+
+
+@pytest.fixture
+def temp_legacy_database(temp_kb_directory, sample_texts):
+  """Create a temporary SQLite database with legacy schema (no BM25 columns)."""
+  db_path = os.path.join(temp_kb_directory, "legacy_test_kb.db")
+
+  conn = None
+  try:
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+
+    # Create table with legacy schema
+    cursor.execute('''
+      CREATE TABLE docs (
+        id INTEGER PRIMARY KEY,
+        sid INTEGER,
+        sourcedoc VARCHAR(255),
+        originaltext TEXT,
+        embedtext TEXT,
+        embedded INTEGER DEFAULT 0,
+        language TEXT default "en",
+        metadata TEXT,
+        keyphrase_processed INTEGER default 0
+      )
+    ''')
+
+    # Insert sample data
+    mock_gen = MockDataGenerator()
+    rows = mock_gen.create_database_rows(sample_texts[:5])  # Use first 5 texts
+
+    for row in rows:
+      cursor.execute(
+        "INSERT INTO docs (id, sid, sourcedoc, originaltext, embedtext, embedded, language, metadata) VALUES (?,?,?,?,?,?,?,?)",
+        row
+      )
+
+    conn.commit()
+  finally:
+    if conn:
+      conn.close()
+
+  return db_path
+
+
+@pytest.fixture
+def mock_openai_client():
+  """Mock OpenAI client for testing."""
+  with patch('openai.OpenAI') as mock_client, \
+       patch('openai.AsyncOpenAI') as mock_async_client:
+
+    # Set up mock responses
+    mock_embedding_response = Mock()
+    mock_embedding_response.data = [Mock(embedding=[0.1] * 1536)]
+
+    mock_chat_response = Mock()
+    mock_chat_response.choices = [Mock(message=Mock(content="Test response"))]
+
+    # Configure sync client
+    mock_client_instance = Mock()
+    mock_client_instance.embeddings.create.return_value = mock_embedding_response
+    mock_client_instance.chat.completions.create.return_value = mock_chat_response
+    mock_client.return_value = mock_client_instance
+
+    # Configure async client
+    mock_async_client_instance = Mock()
+    mock_async_client_instance.embeddings.create = AsyncMock(return_value=mock_embedding_response)
+    mock_async_client_instance.chat.completions.create = AsyncMock(return_value=mock_chat_response)
+    mock_async_client.return_value = mock_async_client_instance
+
+    yield {
+      'sync': mock_client_instance,
+      'async': mock_async_client_instance
+    }
+
+
+@pytest.fixture
+def mock_anthropic_client():
+  """Mock Anthropic client for testing."""
+  with patch('anthropic.Anthropic') as mock_client, \
+       patch('anthropic.AsyncAnthropic') as mock_async_client:
+
+    # Set up mock response
+    mock_message = Mock()
+    mock_message.content = [Mock(text="Test Anthropic response")]
+
+    # Configure sync client
+    mock_client_instance = Mock()
+    mock_client_instance.messages.create.return_value = mock_message
+    mock_client.return_value = mock_client_instance
+
+    # Configure async client
+    mock_async_client_instance = Mock()
+    mock_async_client_instance.messages.create = AsyncMock(return_value=mock_message)
+    mock_async_client.return_value = mock_async_client_instance
+
+    yield {
+      'sync': mock_client_instance,
+      'async': mock_async_client_instance
+    }
+
+
+@pytest.fixture
+def mock_faiss_index():
+  """Mock FAISS index for testing."""
+  with patch('faiss.IndexFlatIP') as mock_index_class, \
+       patch('faiss.IndexIDMap') as mock_id_map, \
+       patch('faiss.read_index') as mock_read, \
+       patch('faiss.write_index'):
+
+    # Create mock index
+    mock_index = Mock()
+    mock_index.ntotal = 5
+    mock_index.search.return_value = (
+      [[0.9, 0.8, 0.7, 0.6, 0.5]],  # distances
+      [[0, 1, 2, 3, 4]]               # indices
+    )
+    mock_index.add_with_ids = Mock()
+
+    mock_index_class.return_value = mock_index
+    mock_id_map.return_value = mock_index
+    mock_read.return_value = mock_index
+
+    yield mock_index
+
+
+@pytest.fixture
+def mock_nltk_data():
+  """Mock NLTK data loading."""
+  with patch('nltk.data.find'), \
+       patch('nltk.download'), \
+       patch.dict('sys.modules', {'nltk.corpus.stopwords': Mock()}):
+    mock_stopwords_module = Mock()
+    mock_stopwords_module.words.return_value = ['the', 'a', 'an', 'and', 'or', 'but']
+
+    with patch('nltk.corpus.stopwords', mock_stopwords_module):
+      yield
+
+
+@pytest.fixture
+def mock_spacy():
+  """Mock spaCy NLP model."""
+  with patch('spacy.load') as mock_load:
+    mock_nlp = Mock()
+    mock_doc = Mock()
+    mock_doc.ents = []
+    mock_nlp.return_value = mock_doc
+    mock_load.return_value = mock_nlp
+    yield mock_nlp
+
+
+@pytest.fixture
+def mock_kb(temp_data_manager):
+  """
+  Provide a comprehensive mock KnowledgeBase with all standard attributes.
+
+  This fixture creates a mock KB object with all commonly-used attributes pre-configured
+  with sensible defaults. Tests can override any attribute by setting it directly.
+
+  Example:
+      def test_something(mock_kb):
+          mock_kb.vector_model = "custom-model"
+          result = some_function(mock_kb)
+          assert result is not None
+
+  Returns:
+      Mock: A mock KnowledgeBase object with comprehensive attributes
+  """
+  kb = Mock()
+
+  # Create temporary paths
+  temp_dir = temp_data_manager.create_temp_dir()
+  kb_name = 'test_kb'
+
+  # Database/Path attributes
+  kb.knowledge_base_name = kb_name
+  kb.knowledge_base_db = os.path.join(temp_dir, f'{kb_name}.db')
+  kb.knowledge_base_vector = os.path.join(temp_dir, f'{kb_name}.faiss')
+
+  # Mock database connection and cursor
+  kb.sql_connection = Mock()
+  kb.sql_cursor = Mock()
+  kb.sql_cursor.fetchall = Mock(return_value=[])
+  kb.sql_cursor.fetchone = Mock(return_value=None)
+  kb.sql_cursor.execute = Mock()
+  kb.sql_cursor.executemany = Mock()
+  kb.sql_connection.commit = Mock()
+  kb.sql_connection.rollback = Mock()
+  kb.sql_connection.cursor = Mock(return_value=kb.sql_cursor)
+
+  # Vector/Embedding configuration
+  kb.vector_model = 'text-embedding-3-small'
+  kb.vector_dimensions = 1536
+  kb.vector_chunks = 200
+
+  # Query configuration
+  kb.query_model = 'gpt-4o-mini'
+  kb.query_top_k = 50
+  kb.query_context_scope = 4
+  kb.query_temperature = 0.0
+  kb.query_max_tokens = 4000
+  kb.query_role = 'You are a helpful assistant.'
+  kb.reference_format = 'xml'
+
+  # Language configuration
+  kb.language = 'en'
+  kb.language_detection_enabled = True
+  kb.language_detection_confidence = 0.9
+  kb.language_detection_sample_size = 1000
+  kb.directory_language_override = True
+
+  # Hybrid Search / BM25 configuration
+  kb.enable_hybrid_search = False
+  kb.bm25_k1 = 1.2
+  kb.bm25_b = 0.75
+  kb.bm25_min_token_length = 2
+  kb.bm25_rebuild_threshold = 1000
+  kb.bm25_max_results = 1000
+
+  # Reranking configuration
+  kb.enable_reranking = True
+  kb.reranking_model = 'cross-encoder/ms-marco-MiniLM-L-6-v2'
+  kb.reranking_device = 'cpu'
+  kb.reranking_batch_size = 32
+  kb.reranking_top_k = 20
+  kb.reranking_cache_size = 1000
+
+  # Categorization
+  kb.enable_categorization = False
+
+  # Performance / Caching
+  kb.cache_thread_pool_size = 4
+  kb.memory_cache_size = 10000
+  kb.cache_memory_limit_mb = 500
+  kb.embedding_batch_size = 100
+  kb.sql_batch_size = 500
+  kb.checkpoint_interval = 10
+  kb.commit_frequency = 1000
+
+  # Processing limits
+  kb.heading_search_limit = 200
+  kb.entity_extraction_limit = 500
+  kb.max_file_size_mb = 100
+  kb.max_query_length = 10000
+
+  # API configuration
+  kb.api_call_delay_seconds = 0.05
+  kb.api_max_retries = 20
+  kb.api_max_concurrency = 8
+
+  # Provider batch limits
+  kb.provider_batch_limits = {
+    'gemini-': 100,
+    'text-embedding-': 2048,
+  }
+
+  # Mock FAISS index
+  kb.faiss_index = Mock()
+  kb.faiss_index.ntotal = 0
+  kb.faiss_index.search = Mock(return_value=(
+    [[0.9, 0.8, 0.7]],  # distances
+    [[0, 1, 2]]          # indices
+  ))
+  kb.faiss_index.add_with_ids = Mock()
+  kb.faiss_index.reset = Mock()
+
+  # Backward compatibility attributes
+  kb.table_name = 'docs'
+
+  return kb
+
+
+@pytest.fixture
+def isolated_imports():
+  """Ensure clean import state for each test."""
+  # Store original sys.modules state
+  sys.modules.copy()
+
+  yield
+
+  # Remove any newly imported modules related to our project
+  modules_to_remove = [
+    name for name in sys.modules
+    if name.startswith(('config.', 'database.', 'embedding.', 'query.', 'models.', 'utils.'))
+  ]
+
+  for module_name in modules_to_remove:
+    if module_name in sys.modules:
+      del sys.modules[module_name]
+
+
+@pytest.fixture(autouse=True)
+def setup_test_environment(mock_env_vars):
+  """Automatically set up test environment for all tests."""
+  pass
+
+
+# Test markers and configuration
+def pytest_configure(config):
+  """Configure pytest with custom markers."""
+  config.addinivalue_line(
+    "markers", "unit: mark test as a unit test"
+  )
+  config.addinivalue_line(
+    "markers", "integration: mark test as an integration test"
+  )
+  config.addinivalue_line(
+    "markers", "slow: mark test as slow (takes >5 seconds)"
+  )
+  config.addinivalue_line(
+    "markers", "requires_api: mark test as requiring real API keys"
+  )
+  config.addinivalue_line(
+    "markers", "requires_data: mark test as requiring external test data"
+  )
+  config.addinivalue_line(
+    "markers", "performance: mark test as a performance test"
+  )
+
+
+def pytest_collection_modifyitems(config, items):
+  """Modify test collection to add markers based on path."""
+  for item in items:
+    # Add markers based on test path
+    if "unit" in item.nodeid:
+      item.add_marker(pytest.mark.unit)
+    elif "integration" in item.nodeid:
+      item.add_marker(pytest.mark.integration)
+    elif "performance" in item.nodeid:
+      item.add_marker(pytest.mark.slow)
+      item.add_marker(pytest.mark.performance)
+
+#fin

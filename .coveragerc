@@ -1,0 +1,52 @@
+[run]
+source = .
+omit = 
+    .venv/*
+    .mailer/.venv/*
+    tests/*
+    */tests/*
+    */test_*.py
+    setup.py
+    */setup.py
+    run_tests.py
+    */migrations/*
+    */config/*
+    */static/*
+    */templates/*
+    
+[report]
+# Regexes for lines to exclude from consideration
+exclude_lines =
+    # Have to re-enable the standard pragma
+    pragma: no cover
+    
+    # Don't complain about missing debug-only code:
+    def __repr__
+    if self\.debug
+    
+    # Don't complain if tests don't hit defensive assertion code:
+    raise AssertionError
+    raise NotImplementedError
+    
+    # Don't complain if non-runnable code isn't run:
+    if 0:
+    if __name__ == .__main__.:
+    
+    # Don't complain about abstract methods
+    @(abc\.)?abstractmethod
+    
+    # Ignore type checking blocks
+    if TYPE_CHECKING:
+    
+    # Ignore logger debug statements
+    logger\.debug
+    
+precision = 2
+skip_covered = False
+show_missing = True
+
+[html]
+directory = htmlcov
+
+[xml]
+output = coverage.xml

@@ -1,0 +1,26 @@
+#!/bin/bash
+# Example environment configuration for citation scripts
+# Copy to citation_env.sh and customize as needed
+
+# Default model for citation extraction
+export CITATION_MODEL=claude-haiku-4-5
+
+# Default database location
+export CITATION_DATABASE="$PWD"/citations.db
+
+# Default chunk size for processing
+export CITATION_CHUNK_SIZE=7420
+
+# Default max tokens for API responses
+export CITATION_MAX_TOKENS=128
+
+# Default temperature (0 = deterministic)
+export CITATION_TEMPERATURE=0
+
+# Base directory for vector databases (if using CustomKB)
+export VECTORDBS=/var/lib/vectordbs
+
+# Optional: Default source directory
+# export CITATION_DEFAULT_SRC="$VECTORDBS/myproject/staging.text"
+
+#fin

@@ -1,0 +1,74 @@
+# EditorConfig helps maintain consistent coding styles across different editors and IDEs
+# https://editorconfig.org
+
+# Top-most EditorConfig file
+root = true
+
+# Universal settings
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+# Python files
+[*.py]
+indent_style = space
+indent_size = 2
+max_line_length = 127
+
+# YAML files
+[*.{yml,yaml}]
+indent_style = space
+indent_size = 2
+
+# JSON files
+[*.json]
+indent_style = space
+indent_size = 2
+
+# JavaScript/TypeScript files (if any)
+[*.{js,ts,jsx,tsx}]
+indent_style = space
+indent_size = 2
+
+# Markdown files
+[*.md]
+indent_style = space
+indent_size = 2
+# Don't trim trailing whitespace in markdown (two spaces = line break)
+trim_trailing_whitespace = false
+
+# Shell scripts
+[*.{sh,bash}]
+indent_style = space
+indent_size = 2
+
+# Makefiles (requires tabs)
+[Makefile]
+indent_style = tab
+
+# Configuration files
+[*.{ini,cfg,conf}]
+indent_style = space
+indent_size = 2
+
+# Docker files
+[{Dockerfile,*.dockerfile}]
+indent_style = space
+indent_size = 2
+
+# Git files
+[.git*]
+indent_style = space
+indent_size = 2
+
+# Requirements files
+[requirements*.txt]
+indent_style = space
+indent_size = 0
+
+# Test fixtures and data files
+[tests/fixtures/*]
+trim_trailing_whitespace = false
+insert_final_newline = false

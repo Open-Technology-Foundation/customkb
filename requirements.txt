@@ -1,0 +1,77 @@
+# CustomKB Core Dependencies
+# Install with: pip install -r requirements.txt
+# Then install FAISS: ./setup/install_faiss.sh
+
+# =============================================================================
+# Core AI/ML Packages
+# =============================================================================
+anthropic>=0.66.0
+litellm>=1.0
+openai>=1.106.0
+pydantic>=2.0
+sentence_transformers>=5.1.0
+torch>=2.6.0
+
+# =============================================================================
+# Vector & Search
+# =============================================================================
+# Note: faiss-gpu-cu12 >=1.13 supports numpy 2.x
+numpy>=1.26.4
+rank_bm25>=0.2.2
+
+# =============================================================================
+# NLP Processing
+# =============================================================================
+nltk>=3.9.1
+langchain_text_splitters>=0.3.11
+langdetect>=1.0.9
+tiktoken>=0.5.0
+
+# =============================================================================
+# Data Handling
+# =============================================================================
+protobuf>=5.29.5
+PyYAML>=6.0.2
+rapidfuzz>=3.14.0
+
+# =============================================================================
+# Utilities
+# =============================================================================
+colorlog>=6.9.0
+httpx>=0.28.1
+charset-normalizer>=3.0.0
+post_slug>=1.0.0
+psutil>=7.0.0
+nvidia-ml-py>=12.560.30
+tqdm>=4.67.1
+
+# =============================================================================
+# Testing (for development)
+# =============================================================================
+pytest>=8.4.1
+pytest-asyncio>=1.0
+
+# =============================================================================
+# Optional Packages
+# =============================================================================
+# Uncomment if needed for your use case:
+# spacy>=3.7.5           # For named entity recognition (NER) in document processing
+# matplotlib>=3.9.0      # For visualization and plotting
+# textblob>=0.15.0       # For text sentiment analysis
+
+# =============================================================================
+# FAISS Installation (Required)
+# =============================================================================
+# FAISS is NOT included in this file and must be installed separately
+# based on your hardware configuration.
+#
+# Automatic installation (recommended):
+#   ./setup/install_faiss.sh
+#
+# Manual installation:
+#   CPU-only:        pip install -r requirements-faiss-cpu.txt
+#   GPU (CUDA 12):   pip install -r requirements-faiss-gpu-cu12.txt
+#   GPU (CUDA 11):   pip install -r requirements-faiss-gpu-cu11.txt
+#
+# Force specific variant:
+#   FAISS_VARIANT=cpu ./setup/install_faiss.sh
