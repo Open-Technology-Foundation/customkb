@@ -277,7 +277,7 @@ def get_optimal_faiss_index(dimensions: int, dataset_size: int, kb=None):
     n_centroids = min(int(ivf_centroid_multiplier * (dataset_size ** 0.5)), max_centroids)  # Limit number of centroids
     quantizer = faiss.IndexFlatIP(dimensions)
     index = faiss.IndexIVFFlat(quantizer, dimensions, n_centroids, faiss.METRIC_INNER_PRODUCT)
-    index.train_mode = True  # Enable training mode initially
+    # IVF index will be trained later with actual embedding data
   else:
     # For large datasets, use IVF with PQ for compression
     large_max_centroids = max_centroids * 2  # Allow more centroids for large datasets
@@ -286,7 +286,7 @@ def get_optimal_faiss_index(dimensions: int, dataset_size: int, kb=None):
     # Use 8-bit quantization with 16 subquantizers
     n_subquantizers = min(16, dimensions // 64)  # Ensure subquantizers fit dimensions
     index = faiss.IndexIVFPQ(quantizer, dimensions, n_centroids, n_subquantizers, 8, faiss.METRIC_INNER_PRODUCT)
-    index.train_mode = True  # Enable training mode initially
+    # IVF index will be trained later with actual embedding data
 
   return faiss.IndexIDMap(index)
 

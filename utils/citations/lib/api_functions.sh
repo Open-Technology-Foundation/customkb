@@ -7,6 +7,7 @@
 # Supported Providers:
 #   - OpenAI (gpt-4o, gpt-4o-mini, gpt-4, gpt-3.5-turbo, o1-*, o3-*)
 #   - Anthropic (claude-*, claude-sonnet-*, claude-opus-*, claude-haiku-*)
+#   - Ollama (ollama/*, gemma*, llama*, mistral*, phi*, qwen*)
 #   - xAI (grok-*)
 #   - Google (gemini-*)
 #
@@ -23,6 +24,7 @@
 #   - api_call: Route to appropriate provider based on model
 #   - api_call_openai: Make OpenAI API request
 #   - api_call_anthropic: Make Anthropic API request
+#   - api_call_ollama: Make Ollama API request (OpenAI-compatible, no auth)
 #   - api_extract_result: Parse citation from API response
 #   - api_validate_key: Validate API keys
 #
@@ -31,6 +33,7 @@
 #   - ANTHROPIC_API_KEY: Anthropic API key
 #   - XAI_API_KEY: xAI API key
 #   - GOOGLE_API_KEY: Google API key
+#   - OLLAMA_API_URL: Ollama API base URL (default: http://localhost:11434)
 #   - API_DELAY_MS: Override rate limit delay (default: 1000ms)
 #
 set -euo pipefail
@@ -260,6 +263,98 @@ api_call_anthropic() {
   return 1
 }
 
+# Call Ollama API with retry logic (OpenAI-compatible, no auth required)
+# Args:
+#   $1: Model name (e.g., gemma3:12b, llama3.1:8b)
+#   $2: System prompt
+#   $3: User content
+#   $4: Max tokens for response
+#   $5: Temperature (0-1)
+# Returns:
+#   0 on success with JSON response to stdout
+#   1 on failure after all retries
+api_call_ollama() {
+  local model="$1"
+  local system_prompt="$2"
+  local user_content="$3"
+  local max_tokens="$4"
+  local temperature="$5"
+  local -i max_retries=3
+  local -i retry_delay=5
+  local response
+  local -i attempt
+  local ollama_url="${OLLAMA_API_URL:-http://localhost:11434}"
+
+  # Strip ollama/ prefix if present
+  model="${model#ollama/}"
+
+  for ((attempt=1; attempt<=max_retries; attempt++)); do
+    # Rate limit
+    api_rate_limit
+
+    # Create JSON payload (OpenAI-compatible format)
+    local json_payload
+    json_payload=$(jq -n \
+      --arg model "$model" \
+      --arg system "$system_prompt" \
+      --arg content "$user_content" \
+      --arg max_tokens "$max_tokens" \
+      --arg temperature "$temperature" \
+      '{
+        model: $model,
+        messages: [
+          {role: "system", content: $system},
+          {role: "user", content: $content}
+        ],
+        temperature: ($temperature | tonumber),
+        max_tokens: ($max_tokens | tonumber)
+      }')
+
+    # Make API call with timeouts (no auth header needed for Ollama)
+    response=$(curl -s -w '\n%{http_code}' \
+      --connect-timeout 30 \
+      --max-time 300 \
+      "${ollama_url}/v1/chat/completions" \
+      -H "Content-Type: application/json" \
+      -d "$json_payload" 2>/dev/null) || true
+
+    # Extract HTTP status code
+    local http_code
+    http_code=$(echo "$response" | tail -n1)
+    response=$(echo "$response" | sed '$d')
+
+    # Check for success
+    if [[ "$http_code" == "200" ]]; then
+      echo "$response"
+      return 0
+    fi
+
+    # Handle specific error codes
+    case "$http_code" in
+      000)  # Timeout or connection failure
+        >&2 echo "Ollama connection timeout/failure on attempt $attempt/$max_retries (is Ollama running at $ollama_url?)"
+        if ((attempt < max_retries)); then
+          sleep $retry_delay
+          retry_delay=$((retry_delay * 2))
+        fi
+        ;;
+      404)  # Model not found
+        >&2 echo "Ollama model '$model' not found. Run: ollama pull $model"
+        return 1
+        ;;
+      *)    # Other errors
+        >&2 echo "Ollama API call failed with HTTP $http_code on attempt $attempt/$max_retries"
+        if ((attempt < max_retries)); then
+          sleep $retry_delay
+        fi
+        ;;
+    esac
+  done
+
+  >&2 echo "Ollama API call failed after $max_retries attempts"
+  return 1
+}
+
 # Router function - calls appropriate provider based on model name
 # Args:
 #   $1: Model name
@@ -279,6 +374,9 @@ api_call() {
       ;;
     gpt-*|o1-*|o3-*|text-*)
       api_call_openai "$@"
+      ;;
+    ollama/*|gemma*|llama*|mistral*|phi*|qwen*)
+      api_call_ollama "$@"
       ;;
     grok-*)
       # xAI uses OpenAI-compatible API
@@ -359,6 +457,10 @@ api_validate_key() {
   # If model specified, check only that provider
   if [[ -n "$model" ]]; then
     case "$model" in
+      ollama/*|gemma*|llama*|mistral*|phi*|qwen*)
+        # Ollama models don't require API keys
+        return 0
+        ;;
       claude-*|claude*)
         if [[ -z "${ANTHROPIC_API_KEY:-}" ]]; then
           >&2 echo "Error: ANTHROPIC_API_KEY not set for model $model"

@@ -1,0 +1,25 @@
+You may not recall, but one of my motivations in joining stephen bachelor on his courses years ago was to figure out ways of 'teaching' AIs 'dharma'. 
+
+At the most basic level, this involves curating a concentration -- or cluster -- of credible, publicly accessible 'knowledge' and discourses around the broad topic of 'compassionate dharmas' (for which I *do* have a definition!).  I also aggregate material around human biological/cultural/behavioral evolution, history, ecology, creativity, etc.
+
+Just one example of aggregating concentrations of credible and relevant discourse on these topics, is the 'a secular dharma?' channel.  Besides the 50+ hours of myself, Rupert and Elfie rabbitting on about dharma, there is about 600 other videos in playlists.   (https://www.youtube.com/@aseculardharma/playlists) These videos constitute a publicly accessible body of discourse in support of 'the Way of compassion'.
+
+I use transcripts from these playlists (which I generate on my own machines using offline AI transcription models) to build and 'feed' a dedicated AI model.  And of course, I have a mountain of other textual sources and notes that I have collected over decades.
+
+The approach I am taking to this curation is to seek discourse, rather than rightness or wrongness.  I look more for the vocabulary of the discourse, not just 'facts'.
+
+This notion of vocabulary is central to how LLMs (Large Language Models, like GPTs; sorry if you already know all this stuff) work. 
+
+Somewhat distressingly, LLMs seem to have unlocked a kind of linguistic 'semiotic' key embedded in human cognitive biology, which can be reduced down to a distressing small number of 'parameters' (7B and even smaller).
+
+We may not be as smart as we think.
+
+Our "mind"/brain/cognition is merely a confabulation machine with a capacity for "emergence".
+
+The principal issue with any LLM is that without proper contextual orientation it will always respond as "the median man" (though probably better stated as "the median person who discourses on the internet").
+
+For this reason, specialist adjunct AI models need to be developed.  This means curating knowledge bases.  And that is what I have been doing for some years.
+
+Oh god, just look at this bloody reply. You know, I thought I could explain what I was up to in a few paragraphs.  There is just so much more.  If you're interested we could do a zoom call. 🙂
+
+And if you want to drop into Bali while you're in the general region, let me know!

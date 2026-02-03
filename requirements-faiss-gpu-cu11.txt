@@ -3,4 +3,4 @@
 # Requires: NVIDIA Driver >= R520
 # Install with: pip install -r requirements-faiss-gpu-cu11.txt
 
-faiss-gpu-cu11==1.12.0
+faiss-gpu-cu11>=1.12.0

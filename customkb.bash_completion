@@ -1,0 +1,208 @@
+#!/bin/bash
+# Bash completion for customkb - AI-powered knowledgebase tool
+# Source this file or place in /etc/bash_completion.d/
+#
+# Usage:
+#   source customkb.bash_completion
+#   # or
+#   cp customkb.bash_completion /etc/bash_completion.d/customkb
+
+_customkb_list_kbs() {
+  local vectordbs="${VECTORDBS:-/var/lib/vectordbs}"
+  if [[ -d "$vectordbs" ]]; then
+    local dir
+    for dir in "$vectordbs"/*/; do
+      [[ -d "$dir" ]] || continue
+      local name="${dir%/}"
+      name="${name##*/}"
+      [[ -f "$dir/$name.cfg" ]] && printf '%s\n' "$name"
+    done
+  fi
+}
+
+_customkb_completions() {
+  local cur prev words cword
+  _init_completion || return
+
+  local subcommands="query database embed edit bm25 optimize verify-indexes categorize convert-encoding help version"
+  local common_opts="-h --help"
+  local verbose_opts="-q --quiet -v --verbose -d --debug"
+
+  # Find the subcommand position
+  local subcmd=""
+  local subcmd_idx=0
+  local i
+  for ((i = 1; i < cword; i++)); do
+    case "${words[i]}" in
+      query|database|embed|edit|bm25|optimize|verify-indexes|categorize|convert-encoding|help|version)
+        subcmd="${words[i]}"
+        subcmd_idx=$i
+        break
+        ;;
+    esac
+  done
+
+  # No subcommand yet - complete subcommands
+  if [[ -z "$subcmd" ]]; then
+    COMPREPLY=($(compgen -W "$subcommands $common_opts" -- "$cur"))
+    return
+  fi
+
+  # Count positional args after subcommand (excluding options)
+  local pos_count=0
+  for ((i = subcmd_idx + 1; i < cword; i++)); do
+    [[ "${words[i]}" == -* ]] && continue
+    # Skip option arguments
+    case "${words[i-1]}" in
+      -m|--model|-k|--top-k|-s|--context-scope|-t|--temperature|-M|--max-tokens|\
+      -f|--format|-p|--prompt-template|-R|--role|-Q|--query_file|-l|--language|\
+      --memory-gb|--category|--categories|-S|--sample|--sampling|--max-concurrent|\
+      --confidence-threshold|-x|--exclude|--context-files|--dedup-threshold)
+        continue
+        ;;
+    esac
+    ((pos_count += 1))
+  done
+
+  case "$subcmd" in
+    query)
+      case "$prev" in
+        -m|--model)
+          COMPREPLY=($(compgen -W "gpt-4o gpt-4.1 gpt-4.1-mini claude-sonnet-4-20250514 claude-haiku-4-5-20241022 gemini-2.5-flash" -- "$cur"))
+          return
+          ;;
+        -f|--format)
+          COMPREPLY=($(compgen -W "xml json markdown plain" -- "$cur"))
+          return
+          ;;
+        -p|--prompt-template)
+          COMPREPLY=($(compgen -W "default instructive scholarly concise analytical conversational technical" -- "$cur"))
+          return
+          ;;
+        -Q|--query_file)
+          _filedir
+          return
+          ;;
+        -k|--top-k|-s|--context-scope|-t|--temperature|-M|--max-tokens|-R|--role|\
+        --category|--categories)
+          return
+          ;;
+        --context-files)
+          _filedir
+          return
+          ;;
+      esac
+      if ((pos_count == 0)); then
+        COMPREPLY=($(compgen -W "$(_customkb_list_kbs)" -- "$cur"))
+      elif [[ "$cur" == -* ]]; then
+        COMPREPLY=($(compgen -W "$common_opts -Q --query_file -c --context --context-only \
+          -R --role -m --model -k --top-k -s --context-scope -t --temperature \
+          -M --max-tokens -f --format -p --prompt-template --category --categories \
+          --context-files $verbose_opts" -- "$cur"))
+      fi
+      ;;
+
+    database)
+      case "$prev" in
+        -l|--language)
+          COMPREPLY=($(compgen -W "en fr de es it pt nl ru zh ja ko id" -- "$cur"))
+          return
+          ;;
+      esac
+      if ((pos_count == 0)); then
+        COMPREPLY=($(compgen -W "$(_customkb_list_kbs)" -- "$cur"))
+      elif [[ "$cur" == -* ]]; then
+        COMPREPLY=($(compgen -W "$common_opts -l --language --detect-language -f --force $verbose_opts" -- "$cur"))
+      else
+        _filedir
+      fi
+      ;;
+
+    embed)
+      if ((pos_count == 0)); then
+        COMPREPLY=($(compgen -W "$(_customkb_list_kbs)" -- "$cur"))
+      elif [[ "$cur" == -* ]]; then
+        COMPREPLY=($(compgen -W "$common_opts -r --reset-database $verbose_opts" -- "$cur"))
+      fi
+      ;;
+
+    edit)
+      if ((pos_count == 0)); then
+        COMPREPLY=($(compgen -W "$(_customkb_list_kbs)" -- "$cur"))
+      elif [[ "$cur" == -* ]]; then
+        COMPREPLY=($(compgen -W "$common_opts $verbose_opts" -- "$cur"))
+      fi
+      ;;
+
+    bm25)
+      if ((pos_count == 0)); then
+        COMPREPLY=($(compgen -W "$(_customkb_list_kbs)" -- "$cur"))
+      elif [[ "$cur" == -* ]]; then
+        COMPREPLY=($(compgen -W "$common_opts --force" -- "$cur"))
+      fi
+      ;;
+
+    optimize)
+      case "$prev" in
+        -m|--memory-gb)
+          return
+          ;;
+      esac
+      if ((pos_count == 0)); then
+        COMPREPLY=($(compgen -W "$(_customkb_list_kbs)" -- "$cur"))
+      elif [[ "$cur" == -* ]]; then
+        COMPREPLY=($(compgen -W "$common_opts -n --dry-run -a --analyze -s --show-tiers \
+          -m --memory-gb $verbose_opts" -- "$cur"))
+      fi
+      ;;
+
+    verify-indexes)
+      if ((pos_count == 0)); then
+        COMPREPLY=($(compgen -W "$(_customkb_list_kbs)" -- "$cur"))
+      elif [[ "$cur" == -* ]]; then
+        COMPREPLY=($(compgen -W "$common_opts $verbose_opts" -- "$cur"))
+      fi
+      ;;
+
+    categorize)
+      case "$prev" in
+        -m|--model)
+          COMPREPLY=($(compgen -W "claude-haiku-4-5 gpt-4o-mini gpt-4.1-mini gemini-2.5-flash" -- "$cur"))
+          return
+          ;;
+        -S|--sample|-M|--max-concurrent|-c|--confidence-threshold|-s|--sampling|\
+        --dedup-threshold)
+          return
+          ;;
+      esac
+      if ((pos_count == 0)); then
+        COMPREPLY=($(compgen -W "$(_customkb_list_kbs)" -- "$cur"))
+      elif [[ "$cur" == -* ]]; then
+        COMPREPLY=($(compgen -W "$common_opts -S --sample -f --full --fresh --import --list \
+          -m --model -s --sampling -M --max-concurrent -c --confidence-threshold \
+          -D --dedup-threshold --fixed-categories $verbose_opts" -- "$cur"))
+      fi
+      ;;
+
+    convert-encoding)
+      case "$prev" in
+        convert-encoding)
+          _filedir
+          return
+          ;;
+      esac
+      if [[ "$cur" == -* ]]; then
+        COMPREPLY=($(compgen -W "$common_opts --backup --no-backup --dry-run -r --recursive $verbose_opts" -- "$cur"))
+      else
+        _filedir
+      fi
+      ;;
+
+    help|version)
+      ;;
+  esac
+}
+
+complete -F _customkb_completions customkb
+
+#fin

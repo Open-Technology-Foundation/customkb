@@ -1,0 +1,8 @@
+In Chapter 5 of "Hierarchy in the Forest: The Evolution of Egalitarian Behavior," Christopher Boehm expands the discussion of egalitarianism to include tribesmen, who differ from foragers by incorporating domesticated plants and animals into their subsistence. Despite ecological changes, tribesmen maintain egalitarian political structures similar to those of hunter-gatherers, even in larger groups. Boehm defines "tribesmen" as nonliterate individuals living in small, autonomous groups that resist strong authority.
+
+The chapter explores tribal segmentation, where tribes engage in feuding and warfare without forming hierarchical structures. Boehm discusses the Yanomamo, a tribe known for its warfare and egalitarian ethos, emphasizing that leadership is based on generosity and respect rather than dominance. The chapter also examines the dynamics of intergroup conflict, noting that while violence is prevalent, egalitarian values persist.
+
+Boehm highlights the importance of public opinion and social sanctions in maintaining egalitarianism, detailing how ridicule, ostracism, and even assassination can be employed against individuals who threaten the group's equality. He contrasts the egalitarian ethos of tribes with the emergence of chiefdoms, where authority becomes more centralized.
+
+The chapter concludes with a discussion of the egalitarian ethos across various cultures, emphasizing shared values such as generosity and cooperation. Boehm argues that this ethos underpins the social dynamics of both foragers and tribesmen, providing a framework for understanding the evolution of human social behavior.
+
