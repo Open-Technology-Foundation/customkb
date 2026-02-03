@@ -3,8 +3,11 @@ Global test configuration and fixtures for CustomKB test suite.
 """
 
 import gc
+import logging
 import os
+import shutil
 import sqlite3
+import subprocess
 import sys
 import tempfile
 from pathlib import Path
@@ -19,6 +22,10 @@ sys.path.insert(0, str(project_root))
 
 from tests.fixtures.mock_data import MockDataGenerator, TestDataManager
 from utils.resource_manager import ResourceGuard, cleanup_caches
+
+# Test KB constants
+TEST_VECTORDBS = Path(__file__).parent / "vectordbs"
+TEST_KB_NAME = "appliedanthropology"
 
 
 @pytest.fixture
@@ -636,6 +643,12 @@ def pytest_configure(config):
   config.addinivalue_line(
     "markers", "performance: mark test as a performance test"
   )
+  config.addinivalue_line(
+    "markers", "requires_test_kb: mark test as requiring the built test KB"
+  )
+  config.addinivalue_line(
+    "markers", "resource_intensive: mark test as needing high memory/CPU"
+  )
 
 
 def pytest_collection_modifyitems(config, items):
@@ -649,5 +662,183 @@ def pytest_collection_modifyitems(config, items):
     elif "performance" in item.nodeid:
       item.add_marker(pytest.mark.slow)
       item.add_marker(pytest.mark.performance)
+
+
+@pytest.fixture(scope="session")
+def built_test_kb():
+  """
+  Session-scoped fixture that builds a complete test KB from source files.
+
+  Copies tests/vectordbs/appliedanthropology/ to a temp dir and runs the
+  full pipeline: database import, embedding (all-minilm-l6-v2, local),
+  BM25 index build, and citation extraction/application (gemma3:12b via Ollama).
+
+  Yields a dict with paths to all KB artifacts.
+  """
+  import config.config_manager as cm
+
+  kb_source = TEST_VECTORDBS / TEST_KB_NAME
+  if not kb_source.exists():
+    pytest.skip(f"Test KB source not found: {kb_source}")
+
+  temp_dir = tempfile.mkdtemp(prefix='test_built_kb_')
+  temp_vectordbs = Path(temp_dir)
+  kb_dir = temp_vectordbs / TEST_KB_NAME
+
+  # Save and patch VECTORDBS
+  original_vectordbs = cm.VECTORDBS
+
+  try:
+    # Copy source KB to temp dir
+    shutil.copytree(str(kb_source), str(kb_dir))
+
+    # Patch VECTORDBS module-level variable
+    cm.VECTORDBS = str(temp_vectordbs)
+
+    build_logger = logging.getLogger('test_kb_build')
+    build_logger.setLevel(logging.INFO)
+
+    # Collect source files from staging.text
+    staging_dir = kb_dir / "staging.text"
+    source_files = sorted(str(p) for p in staging_dir.rglob("*") if p.is_file())
+    assert len(source_files) > 0, "No source files found in staging.text"
+
+    # Step 1: Database import
+    from database.db_manager import process_database
+
+    db_args = Mock()
+    db_args.config_file = TEST_KB_NAME
+    db_args.files = source_files
+    db_args.language = 'en'
+    db_args.force = False
+    db_args.verbose = True
+    db_args.debug = False
+
+    with patch('builtins.input', return_value='y'):
+      db_result = process_database(db_args, build_logger)
+    assert "files added to database" in db_result, f"Database build failed: {db_result}"
+
+    # Step 2: Generate embeddings (all-minilm-l6-v2, local model)
+    from embedding.embed_manager import process_embeddings
+
+    embed_args = Mock()
+    embed_args.config_file = TEST_KB_NAME
+    embed_args.reset_database = False
+    embed_args.verbose = True
+    embed_args.debug = False
+
+    embed_result = process_embeddings(embed_args, build_logger)
+    assert "saved to" in embed_result, f"Embedding build failed: {embed_result}"
+
+    # Free GPU memory before citation step (Ollama needs the VRAM)
+    try:
+      from embedding.providers import EmbeddingProviderFactory, SentenceTransformerProvider
+      # Clear cached providers (releases SentenceTransformer model references)
+      for provider in EmbeddingProviderFactory._providers.values():
+        if isinstance(provider, SentenceTransformerProvider) and provider._model is not None:
+          del provider._model
+          provider._model = None
+      EmbeddingProviderFactory._providers.clear()
+    except Exception:
+      pass
+    gc.collect()
+    try:
+      import torch
+      if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+        torch.cuda.synchronize()
+        build_logger.info("GPU memory cleared after embedding step")
+    except ImportError:
+      pass
+
+    # Step 3: Build BM25 index
+    from config.config_manager import KnowledgeBase
+    from embedding.bm25_manager import build_bm25_index
+
+    kb = KnowledgeBase(TEST_KB_NAME)
+    bm25_result = build_bm25_index(kb)
+
+    # Step 4: Citation extraction via gen-citations.sh (Ollama gemma3:12b)
+    citations_db = kb_dir / "citations.db"
+    gen_citations_script = project_root / "utils" / "citations" / "gen-citations.sh"
+    append_citations_script = project_root / "utils" / "citations" / "append-citations.sh"
+
+    if gen_citations_script.exists():
+      # Initialize the citations database first
+      init_conn = sqlite3.connect(str(citations_db))
+      init_conn.execute("""
+        CREATE TABLE IF NOT EXISTS citations (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          sourcefile TEXT UNIQUE NOT NULL,
+          title TEXT,
+          author TEXT,
+          year TEXT,
+          raw_citation TEXT,
+          broad_context TEXT,
+          processed_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          last_modified TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      """)
+      init_conn.commit()
+      init_conn.close()
+
+      gen_result = subprocess.run(
+        [
+          str(gen_citations_script),
+          "-m", "gemma3:12b",
+          "--sequential",
+          "-d", str(citations_db),
+          str(staging_dir),
+        ],
+        capture_output=True, text=True, timeout=600,
+        cwd=str(project_root),
+      )
+      if gen_result.returncode != 0:
+        build_logger.warning(f"gen-citations.sh failed (rc={gen_result.returncode}): {gen_result.stderr}")
+
+      # Step 5: Apply citations via append-citations.sh
+      if append_citations_script.exists() and citations_db.exists():
+        append_result = subprocess.run(
+          [
+            str(append_citations_script),
+            "-d", str(citations_db),
+            "--no-backup",
+            str(staging_dir),
+          ],
+          capture_output=True, text=True, timeout=120,
+          cwd=str(project_root),
+        )
+        if append_result.returncode != 0:
+          build_logger.warning(f"append-citations.sh failed: {append_result.stderr}")
+
+    db_path = kb_dir / f"{TEST_KB_NAME}.db"
+    faiss_path = kb_dir / f"{TEST_KB_NAME}.faiss"
+
+    yield {
+      'vectordbs': str(temp_vectordbs),
+      'kb_dir': str(kb_dir),
+      'kb_name': TEST_KB_NAME,
+      'db_path': str(db_path),
+      'faiss_path': str(faiss_path),
+      'citations_db': str(citations_db),
+      'source_files': source_files,
+      'staging_dir': str(staging_dir),
+    }
+
+  finally:
+    # Restore VECTORDBS
+    cm.VECTORDBS = original_vectordbs
+    # Clean up temp dir
+    shutil.rmtree(temp_dir, ignore_errors=True)
+
+
+@pytest.fixture
+def test_kb(built_test_kb, monkeypatch):
+  """
+  Function-scoped fixture that provides the built test KB with
+  per-test VECTORDBS isolation via monkeypatch.
+  """
+  monkeypatch.setattr('config.config_manager.VECTORDBS', built_test_kb['vectordbs'])
+  return built_test_kb
 
 #fin
