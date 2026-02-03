@@ -303,7 +303,7 @@ class SentenceTransformerProvider(EmbeddingProvider):
           from sentence_transformers import SentenceTransformer
           hf_model = self.SUPPORTED_MODELS.get(self.model_name, self.model_name)
           logger.info(f"Loading local embedding model: {hf_model}")
-          self._model = SentenceTransformer(hf_model)
+          self._model = SentenceTransformer(hf_model, device="cpu")
           logger.info(f"Model loaded: {hf_model}")
     return self._model
 
