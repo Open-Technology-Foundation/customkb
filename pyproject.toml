@@ -8,7 +8,7 @@ version = "1.1.0"
 description = "AI-powered knowledgebase management system"
 readme = "README.md"
 requires-python = ">=3.12"
-license = {text = "MIT"}
+license = {text = "GPL-3.0"}
 authors = [
     {name = "CustomKB Team", email = "admin@okusi.id"},
 ]
@@ -16,7 +16,7 @@ keywords = ["ai", "knowledge-base", "embeddings", "llm", "search"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: MIT License",
+    "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.12",
     "Topic :: Software Development :: Libraries :: Python Modules",
@@ -77,10 +77,10 @@ test = [
 customkb = "customkb:main"
 
 [project.urls]
-Homepage = "https://github.com/okusi/customkb"
+Homepage = "https://github.com/Open-Technology-Foundation/customkb"
 Documentation = "https://docs.okusi.id/customkb"
-Repository = "https://github.com/okusi/customkb.git"
-Issues = "https://github.com/okusi/customkb/issues"
+Repository = "https://github.com/Open-Technology-Foundation/customkb.git"
+Issues = "https://github.com/Open-Technology-Foundation/customkb/issues"
 
 [tool.setuptools]
 py-modules = ["customkb"]

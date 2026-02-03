@@ -263,6 +263,74 @@ customkb query myproject "Explain the architecture" \
 customkb query myproject "Find authentication docs" --context-only
 ```
 
+### `categorize` - AI-Powered Document Categorization
+
+```bash
+customkb categorize <kb_name> [options]
+```
+
+Automatically categorize articles using AI models.
+
+**Options:**
+- `-S, --sample N`: Process only N sample articles
+- `-f, --full`: Process all articles
+- `--fresh`: Ignore checkpoint, reprocess all articles
+- `--import`: Import categories to database after processing
+- `--list`: List existing categories and counts
+- `-m, --model`: AI model to use (default: `claude-haiku-4-5`)
+- `-s, --sampling T-M-B`: Chunk sampling config (e.g., `5-10-5`)
+- `-M, --max-concurrent`: Maximum concurrent API requests (default: 5)
+- `-c, --confidence-threshold`: Minimum confidence (default: 0.5)
+- `-D, --no-dedup`: Disable category deduplication
+
+**Examples:**
+```bash
+# Categorize with import to database
+customkb categorize myproject --full --import
+
+# Process 10 sample articles
+customkb categorize myproject --sample 10
+
+# List existing categories
+customkb categorize myproject --list
+```
+
+### `edit` - Edit KB Configuration
+
+```bash
+customkb edit <kb_name>
+```
+
+Open the knowledgebase configuration file in `$EDITOR`.
+
+**Examples:**
+```bash
+customkb edit myproject
+```
+
+### `convert-encoding` - Convert Files to UTF-8
+
+```bash
+customkb convert-encoding <files...> [options]
+```
+
+Convert text files to UTF-8 encoding in-place.
+
+**Options:**
+- `-r, --recursive`: Process directories recursively
+- `--dry-run`: Preview changes without converting
+- `--no-backup`: Convert without creating backups
+- `-v, --verbose`: Detailed output
+
+**Examples:**
+```bash
+# Convert all .txt files
+customkb convert-encoding *.txt
+
+# Recursive conversion with preview
+customkb convert-encoding docs/ --recursive --dry-run
+```
+
 ## Configuration
 
 CustomKB uses INI-style configuration with environment variable overrides.
@@ -648,6 +716,8 @@ Located in `scripts/` directory:
 - `diagnose_crashes.py` - Analyze crash logs and system state
 - `update_dependencies.py` - Check and update Python dependencies
 - `security-check.sh` - Run security validation checks
+- `emergency_cleanup.sh` - Emergency cleanup operations
+- `test_cuda.sh` - CUDA availability testing
 
 ## Testing
 
@@ -938,7 +1008,7 @@ grok-4                   → xAI Grok 4
 
 GPL-3.0 License - see [LICENSE](LICENSE) file for details.
 
-**Copyright © 2025 Indonesian Open Technology Foundation**
+**Copyright © 2025-2026 Indonesian Open Technology Foundation**
 
 ---
 
