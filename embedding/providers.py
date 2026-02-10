@@ -303,8 +303,11 @@ class SentenceTransformerProvider(EmbeddingProvider):
           from sentence_transformers import SentenceTransformer
           hf_model = self.SUPPORTED_MODELS.get(self.model_name, self.model_name)
           logger.info(f"Loading local embedding model: {hf_model}")
-          self._model = SentenceTransformer(hf_model, device="cpu")
-          logger.info(f"Model loaded: {hf_model}")
+          import torch
+          device = "cuda" if torch.cuda.is_available() else "cpu"
+          logger.info(f"Using device: {device}")
+          self._model = SentenceTransformer(hf_model, device=device)
+          logger.info(f"Model loaded: {hf_model} on {device}")
     return self._model
 
   async def get_embeddings(self, texts: list[str], model: str) -> list[list[float]]:

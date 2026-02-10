@@ -28,6 +28,7 @@ litellm.suppress_debug_info = True
 
 # Models that require local SentenceTransformer (not supported by LiteLLM)
 LOCAL_MODELS = {'bge-m3', 'all-minilm-l6-v2'}
+_local_provider_cache = {}  # Cache local model providers to avoid reloading
 
 
 def _to_litellm_embedding_model(model: str) -> str:
@@ -80,8 +81,9 @@ async def get_embeddings(
   # Delegate local models to SentenceTransformerProvider
   if model_lower in LOCAL_MODELS or model_lower.startswith('sentence-transformers/'):
     from embedding.providers import SentenceTransformerProvider
-    provider = SentenceTransformerProvider(model)
-    return await provider.get_embeddings(texts, model)
+    if model_lower not in _local_provider_cache:
+      _local_provider_cache[model_lower] = SentenceTransformerProvider(model)
+    return await _local_provider_cache[model_lower].get_embeddings(texts, model)
 
   litellm_model = _to_litellm_embedding_model(model)
   logger.info(f"LiteLLM embedding: model={litellm_model}, texts={len(texts)}")
@@ -130,8 +132,9 @@ def get_embedding_sync(text: str, model: str) -> list[float]:
   # Delegate local models
   if model_lower in LOCAL_MODELS or model_lower.startswith('sentence-transformers/'):
     from embedding.providers import SentenceTransformerProvider
-    provider = SentenceTransformerProvider(model)
-    return provider.get_embedding_sync(text, model)
+    if model_lower not in _local_provider_cache:
+      _local_provider_cache[model_lower] = SentenceTransformerProvider(model)
+    return _local_provider_cache[model_lower].get_embedding_sync(text, model)
 
   litellm_model = _to_litellm_embedding_model(model)
 
