@@ -34,8 +34,20 @@ from utils.text_utils import get_env
 # Setup module logger
 logger = get_logger(__name__)
 
+
 def _extract_json(text: str) -> str:
-  """Extract JSON from text that may contain markdown code fences or prose."""
+  """Extract a JSON object or array from LLM response text.
+
+  Handles common LLM output patterns: bare JSON, markdown code fences
+  (````` ```json ... ``` `````), or JSON embedded in surrounding prose.
+
+  Args:
+      text: Raw LLM response text that may contain non-JSON content.
+
+  Returns:
+      The extracted JSON substring (not yet parsed). If no JSON structure
+      is found, returns the stripped input unchanged.
+  """
   stripped = text.strip()
   if stripped.startswith('{') or stripped.startswith('['):
     return stripped
@@ -47,18 +59,29 @@ def _extract_json(text: str) -> str:
   start = stripped.find('{')
   end = stripped.rfind('}')
   if start != -1 and end > start:
-    return stripped[start:end + 1]
+    return stripped[start : end + 1]
   return stripped
+
 
 @dataclass
 class CategoryResult:
-  """Represents a category assignment with confidence"""
+  """A single category assignment for an article.
+
+  Attributes:
+      name: The category label (e.g. "Technology", "Healthcare").
+      confidence: LLM-assigned relevance score between 0.0 and 1.0.
+          Values below ``AdaptiveCategorizer.confidence_threshold`` may
+          trigger dynamic category suggestions.
+  """
+
   name: str
   confidence: float
+
 
 @dataclass
 class ArticleCategories:
   """Complete categorization result for an article"""
+
   article_path: str
   total_chunks: int
   sampled_chunks: int
@@ -68,6 +91,7 @@ class ArticleCategories:
   error: str | None = None
   model_used: str | None = None
   suggested_new_categories: list[str] = field(default_factory=list)
+
 
 class CategoryGenerator:
   """Generate initial categories based on KB content"""
@@ -92,24 +116,30 @@ class CategoryGenerator:
 
     # Validate table name to prevent SQL injection
     if table_name not in ['docs', 'chunks']:
-      logger.error(f"Invalid table name: {table_name}")
+      logger.error(f'Invalid table name: {table_name}')
       return {}
 
     # Get sample articles - using validated table name
     if table_name == 'docs':
-      cursor.execute("""
+      cursor.execute(
+        """
         SELECT DISTINCT sourcedoc
         FROM docs
         ORDER BY RANDOM()
         LIMIT ?
-      """, (sample_size,))
+      """,
+        (sample_size,),
+      )
     else:
-      cursor.execute("""
+      cursor.execute(
+        """
         SELECT DISTINCT sourcedoc
         FROM chunks
         ORDER BY RANDOM()
         LIMIT ?
-      """, (sample_size,))
+      """,
+        (sample_size,),
+      )
 
     sample_docs = cursor.fetchall()
 
@@ -117,19 +147,25 @@ class CategoryGenerator:
     all_text = []
     for doc in sample_docs:
       if table_name == 'docs':
-        cursor.execute("""
+        cursor.execute(
+          """
           SELECT embedtext
           FROM docs
           WHERE sourcedoc = ?
           LIMIT 5
-        """, (doc[0],))
+        """,
+          (doc[0],),
+        )
       else:
-        cursor.execute("""
+        cursor.execute(
+          """
           SELECT embedtext
           FROM chunks
           WHERE sourcedoc = ?
           LIMIT 5
-        """, (doc[0],))
+        """,
+          (doc[0],),
+        )
 
       chunks = cursor.fetchall()
       doc_text = ' '.join([chunk[0] for chunk in chunks if chunk[0]])
@@ -141,7 +177,7 @@ class CategoryGenerator:
     categories = self._generate_categories_from_samples(all_text)
     return categories
 
-  def _generate_categories_from_samples(self, samples: list[str], model_name: str = "claude-haiku-4-5") -> list[str]:
+  def _generate_categories_from_samples(self, samples: list[str], model_name: str = 'claude-haiku-4-5') -> list[str]:
     """Use AI to generate categories from sample texts"""
     # Resolve provider from model registry
     model_info = get_canonical_model(model_name)
@@ -173,18 +209,12 @@ Return ONLY the Python list, no other text."""
     try:
       if provider == 'anthropic':
         response = client.messages.create(
-          model=model_name,
-          messages=[{"role": "user", "content": prompt}],
-          temperature=0.7,
-          max_tokens=500
+          model=model_name, messages=[{'role': 'user', 'content': prompt}], temperature=0.7, max_tokens=500
         )
         categories_text = response.content[0].text.strip()
       else:
         response = client.chat.completions.create(
-          model=model_name,
-          messages=[{"role": "user", "content": prompt}],
-          temperature=0.7,
-          max_tokens=500
+          model=model_name, messages=[{'role': 'user', 'content': prompt}], temperature=0.7, max_tokens=500
         )
         categories_text = response.choices[0].message.content.strip()
 
@@ -194,29 +224,46 @@ Return ONLY the Python list, no other text."""
       if isinstance(categories, list):
         return categories
       else:
-        raise ValueError("AI did not return a list")
+        raise ValueError('AI did not return a list')
 
     except (ValueError, KeyError, AttributeError, json.JSONDecodeError, RuntimeError) as e:
-      self.logger.error(f"Failed to generate categories: {e}")
+      self.logger.error(f'Failed to generate categories: {e}')
       # Fallback categories
       return [
-        "Technology", "Business", "Science", "Healthcare", "Education",
-        "Finance", "Legal", "Marketing", "Engineering", "Research",
-        "Culture", "Politics", "Environment", "Social Issues", "History"
+        'Technology',
+        'Business',
+        'Science',
+        'Healthcare',
+        'Education',
+        'Finance',
+        'Legal',
+        'Marketing',
+        'Engineering',
+        'Research',
+        'Culture',
+        'Politics',
+        'Environment',
+        'Social Issues',
+        'History',
       ]
+
 
 class AdaptiveCategorizer:
   """Main categorization engine with adaptive learning"""
 
-  def __init__(self, kb: KnowledgeBase, model_name: str | None = None,
-               checkpoint_file: str | None = None,
-               sampling_config: tuple[int, int, int] | None = None,
-               confidence_threshold: float | None = None,
-               enable_deduplication: bool = True,
-               dedup_threshold: float = 85.0,
-               use_variable_categories: bool = True):
+  def __init__(
+    self,
+    kb: KnowledgeBase,
+    model_name: str | None = None,
+    checkpoint_file: str | None = None,
+    sampling_config: tuple[int, int, int] | None = None,
+    confidence_threshold: float | None = None,
+    enable_deduplication: bool = True,
+    dedup_threshold: float = 85.0,
+    use_variable_categories: bool = True,
+  ):
     self.kb = kb
-    self.model_name = model_name or "claude-haiku-4-5"
+    self.model_name = model_name or 'claude-haiku-4-5'
     self.checkpoint_file = checkpoint_file
     self.sampling_config = sampling_config or (3, 3, 3)
     self.confidence_threshold = confidence_threshold or 0.5
@@ -238,36 +285,25 @@ class AdaptiveCategorizer:
     if self.provider == 'anthropic':
       api_key = get_env('ANTHROPIC_API_KEY', None)
       if not api_key:
-        raise ValueError("ANTHROPIC_API_KEY environment variable not set")
-      self.client = AsyncAnthropic(
-        api_key=api_key,
-        timeout=httpx.Timeout(60.0, connect=10.0),
-        max_retries=3
-      )
+        raise ValueError('ANTHROPIC_API_KEY environment variable not set')
+      self.client = AsyncAnthropic(api_key=api_key, timeout=httpx.Timeout(60.0, connect=10.0), max_retries=3)
     elif self.provider == 'ollama':
       self.client = AsyncOpenAI(
-        api_key='ollama',
-        base_url='http://localhost:11434/v1',
-        timeout=httpx.Timeout(120.0, connect=10.0),
-        max_retries=3
+        api_key='ollama', base_url='http://localhost:11434/v1', timeout=httpx.Timeout(120.0, connect=10.0), max_retries=3
       )
     else:
       api_key = get_env('OPENAI_API_KEY', None)
       if not api_key:
-        raise ValueError("OPENAI_API_KEY environment variable not set")
-      self.client = AsyncOpenAI(
-        api_key=api_key,
-        timeout=httpx.Timeout(60.0, connect=10.0),
-        max_retries=3
-      )
+        raise ValueError('OPENAI_API_KEY environment variable not set')
+      self.client = AsyncOpenAI(api_key=api_key, timeout=httpx.Timeout(60.0, connect=10.0), max_retries=3)
 
     # Setup deduplicator if enabled
     self.deduplicator = CategoryDeduplicator() if enable_deduplication else None
 
   def _load_or_generate_categories(self) -> list[str]:
     """Load existing categories or generate new ones"""
-    cats_dir = Path(self.kb.knowledge_base_db).parent / "cats"
-    categories_file = cats_dir / "categories.yaml"
+    cats_dir = Path(self.kb.knowledge_base_db).parent / 'cats'
+    categories_file = cats_dir / 'categories.yaml'
 
     if categories_file.exists():
       with open(categories_file) as f:
@@ -281,13 +317,11 @@ class AdaptiveCategorizer:
       # Save categories
       cats_dir.mkdir(exist_ok=True)
       with open(categories_file, 'w') as f:
-        yaml.dump({
-          'categories': categories,
-          'generated_at': datetime.now().isoformat(),
-          'kb_name': self.kb.knowledge_base_name
-        }, f)
+        yaml.dump(
+          {'categories': categories, 'generated_at': datetime.now().isoformat(), 'kb_name': self.kb.knowledge_base_name}, f
+        )
 
-      self.logger.info(f"Generated {len(categories)} initial categories")
+      self.logger.info(f'Generated {len(categories)} initial categories')
       return categories
 
   def _calculate_complexity(self, text: str) -> int:
@@ -340,7 +374,7 @@ class AdaptiveCategorizer:
     sampled = []
 
     # Top chunks
-    sampled.extend(chunks[:min(top, total)])
+    sampled.extend(chunks[: min(top, total)])
 
     # Middle chunks
     if middle > 0 and total > top + bottom:
@@ -350,7 +384,7 @@ class AdaptiveCategorizer:
 
     # Bottom chunks
     if bottom > 0 and total > top:
-      sampled.extend(chunks[-min(bottom, total - top):])
+      sampled.extend(chunks[-min(bottom, total - top) :])
 
     # Combine text
     text = '\n'.join([chunk[1] for chunk in sampled if chunk[1]])
@@ -399,38 +433,28 @@ Return ONLY a JSON object like:
         try:
           if self.provider == 'anthropic':
             response = await self.client.messages.create(
-              model=self.model_name,
-              messages=[{"role": "user", "content": prompt}],
-              temperature=0.3,
-              max_tokens=500
+              model=self.model_name, messages=[{'role': 'user', 'content': prompt}], temperature=0.3, max_tokens=500
             )
             response_content = response.content[0].text
           elif self.provider == 'ollama':
             response = await self.client.chat.completions.create(
-              model=self.model_name,
-              messages=[{"role": "user", "content": prompt}],
-              temperature=0.3,
-              max_tokens=500
+              model=self.model_name, messages=[{'role': 'user', 'content': prompt}], temperature=0.3, max_tokens=500
             )
             response_content = response.choices[0].message.content
           else:
             response = await self.client.chat.completions.create(
               model=self.model_name,
-              messages=[{"role": "user", "content": prompt}],
+              messages=[{'role': 'user', 'content': prompt}],
               temperature=0.3,
               max_tokens=500,
-              response_format={"type": "json_object"}
+              response_format={'type': 'json_object'},
             )
             response_content = response.choices[0].message.content
           break  # success
-        except (ConnectionError, TimeoutError, OSError, ValueError,
-                httpx.HTTPError) as e:
+        except (ConnectionError, TimeoutError, OSError, ValueError, httpx.HTTPError) as e:
           if '429' in str(e) or 'rate' in str(e).lower():
-            wait = 2 ** attempt + random.uniform(0, 1)
-            self.logger.warning(
-              f"Rate limited (attempt {attempt + 1}/{max_retries}), "
-              f"waiting {wait:.1f}s: {article_path}"
-            )
+            wait = 2**attempt + random.uniform(0, 1)
+            self.logger.warning(f'Rate limited (attempt {attempt + 1}/{max_retries}), waiting {wait:.1f}s: {article_path}')
             await asyncio.sleep(wait)
             if attempt == max_retries - 1:
               raise
@@ -442,7 +466,7 @@ Return ONLY a JSON object like:
         result = json.loads(_extract_json(response_content))
       except json.JSONDecodeError:
         # Log the actual response for debugging
-        self.logger.debug(f"Invalid JSON response: {response_content[:500]}")
+        self.logger.debug(f'Invalid JSON response: {response_content[:500]}')
 
         # Try to clean up common JSON issues
         cleaned_content = _extract_json(response_content)
@@ -455,23 +479,17 @@ Return ONLY a JSON object like:
           result = json.loads(cleaned_content)
         except json.JSONDecodeError:
           # If still fails, create a fallback response
-          self.logger.warning(f"Could not parse JSON for {article_path}, using fallback")
-          result = {
-            "categories": [],
-            "suggested_new": []
-          }
+          self.logger.warning(f'Could not parse JSON for {article_path}, using fallback')
+          result = {'categories': [], 'suggested_new': []}
 
       # Parse categories with validation
       categories = []
       for cat in result.get('categories', []):
         if isinstance(cat, dict) and 'name' in cat and 'confidence' in cat:
           try:
-            categories.append(CategoryResult(
-              name=str(cat['name']),
-              confidence=float(cat['confidence'])
-            ))
+            categories.append(CategoryResult(name=str(cat['name']), confidence=float(cat['confidence'])))
           except (ValueError, TypeError) as e:
-            self.logger.debug(f"Invalid category data: {cat}, error: {e}")
+            self.logger.debug(f'Invalid category data: {cat}, error: {e}')
             continue
 
       # Add suggested categories to dynamic set
@@ -490,11 +508,11 @@ Return ONLY a JSON object like:
         primary_category=categories[0].name if categories else None,
         processing_time=time.time() - start_time,
         model_used=self.model_name,
-        suggested_new_categories=suggested
+        suggested_new_categories=suggested,
       )
 
     except (ValueError, KeyError, RuntimeError, OSError) as e:
-      self.logger.error(f"Error categorizing {article_path}: {e}")
+      self.logger.error(f'Error categorizing {article_path}: {e}')
       return ArticleCategories(
         article_path=article_path,
         total_chunks=len(chunks),
@@ -502,7 +520,7 @@ Return ONLY a JSON object like:
         categories=[],
         primary_category=None,
         processing_time=time.time() - start_time,
-        error=str(e)
+        error=str(e),
       )
 
   async def process_all_articles(self, articles: list[str], max_concurrent: int = 5) -> list[ArticleCategories]:
@@ -525,26 +543,32 @@ Return ONLY a JSON object like:
 
     # Validate table name to prevent SQL injection
     if table_name not in ['docs', 'chunks']:
-      logger.error(f"Invalid table name: {table_name}")
+      logger.error(f'Invalid table name: {table_name}')
       conn.close()
       return []
 
     article_data = []
     for article in articles:
       if table_name == 'docs':
-        cursor.execute("""
+        cursor.execute(
+          """
           SELECT sid, embedtext
           FROM docs
           WHERE sourcedoc = ?
           ORDER BY sid
-        """, (article,))
+        """,
+          (article,),
+        )
       else:
-        cursor.execute("""
+        cursor.execute(
+          """
           SELECT sid, embedtext
           FROM chunks
           WHERE sourcedoc = ?
           ORDER BY sid
-        """, (article,))
+        """,
+          (article,),
+        )
       chunks = cursor.fetchall()
       article_data.append((article, chunks))
 
@@ -554,7 +578,7 @@ Return ONLY a JSON object like:
     tasks = [process_with_limit(data) for data in article_data]
 
     results = []
-    with tqdm_asyncio(total=len(tasks), desc="Categorizing articles") as pbar:
+    with tqdm_asyncio(total=len(tasks), desc='Categorizing articles') as pbar:
       for coro in asyncio.as_completed(tasks):
         result = await coro
         results.append(result)
@@ -570,26 +594,26 @@ Return ONLY a JSON object like:
   def _save_checkpoint(self, results: list[ArticleCategories]):
     """Save checkpoint for resume capability (JSON format)"""
     if not self.checkpoint_file:
-      cats_dir = Path(self.kb.knowledge_base_db).parent / "cats"
-      self.checkpoint_file = cats_dir / "checkpoint.json"
+      cats_dir = Path(self.kb.knowledge_base_db).parent / 'cats'
+      self.checkpoint_file = cats_dir / 'checkpoint.json'
 
     # Convert ArticleCategories dataclasses to dictionaries
     checkpoint_data = {
       'results': [asdict(r) for r in results],
       'dynamic_categories': list(self.dynamic_categories),
       'timestamp': datetime.now().isoformat(),
-      'version': '1.0'
+      'version': '1.0',
     }
 
     with open(self.checkpoint_file, 'w') as f:
       json.dump(checkpoint_data, f, indent=2)
 
-    self.logger.debug(f"Checkpoint saved: {len(results)} articles processed")
+    self.logger.debug(f'Checkpoint saved: {len(results)} articles processed')
 
   def load_checkpoint(self) -> list[ArticleCategories] | None:
     """Load checkpoint if exists (supports JSON and legacy pickle formats)"""
     # Try JSON format first
-    json_checkpoint = self.checkpoint_file or (Path(self.kb.knowledge_base_db).parent / "cats" / "checkpoint.json")
+    json_checkpoint = self.checkpoint_file or (Path(self.kb.knowledge_base_db).parent / 'cats' / 'checkpoint.json')
     if Path(json_checkpoint).exists():
       try:
         with open(json_checkpoint) as f:
@@ -601,23 +625,21 @@ Return ONLY a JSON object like:
           for r in results_data:
             if isinstance(r, dict):
               # Convert nested category dicts to CategoryResult objects
-              r['categories'] = [
-                CategoryResult(**c) if isinstance(c, dict) else c
-                for c in r.get('categories', [])
-              ]
+              r['categories'] = [CategoryResult(**c) if isinstance(c, dict) else c for c in r.get('categories', [])]
               results.append(ArticleCategories(**r))
             else:
               results.append(r)
-          self.logger.info(f"Loaded checkpoint: {len(results)} articles from JSON")
+          self.logger.info(f'Loaded checkpoint: {len(results)} articles from JSON')
           return results
       except (json.JSONDecodeError, OSError, KeyError, TypeError) as e:
-        self.logger.warning(f"Failed to load JSON checkpoint: {e}")
+        self.logger.warning(f'Failed to load JSON checkpoint: {e}')
 
     # Backward compatibility: try old pickle format
-    pkl_checkpoint = Path(self.kb.knowledge_base_db).parent / "cats" / "checkpoint.pkl"
+    pkl_checkpoint = Path(self.kb.knowledge_base_db).parent / 'cats' / 'checkpoint.pkl'
     if pkl_checkpoint.exists():
       try:
         import pickle
+
         with open(pkl_checkpoint, 'rb') as f:
           data = pickle.load(f)
           self.dynamic_categories = set(data.get('dynamic_categories', []))
@@ -626,12 +648,13 @@ Return ONLY a JSON object like:
           self._save_checkpoint(results)
           # Remove old pickle file
           pkl_checkpoint.unlink()
-          self.logger.info(f"Migrated checkpoint from pickle to JSON: {len(results)} articles")
+          self.logger.info(f'Migrated checkpoint from pickle to JSON: {len(results)} articles')
           return results
       except (OSError, KeyError, TypeError, ValueError) as e:
-        self.logger.warning(f"Failed to load/migrate pickle checkpoint: {e}")
+        self.logger.warning(f'Failed to load/migrate pickle checkpoint: {e}')
 
     return None
+
 
 def process_categorize(args: argparse.Namespace, logger) -> str:
   """
@@ -650,7 +673,7 @@ def process_categorize(args: argparse.Namespace, logger) -> str:
     return f"Error: Knowledgebase '{args.config_file}' not found"
 
   kb = KnowledgeBase(config_file)
-  logger.info(f"Processing categorization for: {kb.knowledge_base_name}")
+  logger.info(f'Processing categorization for: {kb.knowledge_base_name}')
 
   # Check if listing categories
   if hasattr(args, 'list_categories') and args.list_categories:
@@ -658,6 +681,7 @@ def process_categorize(args: argparse.Namespace, logger) -> str:
 
   # Run categorization
   return asyncio.run(categorize_async(args, kb, logger))
+
 
 async def categorize_async(args: argparse.Namespace, kb: KnowledgeBase, logger) -> str:
   """
@@ -678,25 +702,25 @@ async def categorize_async(args: argparse.Namespace, kb: KnowledgeBase, logger) 
   # Validate table name to prevent SQL injection
   if table_name not in ['docs', 'chunks']:
     conn.close()
-    return f"Error: Invalid table name: {table_name}"
+    return f'Error: Invalid table name: {table_name}'
 
   # Get all unique articles - using validated table name
   if table_name == 'docs':
-    cursor.execute("SELECT DISTINCT sourcedoc FROM docs")
+    cursor.execute('SELECT DISTINCT sourcedoc FROM docs')
   else:
-    cursor.execute("SELECT DISTINCT sourcedoc FROM chunks")
+    cursor.execute('SELECT DISTINCT sourcedoc FROM chunks')
   all_articles = [row[0] for row in cursor.fetchall()]
   conn.close()
 
-  logger.info(f"Found {len(all_articles)} articles in knowledgebase")
+  logger.info(f'Found {len(all_articles)} articles in knowledgebase')
 
   # Determine sample size
   if hasattr(args, 'sample') and args.sample:
-    articles = all_articles[:args.sample]
-    logger.info(f"Processing sample of {len(articles)} articles")
+    articles = all_articles[: args.sample]
+    logger.info(f'Processing sample of {len(articles)} articles')
   else:
     articles = all_articles
-    logger.info(f"Processing all {len(articles)} articles")
+    logger.info(f'Processing all {len(articles)} articles')
 
   # Setup categorizer
   sampling_config = (3, 3, 3)  # Default sampling
@@ -712,7 +736,7 @@ async def categorize_async(args: argparse.Namespace, kb: KnowledgeBase, logger) 
     confidence_threshold=getattr(args, 'confidence_threshold', 0.5),
     enable_deduplication=getattr(args, 'enable_deduplication', True),
     dedup_threshold=getattr(args, 'dedup_threshold', 85.0),
-    use_variable_categories=getattr(args, 'use_variable_categories', True)
+    use_variable_categories=getattr(args, 'use_variable_categories', True),
   )
 
   # Auto-resume from checkpoint unless --fresh
@@ -722,14 +746,11 @@ async def categorize_async(args: argparse.Namespace, kb: KnowledgeBase, logger) 
     if existing_results:
       processed_articles = {r.article_path for r in existing_results}
       articles = [a for a in articles if a not in processed_articles]
-      logger.info(f"Resuming from checkpoint: {len(existing_results)} already processed")
+      logger.info(f'Resuming from checkpoint: {len(existing_results)} already processed')
 
   # Process articles
   if articles:
-    results = await categorizer.process_all_articles(
-      articles,
-      max_concurrent=getattr(args, 'max_concurrent', 5)
-    )
+    results = await categorizer.process_all_articles(articles, max_concurrent=getattr(args, 'max_concurrent', 5))
     results = existing_results + results
   else:
     results = existing_results
@@ -742,42 +763,51 @@ async def categorize_async(args: argparse.Namespace, kb: KnowledgeBase, logger) 
 
     duplicates = categorizer.deduplicator.find_duplicates(list(all_categories))
     if duplicates:
-      logger.info(f"Found {len(duplicates)} groups of similar categories")
+      logger.info(f'Found {len(duplicates)} groups of similar categories')
       # Apply deduplication to each result's categories
       for result in results:
         category_names = [cat.name for cat in result.categories]
         deduplicated_names = categorizer.deduplicator.apply_to_results(category_names)
         # Update categories with deduplicated names
-        result.categories = [CategoryResult(name=name, confidence=next((cat.confidence for cat in result.categories if cat.name == name or name in deduplicated_names), 0.0)) for name in deduplicated_names]
+        result.categories = [
+          CategoryResult(
+            name=name,
+            confidence=next(
+              (cat.confidence for cat in result.categories if cat.name == name or name in deduplicated_names), 0.0
+            ),
+          )
+          for name in deduplicated_names
+        ]
         # Update primary category if it was changed
         if result.primary_category:
           deduplicated_primary = categorizer.deduplicator.apply_to_results([result.primary_category])
           result.primary_category = deduplicated_primary[0] if deduplicated_primary else result.primary_category
 
   # Save results
-  output_dir = Path(kb.knowledge_base_db).parent / "cats"
+  output_dir = Path(kb.knowledge_base_db).parent / 'cats'
   output_dir.mkdir(exist_ok=True)
 
   # Save JSON
-  output_file = output_dir / "categorization.json"
+  output_file = output_dir / 'categorization.json'
   with open(output_file, 'w') as f:
     json.dump([asdict(r) for r in results], f, indent=2)
 
   # Save CSV
-  csv_file = output_dir / "categorization.csv"
+  csv_file = output_dir / 'categorization.csv'
   with open(csv_file, 'w', newline='') as csvf:
     writer = csv.writer(csvf)
-    writer.writerow(['article', 'primary_category', 'all_categories',
-                     'confidence', 'processing_time', 'error'])
+    writer.writerow(['article', 'primary_category', 'all_categories', 'confidence', 'processing_time', 'error'])
     for r in results:
-      writer.writerow([
-        r.article_path,
-        r.primary_category,
-        ', '.join([c.name for c in r.categories]),
-        r.categories[0].confidence if r.categories else 0,
-        r.processing_time,
-        r.error
-      ])
+      writer.writerow(
+        [
+          r.article_path,
+          r.primary_category,
+          ', '.join([c.name for c in r.categories]),
+          r.categories[0].confidence if r.categories else 0,
+          r.processing_time,
+          r.error,
+        ]
+      )
 
   # Generate summary
   successful = len([r for r in results if not r.error])
@@ -802,22 +832,24 @@ Results saved to:
 """
 
   # Save summary
-  summary_file = output_dir / "summary.txt"
+  summary_file = output_dir / 'summary.txt'
   with open(summary_file, 'w') as f:
     f.write(summary)
 
   # Import to database if requested
   if hasattr(args, 'import_to_db') and args.import_to_db:
     from categorize.import_to_db import import_categories
+
     import_result = import_categories(kb, results)
-    summary += f"\n{import_result}"
+    summary += f'\n{import_result}'
 
   logger.info(summary)
   return summary
 
+
 def list_categories(kb: KnowledgeBase, logger) -> str:
   """List existing categories for a knowledgebase"""
-  cats_file = Path(kb.knowledge_base_db).parent / "cats" / "categorization.json"
+  cats_file = Path(kb.knowledge_base_db).parent / 'cats' / 'categorization.json'
 
   if not cats_file.exists():
     return "No categorization results found. Run 'customkb categorize' first."
@@ -835,13 +867,14 @@ def list_categories(kb: KnowledgeBase, logger) -> str:
   # Sort by count
   sorted_cats = sorted(category_counts.items(), key=lambda x: x[1], reverse=True)
 
-  output = f"Categories in {kb.knowledge_base_name}:\n"
-  output += "=" * 50 + "\n"
+  output = f'Categories in {kb.knowledge_base_name}:\n'
+  output += '=' * 50 + '\n'
   for cat, count in sorted_cats:
-    output += f"{cat:30} {count:5} articles\n"
+    output += f'{cat:30} {count:5} articles\n'
 
-  output += f"\nTotal: {len(sorted_cats)} unique categories"
+  output += f'\nTotal: {len(sorted_cats)} unique categories'
 
   return output
 
-#fin
+
+# fin

@@ -10,7 +10,6 @@ import tempfile
 from unittest.mock import MagicMock, Mock, patch
 
 import numpy as np
-import pytest
 
 from embedding.bm25_manager import (
   build_bm25_index,
@@ -49,6 +48,7 @@ class TestBM25Manager:
   def teardown_method(self):
     """Clean up test fixtures."""
     import shutil
+
     shutil.rmtree(self.temp_dir, ignore_errors=True)
 
   def create_test_database(self):
@@ -57,7 +57,7 @@ class TestBM25Manager:
     cursor = conn.cursor()
 
     # Create table with BM25 columns
-    cursor.execute('''
+    cursor.execute("""
       CREATE TABLE docs (
         id INTEGER PRIMARY KEY,
         sid INTEGER,
@@ -71,25 +71,60 @@ class TestBM25Manager:
         bm25_tokens TEXT,
         doc_length INTEGER DEFAULT 0
       )
-    ''')
+    """)
 
     # Insert test data
     test_data = [
-      (1, 0, 'doc1.txt', 'Machine learning is great', 'machine learning great',
-       1, 'en', '{}', 1, 'machine learning great', 3),
-      (2, 1, 'doc1.txt', 'Deep learning algorithms work well', 'deep learning algorithms work well',
-       1, 'en', '{}', 1, 'deep learning algorithms work well', 5),
-      (3, 0, 'doc2.txt', 'Natural language processing', 'natural language processing',
-       1, 'en', '{}', 1, 'natural language processing', 3),
-      (4, 1, 'doc2.txt', 'Text classification tasks', 'text classification tasks',
-       1, 'en', '{}', 0, '', 0)  # Unprocessed entry
+      (1, 0, 'doc1.txt', 'Machine learning is great', 'machine learning great', 1, 'en', '{}', 1, 'machine learning great', 3),
+      (
+        2,
+        1,
+        'doc1.txt',
+        'Deep learning algorithms work well',
+        'deep learning algorithms work well',
+        1,
+        'en',
+        '{}',
+        1,
+        'deep learning algorithms work well',
+        5,
+      ),
+      (
+        3,
+        0,
+        'doc2.txt',
+        'Natural language processing',
+        'natural language processing',
+        1,
+        'en',
+        '{}',
+        1,
+        'natural language processing',
+        3,
+      ),
+      (
+        4,
+        1,
+        'doc2.txt',
+        'Text classification tasks',
+        'text classification tasks',
+        1,
+        'en',
+        '{}',
+        0,
+        '',
+        0,
+      ),  # Unprocessed entry
     ]
 
-    cursor.executemany('''
+    cursor.executemany(
+      """
       INSERT INTO docs (id, sid, sourcedoc, originaltext, embedtext, embedded,
                        language, metadata, keyphrase_processed, bm25_tokens, doc_length)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ''', test_data)
+    """,
+      test_data,
+    )
 
     conn.commit()
     conn.close()
@@ -99,7 +134,7 @@ class TestBM25Manager:
     self.mock_kb.sql_cursor.fetchall.return_value = [
       (1, 'machine learning great', 3),
       (2, 'deep learning algorithms work well', 5),
-      (3, 'natural language processing', 3)
+      (3, 'natural language processing', 3),
     ]
     self.mock_kb.sql_cursor.fetchone.return_value = [1]  # For rebuild check
 
@@ -133,10 +168,13 @@ class TestBM25Manager:
     # Verify
     assert result == mock_bm25_instance
     mock_bm25.assert_called_once_with(
-      [['machine', 'learning', 'great'],
-       ['deep', 'learning', 'algorithms', 'work', 'well'],
-       ['natural', 'language', 'processing']],
-      k1=1.2, b=0.75
+      [
+        ['machine', 'learning', 'great'],
+        ['deep', 'learning', 'algorithms', 'work', 'well'],
+        ['natural', 'language', 'processing'],
+      ],
+      k1=1.2,
+      b=0.75,
     )
     # Verify NPZ save was called
     mock_savez.assert_called_once()
@@ -154,7 +192,7 @@ class TestBM25Manager:
   def test_build_bm25_index_database_error(self):
     """Test BM25 index building with database error."""
     # Mock database error
-    self.mock_kb.sql_cursor.execute.side_effect = sqlite3.Error("DB error")
+    self.mock_kb.sql_cursor.execute.side_effect = sqlite3.Error('DB error')
 
     result = build_bm25_index(self.mock_kb)
     assert result is None
@@ -162,6 +200,7 @@ class TestBM25Manager:
   @patch('os.path.exists')
   def test_load_bm25_index_legacy_pickle_detected(self, mock_exists):
     """Test that legacy pickle format triggers error message."""
+
     # Setup - simulate old pickle file exists but no JSON metadata
     def exists_side_effect(path):
       if path.endswith('.bm25'):
@@ -234,11 +273,7 @@ class TestBM25Manager:
     mock_bm25 = Mock()
     mock_bm25.get_scores.return_value = [0.8, 0.6, 0.3, 0.1]
 
-    bm25_data = {
-      'bm25': mock_bm25,
-      'doc_ids': [1, 2, 3, 4],
-      'total_docs': 4
-    }
+    bm25_data = {'bm25': mock_bm25, 'doc_ids': [1, 2, 3, 4], 'total_docs': 4}
 
     # Execute
     result = get_bm25_scores(self.mock_kb, 'machine learning algorithms', bm25_data)
@@ -265,11 +300,7 @@ class TestBM25Manager:
     mock_bm25 = Mock()
     mock_bm25.get_scores.return_value = [0.5, 0.0, -0.1, 0.3]
 
-    bm25_data = {
-      'bm25': mock_bm25,
-      'doc_ids': [1, 2, 3, 4],
-      'total_docs': 4
-    }
+    bm25_data = {'bm25': mock_bm25, 'doc_ids': [1, 2, 3, 4], 'total_docs': 4}
 
     result = get_bm25_scores(self.mock_kb, 'test query', bm25_data)
     expected = [(1, 0.5), (4, 0.3)]  # Only positive scores
@@ -288,7 +319,7 @@ class TestBM25Manager:
     bm25_data = {
       'bm25': mock_bm25,
       'doc_ids': list(range(1, 11)),  # 10 documents
-      'total_docs': 10
+      'total_docs': 10,
     }
 
     # Test with explicit limit
@@ -308,11 +339,7 @@ class TestBM25Manager:
     scores = [0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1, 0.05]
     mock_bm25.get_scores.return_value = scores
 
-    bm25_data = {
-      'bm25': mock_bm25,
-      'doc_ids': list(range(1, 11)),
-      'total_docs': 10
-    }
+    bm25_data = {'bm25': mock_bm25, 'doc_ids': list(range(1, 11)), 'total_docs': 10}
 
     # Test without explicit limit (should use KB limit)
     result = get_bm25_scores(self.mock_kb, 'test query', bm25_data)
@@ -331,11 +358,7 @@ class TestBM25Manager:
     scores = [0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1, 0.05]
     mock_bm25.get_scores.return_value = scores
 
-    bm25_data = {
-      'bm25': mock_bm25,
-      'doc_ids': list(range(1, 11)),
-      'total_docs': 10
-    }
+    bm25_data = {'bm25': mock_bm25, 'doc_ids': list(range(1, 11)), 'total_docs': 10}
 
     # Test with unlimited results
     result = get_bm25_scores(self.mock_kb, 'test query', bm25_data)
@@ -353,11 +376,7 @@ class TestBM25Manager:
     scores = [0.9, 0.8, 0.7]  # Only 3 scores
     mock_bm25.get_scores.return_value = scores
 
-    bm25_data = {
-      'bm25': mock_bm25,
-      'doc_ids': [1, 2, 3],
-      'total_docs': 3
-    }
+    bm25_data = {'bm25': mock_bm25, 'doc_ids': [1, 2, 3], 'total_docs': 3}
 
     # Test with limit larger than available results
     result = get_bm25_scores(self.mock_kb, 'test query', bm25_data, max_results=10)
@@ -375,11 +394,7 @@ class TestBM25Manager:
     scores = [0.9] * 1000  # 1000 scores
     mock_bm25.get_scores.return_value = scores
 
-    bm25_data = {
-      'bm25': mock_bm25,
-      'doc_ids': list(range(1, 1001)),
-      'total_docs': 1000
-    }
+    bm25_data = {'bm25': mock_bm25, 'doc_ids': list(range(1, 1001)), 'total_docs': 1000}
 
     # Test with limit that triggers logging
     result = get_bm25_scores(self.mock_kb, 'test query', bm25_data, max_results=100)
@@ -429,6 +444,7 @@ class TestBM25Manager:
     result = ensure_bm25_index(self.mock_kb)
     assert result is False
 
+
 class TestBM25Integration:
   """Integration tests for BM25 with real data."""
 
@@ -439,18 +455,11 @@ class TestBM25Integration:
   def teardown_method(self):
     """Clean up integration test fixtures."""
     import shutil
+
     shutil.rmtree(self.temp_dir, ignore_errors=True)
 
-  @pytest.mark.skip(reason="Decorator patches BM25Okapi but load uses BM25Okapi.__new__(BM25Okapi) requiring real class")
-  @patch('embedding.bm25_manager.BM25Okapi')
-  def test_end_to_end_bm25_workflow(self, mock_bm25_class):
-    """Test complete BM25 workflow from build to search with NPZ format.
-
-    SKIPPED: The test patches BM25Okapi at decorator level which affects both
-    build and load phases. But load_bm25_index uses BM25Okapi.__new__(BM25Okapi)
-    which requires a real class, not a Mock object. Testing these phases separately
-    is recommended instead of this integration test.
-    """
+  def test_end_to_end_bm25_workflow(self):
+    """Test complete BM25 workflow from build to search with NPZ format."""
     # Setup mock BM25 with required attributes
     mock_bm25 = Mock()
     mock_bm25.get_scores.return_value = [0.9, 0.7, 0.3]
@@ -458,7 +467,6 @@ class TestBM25Integration:
     mock_bm25.doc_len = [3, 3, 3]
     mock_bm25.avgdl = 3.0
     mock_bm25.corpus_size = 3
-    mock_bm25_class.return_value = mock_bm25
 
     # Setup mock KB
     kb = Mock()
@@ -473,56 +481,61 @@ class TestBM25Integration:
     kb.sql_cursor.fetchall.return_value = [
       (1, 'machine learning algorithms', 3),
       (2, 'deep learning networks', 3),
-      (3, 'natural language processing', 3)
+      (3, 'natural language processing', 3),
     ]
 
-    # Build index with NPZ format
-    with patch('builtins.open', create=True), \
-         patch('embedding.bm25_manager.np.savez'), \
-         patch('embedding.bm25_manager.json.dump'):
+    # Build phase: patch BM25Okapi only during build
+    with (
+      patch('embedding.bm25_manager.BM25Okapi', return_value=mock_bm25),
+      patch('builtins.open', create=True),
+      patch('embedding.bm25_manager.np.savez'),
+      patch('embedding.bm25_manager.json.dump'),
+    ):
       bm25_index = build_bm25_index(kb)
       assert bm25_index is not None
 
-    # Load index (simulate NPZ format)
-    mock_data = {
-      'bm25': mock_bm25,
-      'doc_ids': [1, 2, 3],
-      'total_docs': 3,
-      'total_tokens': 9,
-      'k1': 1.2,
-      'b': 0.75,
-      'version': '2.0'
-    }
-
-    # Mock NPZ file contents - must be numpy arrays since code calls .tolist()
+    # Load phase: mock np.load and json.load to return pre-built data
+    # (BM25Okapi is NOT patched here, so __new__ works on the real class)
     mock_npz = {
       'idf_terms': np.array(['machine', 'learning', 'algorithms']),
       'idf_scores': np.array([1.0, 1.0, 1.0]),
       'doc_len': np.array([3, 3, 3]),
-      'doc_ids': np.array([1, 2, 3])
+      'doc_ids': np.array([1, 2, 3]),
+      'doc_freqs': np.array([{'machine': 1}, {'learning': 2}, {'algorithms': 1}], dtype=object),
     }
 
-    with patch('os.path.exists', return_value=True), \
-         patch('embedding.bm25_manager.np.load', return_value=mock_npz), \
-         patch('builtins.open', create=True), \
-         patch('embedding.bm25_manager.json.load', return_value={
-           'total_docs': 3,
-           'total_tokens': 9,
-           'avgdl': 3.0,
-           'corpus_size': 3,
-           'k1': 1.2,
-           'b': 0.75,
-           'version': '2.0'
-         }):
+    with (
+      patch('os.path.exists', return_value=True),
+      patch('embedding.bm25_manager.np.load', return_value=mock_npz),
+      patch('builtins.open', create=True),
+      patch(
+        'embedding.bm25_manager.json.load',
+        return_value={
+          'total_docs': 3,
+          'total_tokens': 9,
+          'avgdl': 3.0,
+          'corpus_size': 3,
+          'k1': 1.2,
+          'b': 0.75,
+          'version': '2.0',
+        },
+      ),
+    ):
       loaded_data = load_bm25_index(kb)
       assert loaded_data is not None
       assert loaded_data['total_docs'] == 3
 
-    # Test scoring
-    with patch('embedding.bm25_manager.tokenize_for_bm25',
-               return_value=('machine learning', 2)):
-      scores = get_bm25_scores(kb, 'machine learning', mock_data)
+    # Score phase: use loaded_data from above
+    mock_score_data = {
+      'bm25': mock_bm25,
+      'doc_ids': [1, 2, 3],
+      'total_docs': 3,
+    }
+
+    with patch('embedding.bm25_manager.tokenize_for_bm25', return_value=('machine learning', 2)):
+      scores = get_bm25_scores(kb, 'machine learning', mock_score_data)
       expected = [(1, 0.9), (2, 0.7), (3, 0.3)]
       assert scores == expected
 
-#fin
+
+# fin

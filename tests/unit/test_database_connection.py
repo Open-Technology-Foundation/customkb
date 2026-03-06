@@ -56,7 +56,7 @@ class TestDatabaseConnection(unittest.TestCase):
     self.assertIsNotNone(self.kb.sql_cursor)
 
     # Verify pragmas set
-    self.kb.sql_cursor.execute("PRAGMA foreign_keys")
+    self.kb.sql_cursor.execute('PRAGMA foreign_keys')
     result = self.kb.sql_cursor.fetchone()
     self.assertEqual(result[0], 1)  # Foreign keys enabled
 
@@ -65,12 +65,12 @@ class TestDatabaseConnection(unittest.TestCase):
 
   def test_connect_to_database_error(self):
     """Test database connection error handling."""
-    self.kb.knowledge_base_db = "/invalid/path/database.db"
+    self.kb.knowledge_base_db = '/invalid/path/database.db'
 
     with self.assertRaises(CustomConnectionError) as cm:
       connect_to_database(self.kb)
 
-    self.assertIn("Failed to connect to database", str(cm.exception))
+    self.assertIn('Failed to connect to database', str(cm.exception))
 
   def test_create_tables_basic(self):
     """Test basic table creation."""
@@ -82,18 +82,13 @@ class TestDatabaseConnection(unittest.TestCase):
     create_tables(self.kb)
 
     # Verify main table exists
-    self.kb.sql_cursor.execute(
-      "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
-      (self.kb.table_name,)
-    )
+    self.kb.sql_cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?", (self.kb.table_name,))
     result = self.kb.sql_cursor.fetchone()
     self.assertIsNotNone(result)
     self.assertEqual(result[0], self.kb.table_name)
 
     # Verify file_metadata table exists
-    self.kb.sql_cursor.execute(
-      "SELECT name FROM sqlite_master WHERE type='table' AND name='file_metadata'"
-    )
+    self.kb.sql_cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='file_metadata'")
     result = self.kb.sql_cursor.fetchone()
     self.assertIsNotNone(result)
 
@@ -109,9 +104,7 @@ class TestDatabaseConnection(unittest.TestCase):
     create_tables(self.kb)
 
     # Verify categories table exists
-    self.kb.sql_cursor.execute(
-      "SELECT name FROM sqlite_master WHERE type='table' AND name='categories'"
-    )
+    self.kb.sql_cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='categories'")
     result = self.kb.sql_cursor.fetchone()
     self.assertIsNotNone(result)
 
@@ -122,12 +115,12 @@ class TestDatabaseConnection(unittest.TestCase):
     """Test table creation error handling."""
     self.kb.sql_connection = sqlite3.connect(self.db_path)
     self.kb.sql_cursor = Mock()
-    self.kb.sql_cursor.execute.side_effect = sqlite3.Error("Table creation failed")
+    self.kb.sql_cursor.execute.side_effect = sqlite3.Error('Table creation failed')
 
     with self.assertRaises(DatabaseError) as cm:
       create_tables(self.kb)
 
-    self.assertIn("Failed to create tables", str(cm.exception))
+    self.assertIn('Failed to create tables', str(cm.exception))
 
     # Clean up
     self.kb.sql_connection.close()
@@ -166,7 +159,7 @@ class TestDatabaseConnection(unittest.TestCase):
     # Verify data was committed
     conn = sqlite3.connect(self.db_path)
     cursor = conn.cursor()
-    cursor.execute(f"SELECT COUNT(*) FROM {self.kb.table_name}")
+    cursor.execute(f'SELECT COUNT(*) FROM {self.kb.table_name}')
     count = cursor.fetchone()[0]
     conn.close()
 
@@ -184,7 +177,7 @@ class TestDatabaseConnection(unittest.TestCase):
       self.assertIsNotNone(kb.sql_cursor)
 
       # Perform operation
-      kb.sql_cursor.execute(f"SELECT COUNT(*) FROM {kb.table_name}")
+      kb.sql_cursor.execute(f'SELECT COUNT(*) FROM {kb.table_name}')
       result = kb.sql_cursor.fetchone()
       self.assertIsNotNone(result)
 
@@ -200,7 +193,7 @@ class TestDatabaseConnection(unittest.TestCase):
 
     with self.assertRaises(ValueError), database_connection(self.kb):
       # Simulate error during operation
-      raise ValueError("Test error")
+      raise ValueError('Test error')
 
     # Verify connection still closed on error (since we opened it)
     self.assertIsNone(self.kb.sql_connection)
@@ -230,13 +223,13 @@ class TestDatabaseConnection(unittest.TestCase):
       self.assertIsNotNone(cursor)
 
       # Create test table
-      cursor.execute("CREATE TABLE test (id INTEGER PRIMARY KEY)")
-      cursor.execute("INSERT INTO test (id) VALUES (1)")
+      cursor.execute('CREATE TABLE test (id INTEGER PRIMARY KEY)')
+      cursor.execute('INSERT INTO test (id) VALUES (1)')
 
     # Verify changes committed and connection closed
     conn2 = sqlite3.connect(self.db_path)
     cursor2 = conn2.cursor()
-    cursor2.execute("SELECT COUNT(*) FROM test")
+    cursor2.execute('SELECT COUNT(*) FROM test')
     count = cursor2.fetchone()[0]
     conn2.close()
 
@@ -244,26 +237,26 @@ class TestDatabaseConnection(unittest.TestCase):
 
   def test_sqlite_connection_invalid_path(self):
     """Test sqlite_connection with invalid path."""
-    with self.assertRaises(CustomConnectionError) as cm, sqlite_connection("/nonexistent/database.db") as (conn, cursor):
+    with self.assertRaises(CustomConnectionError) as cm, sqlite_connection('/nonexistent/database.db') as (conn, cursor):
       pass
 
-    self.assertIn("Database not found", str(cm.exception))
+    self.assertIn('Database not found', str(cm.exception))
 
   def test_sqlite_connection_error_rollback(self):
     """Test sqlite_connection rollback on error."""
     with sqlite_connection(self.db_path) as (conn, cursor):
-      cursor.execute("CREATE TABLE test (id INTEGER PRIMARY KEY)")
+      cursor.execute('CREATE TABLE test (id INTEGER PRIMARY KEY)')
 
     # Try operation that should fail and rollback
     with self.assertRaises(DatabaseError), sqlite_connection(self.db_path) as (conn, cursor):
-      cursor.execute("INSERT INTO test (id) VALUES (1)")
+      cursor.execute('INSERT INTO test (id) VALUES (1)')
       # Force error
-      cursor.execute("INVALID SQL")
+      cursor.execute('INVALID SQL')
 
     # Verify transaction was rolled back
     conn2 = sqlite3.connect(self.db_path)
     cursor2 = conn2.cursor()
-    cursor2.execute("SELECT COUNT(*) FROM test")
+    cursor2.execute('SELECT COUNT(*) FROM test')
     count = cursor2.fetchone()[0]
     conn2.close()
 
@@ -283,9 +276,7 @@ class TestDatabaseConnection(unittest.TestCase):
     connect_to_database(self.kb)
 
     # Add some test data
-    self.kb.sql_cursor.execute(
-      f"INSERT INTO {self.kb.table_name} (sid, sourcedoc) VALUES (1, 'test.txt')"
-    )
+    self.kb.sql_cursor.execute(f"INSERT INTO {self.kb.table_name} (sid, sourcedoc) VALUES (1, 'test.txt')")
     self.kb.sql_connection.commit()
 
     info = get_connection_info(self.kb)
@@ -301,7 +292,7 @@ class TestDatabaseConnection(unittest.TestCase):
     """Test connection info with database error."""
     self.kb.sql_connection = Mock()
     self.kb.sql_cursor = Mock()
-    self.kb.sql_cursor.execute.side_effect = sqlite3.Error("Query failed")
+    self.kb.sql_cursor.execute.side_effect = sqlite3.Error('Query failed')
 
     info = get_connection_info(self.kb)
 
@@ -317,12 +308,12 @@ class TestDatabaseConnection(unittest.TestCase):
     connect_to_database(self.kb)
 
     # Verify connection logged
-    mock_logger.info.assert_called_with("Database connection established successfully")
+    mock_logger.info.assert_called_with('Database connection established successfully')
 
     close_database(self.kb)
 
     # Verify closure logged
-    mock_logger.info.assert_called_with("Database connection closed")
+    mock_logger.info.assert_called_with('Database connection closed')
 
   def test_pragma_settings(self):
     """Test that all pragmas are properly set."""
@@ -335,11 +326,11 @@ class TestDatabaseConnection(unittest.TestCase):
       'synchronous': 1,  # NORMAL
       'cache_size': -64000,
       'temp_store': 2,  # MEMORY
-      'mmap_size': 268435456
+      'mmap_size': 268435456,
     }
 
     for pragma, expected in pragmas.items():
-      self.kb.sql_cursor.execute(f"PRAGMA {pragma}")
+      self.kb.sql_cursor.execute(f'PRAGMA {pragma}')
       result = self.kb.sql_cursor.fetchone()
       if isinstance(expected, str):
         self.assertEqual(result[0].lower(), expected.lower())
@@ -352,4 +343,4 @@ class TestDatabaseConnection(unittest.TestCase):
 if __name__ == '__main__':
   unittest.main()
 
-#fin
+# fin

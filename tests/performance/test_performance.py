@@ -18,8 +18,8 @@ class TestDatabasePerformance:
   def test_large_file_processing_performance(self, temp_data_manager, mock_nltk_data):
     """Test performance of processing large files."""
     # Create large test file (simulate large document)
-    large_content = "This is a test sentence. " * 10000  # ~250KB of text
-    large_file = temp_data_manager.create_temp_text_file(large_content, "large_doc.txt")
+    large_content = 'This is a test sentence. ' * 10000  # ~250KB of text
+    large_file = temp_data_manager.create_temp_text_file(large_content, 'large_doc.txt')
 
     # Create config
     config_content = """[DEFAULT]
@@ -53,20 +53,21 @@ db_max_tokens = 200
 
     # Performance assertions
     assert processing_time < 10.0  # Should process within 10 seconds
-    assert "files added to database" in result
+    assert 'files added to database' in result
 
     # Check chunk count (should create multiple chunks)
     kb = KnowledgeBase(config_file)
     import sqlite3
+
     conn = sqlite3.connect(kb.knowledge_base_db)
     cursor = conn.cursor()
-    cursor.execute("SELECT COUNT(*) FROM docs")
+    cursor.execute('SELECT COUNT(*) FROM docs')
     chunk_count = cursor.fetchone()[0]
     conn.close()
 
     # Should create multiple chunks from large file
     assert chunk_count > 10
-    print(f"Processed large file in {processing_time:.2f}s, created {chunk_count} chunks")
+    print(f'Processed large file in {processing_time:.2f}s, created {chunk_count} chunks')
 
   def test_many_small_files_performance(self, temp_data_manager, mock_nltk_data):
     """Test performance of processing many small files."""
@@ -75,8 +76,8 @@ db_max_tokens = 200
     test_files = []
 
     for i in range(num_files):
-      content = f"This is test document {i}. It contains some sample content for testing."
-      file_path = temp_data_manager.create_temp_text_file(content, f"doc_{i:03d}.txt")
+      content = f'This is test document {i}. It contains some sample content for testing.'
+      file_path = temp_data_manager.create_temp_text_file(content, f'doc_{i:03d}.txt')
       test_files.append(file_path)
 
     config_content = """[DEFAULT]
@@ -109,13 +110,13 @@ db_max_tokens = 50
 
     # Performance assertions
     assert processing_time < 15.0  # Should process within 15 seconds
-    assert f"{num_files} files added to database" in result
+    assert f'{num_files} files added to database' in result
 
     # Check processing rate
     files_per_second = num_files / processing_time
     assert files_per_second > 5  # Should process at least 5 files per second
 
-    print(f"Processed {num_files} files in {processing_time:.2f}s ({files_per_second:.1f} files/sec)")
+    print(f'Processed {num_files} files in {processing_time:.2f}s ({files_per_second:.1f} files/sec)')
 
   def test_database_memory_usage(self, temp_data_manager, mock_nltk_data):
     """Test memory usage during database operations."""
@@ -127,8 +128,8 @@ db_max_tokens = 50
     # Create moderate-sized test data
     test_files = []
     for i in range(20):
-      content = "Sample content for memory testing. " * 1000  # ~35KB per file
-      file_path = temp_data_manager.create_temp_text_file(content, f"memory_test_{i}.txt")
+      content = 'Sample content for memory testing. ' * 1000  # ~35KB per file
+      file_path = temp_data_manager.create_temp_text_file(content, f'memory_test_{i}.txt')
       test_files.append(file_path)
 
     config_content = """[DEFAULT]
@@ -160,7 +161,7 @@ db_max_tokens = 200
     # Memory should not increase excessively (less than 100MB for this test)
     assert memory_increase < 100 * 1024 * 1024
 
-    print(f"Memory increase: {memory_increase / 1024 / 1024:.1f} MB")
+    print(f'Memory increase: {memory_increase / 1024 / 1024:.1f} MB')
 
 
 @pytest.mark.performance
@@ -176,7 +177,7 @@ class TestEmbeddingPerformance:
     kb = KnowledgeBase(temp_config_file)
 
     # Test with various batch sizes
-    test_chunks = [f"Test chunk {i} with some sample content" for i in range(500)]
+    test_chunks = [f'Test chunk {i} with some sample content' for i in range(500)]
 
     # Test batch size calculation performance
     start_time = time.time()
@@ -189,7 +190,7 @@ class TestEmbeddingPerformance:
     assert calc_time < 1.0  # Should calculate quickly
     assert batch_size >= 1
 
-    print(f"Batch size calculation: {calc_time:.4f}s for 100 iterations")
+    print(f'Batch size calculation: {calc_time:.4f}s for 100 iterations')
 
   def test_embedding_cache_performance(self, temp_data_manager):
     """Test embedding cache read/write performance."""
@@ -202,7 +203,7 @@ class TestEmbeddingPerformance:
       start_time = time.time()
 
       for i, embedding in enumerate(test_embeddings):
-        save_embedding_to_cache(f"text_{i}", "test-model", embedding)
+        save_embedding_to_cache(f'text_{i}', 'test-model', embedding)
 
       write_time = time.time() - start_time
 
@@ -211,7 +212,7 @@ class TestEmbeddingPerformance:
 
       hits = 0
       for i in range(len(test_embeddings)):
-        result = get_cached_embedding(f"text_{i}", "test-model")
+        result = get_cached_embedding(f'text_{i}', 'test-model')
         if result is not None:
           hits += 1
 
@@ -219,14 +220,14 @@ class TestEmbeddingPerformance:
 
       # Performance assertions
       assert write_time < 5.0  # Should write 1000 embeddings within 5 seconds
-      assert read_time < 2.0   # Should read 1000 embeddings within 2 seconds
+      assert read_time < 2.0  # Should read 1000 embeddings within 2 seconds
 
       write_rate = len(test_embeddings) / write_time
       read_rate = len(test_embeddings) / read_time
 
-      print(f"Cache write rate: {write_rate:.1f} embeddings/sec")
-      print(f"Cache read rate: {read_rate:.1f} embeddings/sec")
-      print(f"Cache hit rate: {hits}/{len(test_embeddings)}")
+      print(f'Cache write rate: {write_rate:.1f} embeddings/sec')
+      print(f'Cache read rate: {read_rate:.1f} embeddings/sec')
+      print(f'Cache hit rate: {hits}/{len(test_embeddings)}')
 
 
 @pytest.mark.performance
@@ -246,7 +247,7 @@ class TestQueryPerformance:
       mock_faiss_index.ntotal = size
       mock_faiss_index.search.return_value = (
         [np.random.random(50).tolist()],  # distances
-        [list(range(50))]                  # indices
+        [list(range(50))],  # indices
       )
 
       # Measure search time
@@ -260,7 +261,7 @@ class TestQueryPerformance:
       # Search should be fast regardless of index size
       assert search_time < 0.1  # Should search within 100ms
 
-      print(f"Vector search with {size} docs: {search_time:.4f}s")
+      print(f'Vector search with {size} docs: {search_time:.4f}s')
 
   def test_context_building_performance(self, temp_config_file):
     """Test performance of context string building."""
@@ -273,9 +274,7 @@ class TestQueryPerformance:
     large_reference = []
     for i in range(1000):
       # [rid, rsrc, rsid, originaltext, distance, metadata]
-      large_reference.append([
-        i, f"doc_{i}.txt", i % 10, f"Content chunk {i} with some text", 0.8, '{}'
-      ])
+      large_reference.append([i, f'doc_{i}.txt', i % 10, f'Content chunk {i} with some text', 0.8, '{}'])
 
     # Measure context building time
     start_time = time.time()
@@ -291,8 +290,8 @@ class TestQueryPerformance:
     # Check context size
     context_size_kb = len(context) / 1024
 
-    print(f"Built context from {len(large_reference)} references in {build_time:.4f}s")
-    print(f"Context size: {context_size_kb:.1f} KB")
+    print(f'Built context from {len(large_reference)} references in {build_time:.4f}s')
+    print(f'Context size: {context_size_kb:.1f} KB')
 
   def test_concurrent_query_performance(self, temp_config_file, mock_faiss_index):
     """Test performance under concurrent query load."""
@@ -306,9 +305,7 @@ class TestQueryPerformance:
     # Mock database connection
     with patch.object(kb, 'sql_cursor') as mock_cursor:
       mock_cursor.execute.return_value = None
-      mock_cursor.fetchall.return_value = [
-        (1, 0, "test.txt", "Sample content", '{}')
-      ]
+      mock_cursor.fetchall.return_value = [(1, 0, 'test.txt', 'Sample content', '{}')]
 
       async def run_concurrent_queries():
         # Create multiple query batches
@@ -330,12 +327,13 @@ class TestQueryPerformance:
         assert len(results) == 20
 
         throughput = (len(batches) * 10) / total_time  # docs per second
-        print(f"Concurrent query throughput: {throughput:.1f} docs/sec")
+        print(f'Concurrent query throughput: {throughput:.1f} docs/sec')
 
         return total_time
 
       # Run the async test
       import asyncio
+
       asyncio.run(run_concurrent_queries())
 
 
@@ -350,7 +348,7 @@ class TestMemoryUsagePatterns:
     process = psutil.Process()
 
     # Monitor memory during large text processing
-    large_texts = ["Sample text content " * 10000 for _ in range(100)]
+    large_texts = ['Sample text content ' * 10000 for _ in range(100)]
 
     initial_memory = process.memory_info().rss
 
@@ -372,7 +370,7 @@ class TestMemoryUsagePatterns:
     # Memory increase should be reasonable (less than 500MB)
     assert memory_increase < 500 * 1024 * 1024
 
-    print(f"Memory increase during text processing: {memory_increase / 1024 / 1024:.1f} MB")
+    print(f'Memory increase during text processing: {memory_increase / 1024 / 1024:.1f} MB')
 
   def test_memory_cleanup_after_operations(self, temp_data_manager):
     """Test that memory is properly cleaned up after operations."""
@@ -384,7 +382,7 @@ class TestMemoryUsagePatterns:
     # Perform memory-intensive operations
     for _i in range(10):
       # Create and process large data structures
-      large_data = {f"key_{j}": [k] * 1000 for j in range(1000) for k in range(100)}
+      large_data = {f'key_{j}': [k] * 1000 for j in range(1000) for k in range(100)}
 
       # Process the data
       processed = {k: sum(v) for k, v in large_data.items()}
@@ -402,7 +400,7 @@ class TestMemoryUsagePatterns:
     # Memory should not grow significantly after cleanup
     assert memory_change < 100 * 1024 * 1024  # Less than 100MB growth
 
-    print(f"Memory change after operations and cleanup: {memory_change / 1024 / 1024:.1f} MB")
+    print(f'Memory change after operations and cleanup: {memory_change / 1024 / 1024:.1f} MB')
 
 
 @pytest.mark.performance
@@ -422,8 +420,8 @@ db_max_tokens = 20
     config_file = temp_data_manager.create_temp_config(config_content)
 
     # Create file that will generate many chunks
-    large_content = " ".join([f"Sentence {i} with unique content." for i in range(10000)])
-    large_file = temp_data_manager.create_temp_text_file(large_content, "max_chunks.txt")
+    large_content = ' '.join([f'Sentence {i} with unique content.' for i in range(10000)])
+    large_file = temp_data_manager.create_temp_text_file(large_content, 'max_chunks.txt')
 
     from config.config_manager import KnowledgeBase
     from database.db_manager import process_database
@@ -448,9 +446,10 @@ db_max_tokens = 20
     # Check chunk count
     kb = KnowledgeBase(config_file)
     import sqlite3
+
     conn = sqlite3.connect(kb.knowledge_base_db)
     cursor = conn.cursor()
-    cursor.execute("SELECT COUNT(*) FROM docs")
+    cursor.execute('SELECT COUNT(*) FROM docs')
     chunk_count = cursor.fetchone()[0]
     conn.close()
 
@@ -459,7 +458,7 @@ db_max_tokens = 20
     assert processing_time < 30.0  # Should complete within 30 seconds
 
     chunks_per_second = chunk_count / processing_time
-    print(f"Processed {chunk_count} chunks in {processing_time:.2f}s ({chunks_per_second:.1f} chunks/sec)")
+    print(f'Processed {chunk_count} chunks in {processing_time:.2f}s ({chunks_per_second:.1f} chunks/sec)')
 
   def test_query_response_time_with_large_context(self, temp_config_file):
     """Test query response time with large context."""
@@ -471,11 +470,9 @@ db_max_tokens = 20
     # Create very large reference context
     huge_reference = []
     for i in range(5000):  # Very large context
-      huge_reference.append([
-        i, f"doc_{i}.txt", i % 100,
-        f"This is content chunk {i} with substantial text content " * 10,
-        0.8, '{}'
-      ])
+      huge_reference.append(
+        [i, f'doc_{i}.txt', i % 100, f'This is content chunk {i} with substantial text content ' * 10, 0.8, '{}']
+      )
 
     start_time = time.time()
 
@@ -488,6 +485,7 @@ db_max_tokens = 20
     assert len(context) > 0
 
     context_size_mb = len(context) / (1024 * 1024)
-    print(f"Built {context_size_mb:.1f} MB context in {build_time:.2f}s")
+    print(f'Built {context_size_mb:.1f} MB context in {build_time:.2f}s')
 
-#fin
+
+# fin

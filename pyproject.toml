@@ -1,6 +1,6 @@
 [build-system]
-requires = ["setuptools>=61.0", "wheel"]
-build-backend = "setuptools.build_meta"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
 [project]
 name = "customkb"
@@ -24,54 +24,64 @@ classifiers = [
 ]
 
 dependencies = [
-    "psutil",
-    "anthropic>=0.64.0",
+    "anthropic>=0.75.0",
     "beautifulsoup4>=4.13.4",
+    "certifi>=2025.8.3",
+    "charset-normalizer>=3.0.0",
     "colorlog>=6.9.0",
-    "langchain_text_splitters>=0.3.7",
+    "cryptography>=46.0.0",
+    "filetype>=1.0.0",
+    "google-genai>=1.31.0",
+    "httpx>=0.24.0",
+    "langchain-text-splitters>=0.3.7",
+    "langdetect>=1.0.9",
+    "litellm>=1.50.0",
     "nltk>=3.9.1",
     "numpy>=1.26.4",
+    "nvidia-ml-py>=12.0.0",
     "openai>=1.67.0",
-    "rank-bm25>=0.2.2",
-    "sentence-transformers>=2.7.0",
-    "torch>=2.5.1",
-    "spacy>=3.7.5",
-    "tokenizers>=0.21.1",
-    "langdetect>=1.0.9",
-    "google-genai>=1.31.0",
-    "certifi>=2025.8.3",
-    "cryptography>=45.0.6",
     "pandas>=2.0.0",
+    "pillow>=9.0.0",
+    "post-slug>=1.0.0",
+    "protobuf>=5.0.0",
+    "psutil>=5.9.0",
+    "pydantic>=2.0.0",
     "pyyaml>=6.0.1",
+    "rank-bm25>=0.2.2",
     "rapidfuzz>=3.0.0",
+    "sentence-transformers>=2.7.0",
+    "spacy>=3.7.5",
+    "tiktoken>=0.5.0",
+    "tokenizers>=0.21.1",
+    "torch>=2.6.0",
     "tqdm>=4.66.0",
 ]
 
 [project.optional-dependencies]
 dev = [
-    "pytest>=8.0.0",
-    "pytest-cov>=4.1.0",
-    "pytest-xdist>=3.5.0",
-    "pytest-timeout>=2.2.0",
-    "pytest-asyncio>=0.23.0",
-    "pytest-mock>=3.12.0",
-    "black>=24.0.0",
-    "flake8>=7.0.0",
-    "isort>=5.13.0",
-    "mypy>=1.8.0",
-    "pylint>=3.0.0",
+    "bandit>=1.7.0",
     "coverage>=7.4.0",
+    "mypy>=1.8.0",
+    "pre-commit>=3.0.0",
+    "safety>=3.0.0",
 ]
-
 test = [
-    "pytest>=8.0.0",
-    "pytest-cov>=4.1.0",
-    "pytest-timeout>=2.2.0",
-    "pytest-asyncio>=0.23.0",
-    "pytest-mock>=3.12.0",
-    "freezegun>=1.4.0",
+    "factory-boy>=3.3.0",
     "faker>=22.0.0",
+    "freezegun>=1.4.0",
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
+    "pytest-cov>=4.1.0",
+    "pytest-html>=3.2.0",
+    "pytest-mock>=3.12.0",
+    "pytest-timeout>=2.2.0",
+    "pytest-xdist>=3.5.0",
+    "responses>=0.23.0",
 ]
+faiss-cpu = ["faiss-cpu>=1.12.0"]
+faiss-gpu-cu11 = ["faiss-gpu-cu11>=1.12.0"]
+faiss-gpu-cu12 = ["faiss-gpu-cu12>=1.12.0"]
+mcp = ["mcp>=1.0.0"]
 
 [project.scripts]
 customkb = "customkb:main"
@@ -82,40 +92,19 @@ Documentation = "https://docs.okusi.id/customkb"
 Repository = "https://github.com/Open-Technology-Foundation/customkb.git"
 Issues = "https://github.com/Open-Technology-Foundation/customkb/issues"
 
-[tool.setuptools]
-py-modules = ["customkb"]
-packages = ["config", "database", "embedding", "query", "models", "utils", "categorize"]
+[tool.hatch.build.targets.wheel]
+packages = ["config", "database", "embedding", "query", "models", "utils", "categorize", "mcp_server"]
 
-[tool.setuptools.package-data]
-"*" = ["*.md", "*.txt", "*.yaml", "*.yml", "*.json"]
+[tool.uv]
+environments = ["sys_platform == 'linux' and platform_machine == 'x86_64'"]
 
-[tool.black]
-line-length = 127
-target-version = ['py312']
-include = '\.pyi?$'
-# Use 2-space indentation (CustomKB standard, documented in CLAUDE.md)
-# Note: Black doesn't support custom indent-width, so we maintain 2-space manually
-extend-exclude = '''
-/(
-    \.git
-  | \.venv
-  | \.mailer
-  | \.gudang
-  | build
-  | dist
-  | __pycache__
-)/
-'''
+[[tool.uv.index]]
+name = "pytorch-cu126"
+url = "https://download.pytorch.org/whl/cu126"
+explicit = true
 
-[tool.isort]
-profile = "black"
-line_length = 127
-multi_line_output = 3
-include_trailing_comma = true
-force_grid_wrap = 0
-use_parentheses = true
-ensure_newline_before_comments = true
-skip = [".venv", ".mailer", "__pycache__"]
+[tool.uv.sources]
+torch = { index = "pytorch-cu126" }
 
 [tool.mypy]
 python_version = "3.12"
@@ -128,20 +117,6 @@ exclude = [
     ".mailer",
     "tests",
 ]
-
-[tool.pylint.messages_control]
-max-line-length = 127
-disable = [
-    "C0111",  # missing-docstring
-    "C0103",  # invalid-name
-    "R0903",  # too-few-public-methods
-    "R0913",  # too-many-arguments
-    "W0212",  # protected-access
-    "W0622",  # redefined-builtin
-]
-
-[tool.pylint.basic]
-good-names = ["i", "j", "k", "e", "f", "id", "kb", "df", "nlp"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -168,14 +143,19 @@ markers = [
     "requires_data: Tests requiring external test data",
     "performance: Performance and benchmarking tests",
     "resource_intensive: Tests that use significant memory/CPU",
+    "asyncio: Async tests using pytest-asyncio",
+    "requires_faiss: Tests requiring FAISS library",
 ]
 asyncio_mode = "auto"
+junit_family = "xunit2"
 filterwarnings = [
     "ignore::DeprecationWarning",
     "ignore::PendingDeprecationWarning",
     "ignore::UserWarning:spacy*",
     "ignore::FutureWarning:transformers*",
     "ignore::RuntimeWarning:numpy*",
+    "ignore:Using `@model_validator`.*deprecated:DeprecationWarning",
+    "ignore:Importing 'parser.split_arg_string' is deprecated:DeprecationWarning",
 ]
 
 [tool.coverage.run]

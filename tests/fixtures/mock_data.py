@@ -18,11 +18,11 @@ class MockDataGenerator:
 
   @staticmethod
   def create_sample_config(
-    kb_name: str = "test_kb",
-    vector_model: str = "text-embedding-3-small",
+    kb_name: str = 'test_kb',
+    vector_model: str = 'text-embedding-3-small',
     vector_dimensions: int = 1536,
     include_new_sections: bool = True,
-    **kwargs
+    **kwargs,
   ) -> str:
     """
     Create a sample configuration file content.
@@ -55,7 +55,7 @@ query_role = {kwargs.get('query_role', 'You are a helpful assistant.')}
 """
 
     if 'query_context_files' in kwargs:
-      config_content += f"query_context_files = {kwargs['query_context_files']}\n"
+      config_content += f'query_context_files = {kwargs["query_context_files"]}\n'
 
     # Add new configuration sections for comprehensive testing
     if include_new_sections:
@@ -117,25 +117,16 @@ additional_stopword_languages = {kwargs.get('additional_stopword_languages', 'fr
   def create_sample_texts() -> list[str]:
     """Create sample text documents for testing."""
     return [
-      "# Introduction to Machine Learning\nMachine learning is a subset of artificial intelligence that enables computers to learn and improve from experience without being explicitly programmed.",
-
-      "## Natural Language Processing\nNLP combines computational linguistics with statistical machine learning and deep learning models to enable computers to process and analyze large amounts of natural language data.",
-
-      "### Vector Embeddings\nVector embeddings are dense vector representations of words, phrases, or documents that capture semantic meaning in a high-dimensional space.",
-
-      "```python\ndef calculate_similarity(vec1, vec2):\n    return np.dot(vec1, vec2) / (np.linalg.norm(vec1) * np.linalg.norm(vec2))\n```",
-
-      "The quick brown fox jumps over the lazy dog. This sentence contains every letter of the English alphabet at least once.",
-
-      "Knowledgebases are structured repositories of information that can be searched and queried to retrieve relevant context for various applications.",
-
-      "FAISS (Facebook AI Similarity Search) is a library for efficient similarity search and clustering of dense vectors, optimized for large-scale applications.",
-
+      '# Introduction to Machine Learning\nMachine learning is a subset of artificial intelligence that enables computers to learn and improve from experience without being explicitly programmed.',
+      '## Natural Language Processing\nNLP combines computational linguistics with statistical machine learning and deep learning models to enable computers to process and analyze large amounts of natural language data.',
+      '### Vector Embeddings\nVector embeddings are dense vector representations of words, phrases, or documents that capture semantic meaning in a high-dimensional space.',
+      '```python\ndef calculate_similarity(vec1, vec2):\n    return np.dot(vec1, vec2) / (np.linalg.norm(vec1) * np.linalg.norm(vec2))\n```',
+      'The quick brown fox jumps over the lazy dog. This sentence contains every letter of the English alphabet at least once.',
+      'Knowledgebases are structured repositories of information that can be searched and queried to retrieve relevant context for various applications.',
+      'FAISS (Facebook AI Similarity Search) is a library for efficient similarity search and clustering of dense vectors, optimized for large-scale applications.',
       "OpenAI's embedding models convert text into numerical vectors that capture semantic relationships between different pieces of content.",
-
       "## Database Design\nSQLite provides a lightweight, file-based database solution that's perfect for applications requiring structured data storage without the overhead of a full database server.",
-
-      "Semantic search goes beyond keyword matching to understand the intent and contextual meaning of search queries, providing more relevant results."
+      'Semantic search goes beyond keyword matching to understand the intent and contextual meaning of search queries, providing more relevant results.',
     ]
 
   @staticmethod
@@ -157,24 +148,20 @@ additional_stopword_languages = {kwargs.get('additional_stopword_languages', 'fr
       # Create deterministic but realistic-looking embeddings
       np.random.seed(hash(text) % 2**32)
       embedding = np.random.normal(0, 0.1, dimensions).tolist()
-      embeddings.append({
-        "object": "embedding",
-        "index": i,
-        "embedding": embedding
-      })
+      embeddings.append({'object': 'embedding', 'index': i, 'embedding': embedding})
 
     return {
-      "object": "list",
-      "data": embeddings,
-      "model": "text-embedding-3-small",
-      "usage": {
-        "prompt_tokens": sum(len(text.split()) for text in texts),
-        "total_tokens": sum(len(text.split()) for text in texts)
-      }
+      'object': 'list',
+      'data': embeddings,
+      'model': 'text-embedding-3-small',
+      'usage': {
+        'prompt_tokens': sum(len(text.split()) for text in texts),
+        'total_tokens': sum(len(text.split()) for text in texts),
+      },
     }
 
   @staticmethod
-  def create_mock_chat_response(content: str, model: str = "gpt-4o") -> dict[str, Any]:
+  def create_mock_chat_response(content: str, model: str = 'gpt-4o') -> dict[str, Any]:
     """
     Create a mock OpenAI chat completion response.
 
@@ -186,27 +173,16 @@ additional_stopword_languages = {kwargs.get('additional_stopword_languages', 'fr
         Mock API response dictionary
     """
     return {
-      "id": "chatcmpl-test123",
-      "object": "chat.completion",
-      "created": 1677652288,
-      "model": model,
-      "choices": [{
-        "index": 0,
-        "message": {
-          "role": "assistant",
-          "content": content
-        },
-        "finish_reason": "stop"
-      }],
-      "usage": {
-        "prompt_tokens": 50,
-        "completion_tokens": len(content.split()),
-        "total_tokens": 50 + len(content.split())
-      }
+      'id': 'chatcmpl-test123',
+      'object': 'chat.completion',
+      'created': 1677652288,
+      'model': model,
+      'choices': [{'index': 0, 'message': {'role': 'assistant', 'content': content}, 'finish_reason': 'stop'}],
+      'usage': {'prompt_tokens': 50, 'completion_tokens': len(content.split()), 'total_tokens': 50 + len(content.split())},
     }
 
   @staticmethod
-  def create_mock_anthropic_response(content: str, model: str = "claude-3-sonnet-20240229") -> dict[str, Any]:
+  def create_mock_anthropic_response(content: str, model: str = 'claude-3-sonnet-20240229') -> dict[str, Any]:
     """
     Create a mock Anthropic message response.
 
@@ -218,21 +194,18 @@ additional_stopword_languages = {kwargs.get('additional_stopword_languages', 'fr
         Mock API response dictionary
     """
     return {
-      "id": "msg_test123",
-      "type": "message",
-      "role": "assistant",
-      "content": [{"type": "text", "text": content}],
-      "model": model,
-      "stop_reason": "end_turn",
-      "stop_sequence": None,
-      "usage": {
-        "input_tokens": 50,
-        "output_tokens": len(content.split())
-      }
+      'id': 'msg_test123',
+      'type': 'message',
+      'role': 'assistant',
+      'content': [{'type': 'text', 'text': content}],
+      'model': model,
+      'stop_reason': 'end_turn',
+      'stop_sequence': None,
+      'usage': {'input_tokens': 50, 'output_tokens': len(content.split())},
     }
 
   @staticmethod
-  def create_database_rows(texts: list[str], source_doc: str = "test.txt") -> list[tuple]:
+  def create_database_rows(texts: list[str], source_doc: str = 'test.txt') -> list[tuple]:
     """
     Create database rows for testing.
 
@@ -246,23 +219,19 @@ additional_stopword_languages = {kwargs.get('additional_stopword_languages', 'fr
     rows = []
     for i, text in enumerate(texts):
       # (id, sid, sourcedoc, originaltext, embedtext, embedded, language, metadata)
-      metadata = json.dumps({
-        "char_length": len(text),
-        "word_count": len(text.split()),
-        "source": source_doc
-      })
+      metadata = json.dumps({'char_length': len(text), 'word_count': len(text.split()), 'source': source_doc})
 
       clean_text = text.lower().replace('\n', ' ').strip()
 
       row = (
         i + 1,  # id
-        i,      # sid
+        i,  # sid
         source_doc,  # sourcedoc
-        text,   # originaltext
+        text,  # originaltext
         clean_text,  # embedtext
-        0,      # embedded (not embedded yet)
-        "en",   # language
-        metadata  # metadata
+        0,  # embedded (not embedded yet)
+        'en',  # language
+        metadata,  # metadata
       )
       rows.append(row)
 
@@ -276,13 +245,13 @@ class TestDataManager:
     self.temp_dirs = []
     self.temp_files = []
 
-  def create_temp_dir(self, prefix: str = "customkb_test_") -> str:
+  def create_temp_dir(self, prefix: str = 'customkb_test_') -> str:
     """Create a temporary directory for testing."""
     temp_dir = tempfile.mkdtemp(prefix=prefix)
     self.temp_dirs.append(temp_dir)
     return temp_dir
 
-  def create_temp_config(self, config_content: str, suffix: str = ".cfg") -> str:
+  def create_temp_config(self, config_content: str, suffix: str = '.cfg') -> str:
     """Create a temporary configuration file."""
     fd, temp_file = tempfile.mkstemp(suffix=suffix, text=True)
     self.temp_files.append(temp_file)
@@ -292,7 +261,7 @@ class TestDataManager:
 
     return temp_file
 
-  def create_temp_text_file(self, content: str, filename: str = "test.txt") -> str:
+  def create_temp_text_file(self, content: str, filename: str = 'test.txt') -> str:
     """Create a temporary text file."""
     if not self.temp_dirs:
       self.create_temp_dir()
@@ -304,7 +273,7 @@ class TestDataManager:
     self.temp_files.append(temp_file)
     return temp_file
 
-  def create_kb_directory(self, kb_name: str = "test_kb", config_content: str | None = None) -> tuple[str, str, str]:
+  def create_kb_directory(self, kb_name: str = 'test_kb', config_content: str | None = None) -> tuple[str, str, str]:
     """
     Create a properly structured KB directory within a temp VECTORDBS.
 
@@ -335,7 +304,7 @@ class TestDataManager:
     os.makedirs(logs_dir)
 
     # Create config file
-    config_file = os.path.join(kb_dir, f"{kb_name}.cfg")
+    config_file = os.path.join(kb_dir, f'{kb_name}.cfg')
 
     if config_content is None:
       # Use default config from MockDataGenerator
@@ -389,8 +358,8 @@ def create_mock_knowledge_base(config_file: str, temp_path: Path) -> 'KnowledgeB
   kb = KnowledgeBase(config_file)
 
   # Override paths to use temp directory
-  kb.knowledge_base_db = str(temp_path / "test.db")
-  kb.knowledge_base_vector = str(temp_path / "test.faiss")
+  kb.knowledge_base_db = str(temp_path / 'test.db')
+  kb.knowledge_base_vector = str(temp_path / 'test.faiss')
 
   # Create mock database
   conn = sqlite3.connect(kb.knowledge_base_db)
@@ -419,28 +388,34 @@ def create_mock_knowledge_base(config_file: str, temp_path: Path) -> 'KnowledgeB
   rows = mock_gen.create_database_rows(texts)
 
   for row in rows:
-    cursor.execute("""
+    cursor.execute(
+      """
       INSERT INTO docs (id, sid, sourcedoc, originaltext, embedtext,
                        embedded, language, metadata)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    """, row)
+    """,
+      row,
+    )
 
   conn.commit()
   conn.close()
 
-  # Create mock FAISS index
-  import faiss
-  import numpy as np
+  # Create mock FAISS index (skip if FAISS not installed)
+  try:
+    import faiss
+    import numpy as np
 
-  dimension = kb.vector_dimensions
-  index = faiss.IndexFlatL2(dimension)
+    dimension = kb.vector_dimensions
+    index = faiss.IndexFlatL2(dimension)
 
-  # Add some random vectors
-  vectors = np.random.normal(0, 0.1, (len(texts), dimension)).astype('float32')
-  index.add(vectors)
+    # Add some random vectors
+    vectors = np.random.normal(0, 0.1, (len(texts), dimension)).astype('float32')
+    index.add(vectors)
 
-  # Save index
-  faiss.write_index(index, kb.knowledge_base_vector)
+    # Save index
+    faiss.write_index(index, kb.knowledge_base_vector)
+  except ImportError:
+    pass
 
   # Set up mock SQL connection for query
   kb.sql_connection = sqlite3.connect(kb.knowledge_base_db)
@@ -448,4 +423,5 @@ def create_mock_knowledge_base(config_file: str, temp_path: Path) -> 'KnowledgeB
 
   return kb
 
-#fin
+
+# fin

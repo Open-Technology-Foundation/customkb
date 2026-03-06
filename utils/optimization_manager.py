@@ -21,13 +21,21 @@ logger = get_logger(__name__)
 
 
 def get_system_memory_gb() -> float:
-  """Get total system memory in GB."""
+  """Get total system memory in GB.
+
+  Uses a two-step fallback chain:
+  1. ``psutil.virtual_memory()`` — preferred, cross-platform.
+  2. ``/proc/meminfo`` parsing — Linux-only fallback when psutil is
+     unavailable or raises an error.
+  3. Returns ``16`` (GB) as a safe conservative default if both fail.
+  """
   try:
     import psutil
+
     return psutil.virtual_memory().total / (1024**3)
   except (ImportError, AttributeError) as e:
     # Fallback to reading /proc/meminfo if psutil is not available
-    logger.debug(f"psutil not available, falling back to /proc/meminfo: {e}")
+    logger.debug(f'psutil not available, falling back to /proc/meminfo: {e}')
     try:
       with open('/proc/meminfo') as f:
         for line in f:
@@ -35,7 +43,7 @@ def get_system_memory_gb() -> float:
             kb = int(line.split()[1])
             return kb / (1024**2)
     except (OSError, FileNotFoundError, ValueError) as e:
-      logger.warning(f"Could not determine system memory: {e}")
+      logger.warning(f'Could not determine system memory: {e}')
       return 16  # Safe default
 
 
@@ -60,6 +68,7 @@ def get_optimized_settings(memory_gb: float = None) -> dict:
 
   # Get GPU information
   from utils.gpu_utils import get_gpu_memory_mb, get_safe_gpu_memory_limit_mb
+
   gpu_memory_mb = get_gpu_memory_mb()
   gpu_info = {}
 
@@ -68,7 +77,7 @@ def get_optimized_settings(memory_gb: float = None) -> dict:
       'gpu_memory_mb': gpu_memory_mb,
       'gpu_memory_gb': gpu_memory_mb / 1024.0,
       'safe_limit_mb': get_safe_gpu_memory_limit_mb(buffer_gb=4.0),
-      'detected': True
+      'detected': True,
     }
   else:
     gpu_info = {'detected': False}
@@ -112,7 +121,7 @@ def get_optimized_settings(memory_gb: float = None) -> dict:
   embedding_batch = int(750 * batch_factor)
   # Conservative batch sizes to prevent memory exhaustion
   file_batch = int(2000 * batch_factor)  # Reduced from 5000
-  sql_batch = int(2000 * batch_factor)   # Reduced from 5000
+  sql_batch = int(2000 * batch_factor)  # Reduced from 5000
   reference_batch = max(5, int(30 * batch_factor))  # Reduced from 50
   # Conservative reranking batch size
   reranking_batch = int(32 * batch_factor)
@@ -166,14 +175,14 @@ def get_optimized_settings(memory_gb: float = None) -> dict:
         'hybrid_fusion_method': 'rrf',
         'rrf_k': '60',  # Standard RRF ranking constant
         'vector_weight': '0.7',  # Used with 'weighted' fusion method
-        'bm25_weight': '0.3',    # Used with 'weighted' fusion method
+        'bm25_weight': '0.3',  # Used with 'weighted' fusion method
         'bm25_rebuild_threshold': str(int(5000 * batch_factor)),
         # Conservative BM25 limit to prevent memory exhaustion
         'bm25_max_results': str(min(750, int(1000 * memory_factor))),
         # Query enhancement settings
         'enable_query_enhancement': 'true',
         'query_enhancement_synonyms': 'false',  # Disabled - can harm precision in technical content
-        'query_enhancement_spelling': 'true',   # Keep spelling correction enabled
+        'query_enhancement_spelling': 'true',  # Keep spelling correction enabled
         'max_synonyms_per_word': str(max(1, int(3 * memory_factor))),
         'query_enhancement_cache_ttl_days': '60',
         'reranking_top_k': str(min(30, int(30 * batch_factor))),  # Capped at 30
@@ -188,9 +197,9 @@ def get_optimized_settings(memory_gb: float = None) -> dict:
         'faiss_gpu_use_float16': 'true' if gpu_memory_mb < 24576 else 'false',
         # GPU memory buffer for safety
         'faiss_gpu_memory_buffer_gb': '4.0',
-      }
+      },
     },
-    'gpu_info': gpu_info
+    'gpu_info': gpu_info,
   }
 
 
@@ -220,9 +229,7 @@ def find_kb_configs(vectordbs_dir: str) -> list[str]:
       if file.endswith('.cfg'):
         config_path = os.path.join(root, file)
         # Skip backup files and pyvenv.cfg files
-        if ('backup' not in config_path and
-            'optimized' not in config_path and
-            file != 'pyvenv.cfg'):
+        if 'backup' not in config_path and 'optimized' not in config_path and file != 'pyvenv.cfg':
           configs.append(config_path)
 
   return sorted(configs)
@@ -234,23 +241,23 @@ def backup_config(config_path: str) -> str:
   os.makedirs(backup_dir, exist_ok=True)
 
   timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-  backup_name = f"{os.path.basename(config_path)}.{timestamp}.bak"
+  backup_name = f'{os.path.basename(config_path)}.{timestamp}.bak'
   backup_path = os.path.join(backup_dir, backup_name)
 
   shutil.copy2(config_path, backup_path)
-  logger.info(f"Created backup: {backup_path}")
+  logger.info(f'Created backup: {backup_path}')
 
   return backup_path
 
 
 def optimize_config(config_path: str, dry_run: bool = False, memory_gb: float = None, check_indexes: bool = True) -> dict:
   """Apply performance optimizations to a configuration file."""
-  logger.info(f"Processing: {config_path}")
+  logger.info(f'Processing: {config_path}')
 
   # Check FAISS index size
   kb_dir = os.path.dirname(config_path)
   kb_name = os.path.basename(kb_dir)
-  faiss_file = os.path.join(kb_dir, f"{kb_name}.faiss")
+  faiss_file = os.path.join(kb_dir, f'{kb_name}.faiss')
   faiss_size_mb = 0
   if os.path.exists(faiss_file):
     faiss_size_mb = os.path.getsize(faiss_file) / (1024 * 1024)
@@ -263,15 +270,16 @@ def optimize_config(config_path: str, dry_run: bool = False, memory_gb: float = 
   # Adjust GPU settings based on FAISS index size and GPU memory
   if gpu_info and faiss_size_mb > 0:
     from utils.gpu_utils import should_use_gpu_for_index
+
     gpu_suitable, reason = should_use_gpu_for_index(faiss_size_mb, kb_config=None)
 
     if not gpu_suitable:
-      logger.info(f"GPU not suitable for FAISS index: {reason}")
+      logger.info(f'GPU not suitable for FAISS index: {reason}')
       # Conservative GPU settings for large indexes
       performance_optimizations['ALGORITHMS']['faiss_gpu_batch_size'] = '512'  # Minimal batch size
       performance_optimizations['ALGORITHMS']['faiss_gpu_use_float16'] = 'true'  # Always use float16
     else:
-      logger.info(f"GPU suitable for FAISS index: {reason}")
+      logger.info(f'GPU suitable for FAISS index: {reason}')
 
   # Load existing configuration
   config = configparser.ConfigParser()
@@ -295,10 +303,7 @@ def optimize_config(config_path: str, dry_run: bool = False, memory_gb: float = 
 
         if section not in changes:
           changes[section] = {}
-        changes[section][key] = {
-          'old': old_value,
-          'new': new_value
-        }
+        changes[section][key] = {'old': old_value, 'new': new_value}
 
   # Save optimized configuration
   if not dry_run and changes:
@@ -309,8 +314,8 @@ def optimize_config(config_path: str, dry_run: bool = False, memory_gb: float = 
     with open(config_path, 'w') as f:
       config.write(f)
 
-    logger.info(f"Updated configuration: {config_path}")
-    logger.info(f"Backup saved to: {backup_path}")
+    logger.info(f'Updated configuration: {config_path}')
+    logger.info(f'Backup saved to: {backup_path}')
 
   # Check and create missing indexes if requested
   if check_indexes:
@@ -319,18 +324,15 @@ def optimize_config(config_path: str, dry_run: bool = False, memory_gb: float = 
       db_path = kb.knowledge_base_db
 
       if Path(db_path).exists():
-        logger.info("Checking database indexes...")
+        logger.info('Checking database indexes...')
         missing_indexes = create_missing_indexes(db_path, dry_run=dry_run)
         if missing_indexes:
           if 'indexes' not in changes:
             changes['indexes'] = {}
           for idx in missing_indexes:
-            changes['indexes'][idx] = {
-              'old': 'missing',
-              'new': 'created' if not dry_run else 'would create'
-            }
+            changes['indexes'][idx] = {'old': 'missing', 'new': 'created' if not dry_run else 'would create'}
     except (FileNotFoundError, sqlite3.Error, OSError) as e:
-      logger.warning(f"Could not check indexes: {e}")
+      logger.warning(f'Could not check indexes: {e}')
 
   return changes
 
@@ -343,7 +345,7 @@ def analyze_kb_size(config_path: str) -> dict:
     'kb_name': os.path.basename(kb_dir),
     'db_size_mb': 0,
     'vector_size_mb': 0,
-    'total_size_mb': 0
+    'total_size_mb': 0,
   }
 
   # Check for database file
@@ -372,54 +374,55 @@ def show_optimization_tiers() -> str:
   Returns:
       Formatted string showing tier settings
   """
-  output = ["Optimization Tiers for CustomKB", "=" * 80, ""]
+  output = ['Optimization Tiers for CustomKB', '=' * 80, '']
 
   # Show current GPU info if available
   from utils.gpu_utils import get_gpu_info_string
+
   gpu_info_str = get_gpu_info_string()
-  output.extend([
-    "System Configuration:",
-    f"  {gpu_info_str}",
-    ""
-  ])
+  output.extend(['System Configuration:', f'  {gpu_info_str}', ''])
 
   tiers = [
-    (8, "Low Memory (<16GB)"),
-    (32, "Medium Memory (16-64GB)"),
-    (96, "High Memory (64-128GB)"),
-    (256, "Very High Memory (>128GB)")
+    (8, 'Low Memory (<16GB)'),
+    (32, 'Medium Memory (16-64GB)'),
+    (96, 'High Memory (64-128GB)'),
+    (256, 'Very High Memory (>128GB)'),
   ]
 
   for memory_gb, tier_name in tiers:
     settings = get_optimized_settings(memory_gb)
     opts = settings['optimizations']
 
-    output.extend([
-      f"{tier_name} - Example: {memory_gb}GB System",
-      "-" * 80,
-      f"Tier: {settings['tier'].upper()}",
-      "",
-      "Key Settings:",
-      f"  Memory cache size: {opts['LIMITS']['memory_cache_size']}",
-      f"  Embedding batch size: {opts['PERFORMANCE']['embedding_batch_size']}",
-      f"  Reference batch size: {opts['PERFORMANCE']['reference_batch_size']}",
-      f"  IO thread pool: {opts['PERFORMANCE']['io_thread_pool_size']}",
-      f"  Cache thread pool: {opts['PERFORMANCE']['cache_thread_pool_size']}",
-      f"  API max concurrency: {opts['API']['api_max_concurrency']}",
-      f"  BM25 max results: {opts['ALGORITHMS']['bm25_max_results']}",
-      f"  Hybrid search enabled: {opts['ALGORITHMS']['enable_hybrid_search']}",
-      f"  Reranking batch size: {opts['ALGORITHMS']['reranking_batch_size']}",
-      f"  GPU batch size: {opts['ALGORITHMS']['faiss_gpu_batch_size']}",
-      f"  GPU float16 mode: {opts['ALGORITHMS']['faiss_gpu_use_float16']}",
-      ""
-    ])
+    output.extend(
+      [
+        f'{tier_name} - Example: {memory_gb}GB System',
+        '-' * 80,
+        f'Tier: {settings["tier"].upper()}',
+        '',
+        'Key Settings:',
+        f'  Memory cache size: {opts["LIMITS"]["memory_cache_size"]}',
+        f'  Embedding batch size: {opts["PERFORMANCE"]["embedding_batch_size"]}',
+        f'  Reference batch size: {opts["PERFORMANCE"]["reference_batch_size"]}',
+        f'  IO thread pool: {opts["PERFORMANCE"]["io_thread_pool_size"]}',
+        f'  Cache thread pool: {opts["PERFORMANCE"]["cache_thread_pool_size"]}',
+        f'  API max concurrency: {opts["API"]["api_max_concurrency"]}',
+        f'  BM25 max results: {opts["ALGORITHMS"]["bm25_max_results"]}',
+        f'  Hybrid search enabled: {opts["ALGORITHMS"]["enable_hybrid_search"]}',
+        f'  Reranking batch size: {opts["ALGORITHMS"]["reranking_batch_size"]}',
+        f'  GPU batch size: {opts["ALGORITHMS"]["faiss_gpu_batch_size"]}',
+        f'  GPU float16 mode: {opts["ALGORITHMS"]["faiss_gpu_use_float16"]}',
+        '',
+      ]
+    )
 
-  output.extend([
-    "Notes:",
-    "- Actual settings scale based on exact memory amount",
-    "- GPU settings adjust automatically based on FAISS index size",
-    "- Use --memory-gb flag to override auto-detection"
-  ])
+  output.extend(
+    [
+      'Notes:',
+      '- Actual settings scale based on exact memory amount',
+      '- GPU settings adjust automatically based on FAISS index size',
+      '- Use --memory-gb flag to override auto-detection',
+    ]
+  )
 
   return '\n'.join(output)
 
@@ -427,16 +430,16 @@ def show_optimization_tiers() -> str:
 def format_changes(config_path: str, changes: dict) -> str:
   """Format configuration changes for display."""
   if not changes:
-    return f"{config_path}: No changes needed (already optimized)"
+    return f'{config_path}: No changes needed (already optimized)'
 
-  output = [f"\n{config_path}:", "-" * 80]
+  output = [f'\n{config_path}:', '-' * 80]
 
   for section, settings in changes.items():
-    output.append(f"\n[{section}]")
+    output.append(f'\n[{section}]')
     for key, values in settings.items():
       old = values['old'] or '<not set>'
       new = values['new']
-      output.append(f"  {key}: {old} -> {new}")
+      output.append(f'  {key}: {old} -> {new}')
 
   return '\n'.join(output)
 
@@ -471,81 +474,85 @@ def process_optimize(args, logger) -> str:
   vectordbs_dir = os.getenv('VECTORDBS', '/var/lib/vectordbs')
 
   # Debug logging
-  logger.debug(f"VECTORDBS directory: {vectordbs_dir}")
-  logger.debug(f"Target: {args.target if hasattr(args, 'target') else 'None'}")
+  logger.debug(f'VECTORDBS directory: {vectordbs_dir}')
+  logger.debug(f'Target: {args.target if hasattr(args, "target") else "None"}')
 
   if args.target:
-    logger.debug(f"Checking target: {args.target}")
+    logger.debug(f'Checking target: {args.target}')
 
     # First, try to find it as a KB name in VECTORDBS (most common case)
     # This avoids conflicts with local directories that have the same name
     if not os.path.isabs(args.target) and not args.target.endswith('.cfg'):
-      logger.debug("Checking if target is a KB name in VECTORDBS")
+      logger.debug('Checking if target is a KB name in VECTORDBS')
       potential_path = get_fq_cfg_filename(args.target)
-      logger.debug(f"get_fq_cfg_filename returned: {potential_path}")
+      logger.debug(f'get_fq_cfg_filename returned: {potential_path}')
       if potential_path and os.path.exists(potential_path):
         configs = [potential_path]
       else:
         # Fall back to checking if it's a local file or directory
-        logger.debug("Not found as KB name, checking local paths")
-        logger.debug(f"Is file? {os.path.isfile(args.target)}")
-        logger.debug(f"Is dir? {os.path.isdir(args.target)}")
+        logger.debug('Not found as KB name, checking local paths')
+        logger.debug(f'Is file? {os.path.isfile(args.target)}')
+        logger.debug(f'Is dir? {os.path.isdir(args.target)}')
 
         if os.path.isfile(args.target) and args.target.endswith('.cfg'):
           configs = [args.target]
         elif os.path.isdir(args.target):
           configs = find_kb_configs(args.target)
         else:
-          logger.error(f"Cannot find configuration: {args.target}")
-          return f"Error: Cannot find configuration: {args.target}"
+          logger.error(f'Cannot find configuration: {args.target}')
+          return f'Error: Cannot find configuration: {args.target}'
     else:
       # Absolute path or .cfg file - check normally
-      logger.debug(f"Is file? {os.path.isfile(args.target)}")
-      logger.debug(f"Is dir? {os.path.isdir(args.target)}")
+      logger.debug(f'Is file? {os.path.isfile(args.target)}')
+      logger.debug(f'Is dir? {os.path.isdir(args.target)}')
 
       if os.path.isfile(args.target) and args.target.endswith('.cfg'):
         configs = [args.target]
       elif os.path.isdir(args.target):
         configs = find_kb_configs(args.target)
       else:
-        logger.error(f"Cannot find configuration: {args.target}")
-        return f"Error: Cannot find configuration: {args.target}"
+        logger.error(f'Cannot find configuration: {args.target}')
+        return f'Error: Cannot find configuration: {args.target}'
   else:
     # Check if VECTORDBS directory exists
     if not os.path.exists(vectordbs_dir):
-      logger.error(f"VECTORDBS directory does not exist: {vectordbs_dir}")
-      return f"Error: VECTORDBS directory does not exist: {vectordbs_dir}"
+      logger.error(f'VECTORDBS directory does not exist: {vectordbs_dir}')
+      return f'Error: VECTORDBS directory does not exist: {vectordbs_dir}'
 
     configs = find_kb_configs(vectordbs_dir)
 
   if not configs:
-    logger.warning(f"No knowledgebase configurations found in {vectordbs_dir}")
-    return f"No knowledgebase configurations found in {vectordbs_dir}"
+    logger.warning(f'No knowledgebase configurations found in {vectordbs_dir}')
+    return f'No knowledgebase configurations found in {vectordbs_dir}'
 
   # Build output
-  output = [f"Found {len(configs)} knowledgebase configuration(s)"]
+  output = [f'Found {len(configs)} knowledgebase configuration(s)']
 
   # Show system memory info
   memory_gb = args.memory_gb if hasattr(args, 'memory_gb') and args.memory_gb else get_system_memory_gb()
   settings_info = get_optimized_settings(memory_gb)
   gpu_info = settings_info.get('gpu_info', {})
 
-  output.extend([
-    f"\nSystem Memory: {memory_gb:.1f} GB",
-    f"Optimization Tier: {settings_info['tier'].upper()}",
-    f"  - Memory cache size: {settings_info['optimizations']['LIMITS']['memory_cache_size']}",
-    f"  - Reference batch size: {settings_info['optimizations']['PERFORMANCE']['reference_batch_size']}",
-    f"  - Thread pools: {settings_info['optimizations']['PERFORMANCE']['io_thread_pool_size']}"
-  ])
+  output.extend(
+    [
+      f'\nSystem Memory: {memory_gb:.1f} GB',
+      f'Optimization Tier: {settings_info["tier"].upper()}',
+      f'  - Memory cache size: {settings_info["optimizations"]["LIMITS"]["memory_cache_size"]}',
+      f'  - Reference batch size: {settings_info["optimizations"]["PERFORMANCE"]["reference_batch_size"]}',
+      f'  - Thread pools: {settings_info["optimizations"]["PERFORMANCE"]["io_thread_pool_size"]}',
+    ]
+  )
 
   # Show GPU info if available
   if gpu_info and gpu_info.get('detected'):
-    output.extend([
-      f"\nGPU Detected: {gpu_info['gpu_memory_gb']:.1f} GB",
-      f"  - Safe FAISS limit: {gpu_info['safe_limit_mb']} MB",
-      f"  - GPU batch size: {settings_info['optimizations']['ALGORITHMS']['faiss_gpu_batch_size']}",
-      f"  - Float16 mode: {settings_info['optimizations']['ALGORITHMS']['faiss_gpu_use_float16']}"
-    ])
+    output.extend(
+      [
+        f'\nGPU Detected: {gpu_info["gpu_memory_gb"]:.1f} GB',
+        f'  - Safe FAISS limit: {gpu_info["safe_limit_mb"]} MB',
+        f'  - GPU batch size: {settings_info["optimizations"]["ALGORITHMS"]["faiss_gpu_batch_size"]}',
+        f'  - Float16 mode: {settings_info["optimizations"]["ALGORITHMS"]["faiss_gpu_use_float16"]}',
+      ]
+    )
 
   if hasattr(args, 'analyze') and args.analyze:
     # Analyze mode - show KB sizes and recommendations
@@ -560,28 +567,29 @@ def process_optimize(args, logger) -> str:
     # Sort by size
     kb_stats.sort(key=lambda x: x['total_size_mb'], reverse=True)
 
-    output.extend([
-      "\nKnowledgebase Analysis:",
-      "-" * 80,
-      f"{'KB Name':<30} {'DB (MB)':<10} {'Vector (MB)':<12} {'Total (MB)':<10}",
-      "-" * 80
-    ])
+    output.extend(
+      [
+        '\nKnowledgebase Analysis:',
+        '-' * 80,
+        f'{"KB Name":<30} {"DB (MB)":<10} {"Vector (MB)":<12} {"Total (MB)":<10}',
+        '-' * 80,
+      ]
+    )
 
     for stats in kb_stats:
       output.append(
-        f"{stats['kb_name']:<30} "
-        f"{stats['db_size_mb']:<10.1f} "
-        f"{stats['vector_size_mb']:<12.1f} "
-        f"{stats['total_size_mb']:<10.1f}"
+        f'{stats["kb_name"]:<30} {stats["db_size_mb"]:<10.1f} {stats["vector_size_mb"]:<12.1f} {stats["total_size_mb"]:<10.1f}'
       )
 
-    output.extend([
-      "-" * 80,
-      f"{'Total:':<30} {'':<10} {'':<12} {total_size:<10.1f}",
-      "\nOptimization Recommendations:",
-      "- Large KBs (>1GB) will benefit most from increased batch sizes",
-      "- KBs with many queries benefit from larger memory caches"
-    ])
+    output.extend(
+      [
+        '-' * 80,
+        f'{"Total:":<30} {"":<10} {"":<12} {total_size:<10.1f}',
+        '\nOptimization Recommendations:',
+        '- Large KBs (>1GB) will benefit most from increased batch sizes',
+        '- KBs with many queries benefit from larger memory caches',
+      ]
+    )
 
     # Tier-specific recommendations
     tier_value = settings_info['tier']
@@ -592,34 +600,30 @@ def process_optimize(args, logger) -> str:
 
     match tier_enum:
       case OptimizationTier.LOW:
-        output.extend([
-          "\nLow Memory Tier (<16GB):",
-          "- Conservative settings to avoid memory pressure",
-          "- Consider upgrading RAM for better performance"
-        ])
+        output.extend(
+          [
+            '\nLow Memory Tier (<16GB):',
+            '- Conservative settings to avoid memory pressure',
+            '- Consider upgrading RAM for better performance',
+          ]
+        )
       case OptimizationTier.MEDIUM:
-        output.extend([
-          "\nMedium Memory Tier (16-64GB):",
-          "- Balanced settings for good performance",
-          "- Suitable for most workloads"
-        ])
+        output.extend(
+          ['\nMedium Memory Tier (16-64GB):', '- Balanced settings for good performance', '- Suitable for most workloads']
+        )
       case OptimizationTier.HIGH:
-        output.extend([
-          "\nHigh Memory Tier (64-128GB):",
-          "- High performance settings",
-          "- Excellent for production workloads"
-        ])
+        output.extend(
+          ['\nHigh Memory Tier (64-128GB):', '- High performance settings', '- Excellent for production workloads']
+        )
       case OptimizationTier.VERY_HIGH | None:
-        output.extend([
-          "\nVery High Memory Tier (>128GB):",
-        "- Maximum performance settings",
-        "- Optimal for large-scale deployments"
-      ])
+        output.extend(
+          ['\nVery High Memory Tier (>128GB):', '- Maximum performance settings', '- Optimal for large-scale deployments']
+        )
   else:
     # Optimization mode
     dry_run = hasattr(args, 'dry_run') and args.dry_run
     if dry_run:
-      output.append("\nDRY RUN MODE - No changes will be made")
+      output.append('\nDRY RUN MODE - No changes will be made')
 
     all_changes = {}
 
@@ -630,17 +634,14 @@ def process_optimize(args, logger) -> str:
       output.append(format_changes(config, changes))
 
     if all_changes:
-      output.append(
-        f"\n{'Would optimize' if dry_run else 'Optimized'} "
-        f"{len(all_changes)} configuration(s)"
-      )
+      output.append(f'\n{"Would optimize" if dry_run else "Optimized"} {len(all_changes)} configuration(s)')
 
       if dry_run:
-        output.append("\nTo apply these optimizations, run without --dry-run")
+        output.append('\nTo apply these optimizations, run without --dry-run')
     else:
-      output.append("\nAll configurations are already optimized!")
+      output.append('\nAll configurations are already optimized!')
 
   return '\n'.join(output)
 
 
-#fin
+# fin

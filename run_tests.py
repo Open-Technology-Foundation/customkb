@@ -12,36 +12,37 @@ import time
 
 try:
   import psutil
+
   HAS_PSUTIL = True
 except ImportError:
   HAS_PSUTIL = False
 
 
-def run_command(cmd, description=""):
+def run_command(cmd, description=''):
   """Run a command and return the result."""
-  print(f"\n{'='*60}")
+  print(f'\n{"=" * 60}')
   if description:
-    print(f"Running: {description}")
-  print(f"Command: {' '.join(cmd)}")
-  print('='*60)
+    print(f'Running: {description}')
+  print(f'Command: {" ".join(cmd)}')
+  print('=' * 60)
 
   try:
     result = subprocess.run(cmd, check=True, capture_output=False)
     return result.returncode == 0
   except subprocess.CalledProcessError as e:
-    print(f"Command failed with exit code {e.returncode}")
+    print(f'Command failed with exit code {e.returncode}')
     return False
   except FileNotFoundError:
-    print(f"Command not found: {cmd[0]}")
-    print("Make sure pytest is installed: pip install -r requirements-test.txt")
+    print(f'Command not found: {cmd[0]}')
+    print('Make sure pytest is installed: uv sync --extra test')
     return False
 
 
 def run_safe_tests(args):
   """Run tests in safe mode with memory limits and monitoring."""
-  print("="*60)
-  print("Running tests in SAFE MODE")
-  print("="*60)
+  print('=' * 60)
+  print('Running tests in SAFE MODE')
+  print('=' * 60)
 
   # Set memory limit if supported
   memory_limit_mb = args.memory_limit or 2048
@@ -51,17 +52,17 @@ def run_safe_tests(args):
     memory_limit_bytes = memory_limit_mb * 1024 * 1024
     try:
       resource.setrlimit(resource.RLIMIT_AS, (memory_limit_bytes, memory_limit_bytes))
-      print(f"Memory limit set to: {memory_limit_mb} MB")
+      print(f'Memory limit set to: {memory_limit_mb} MB')
     except (ValueError, OSError) as e:
-      print(f"Warning: Could not set memory limit: {e}")
+      print(f'Warning: Could not set memory limit: {e}')
   else:
-    print("Warning: Memory limits not supported on Windows")
+    print('Warning: Memory limits not supported on Windows')
 
   # Show initial memory usage if psutil available
   if HAS_PSUTIL:
     process = psutil.Process()
     initial_memory = process.memory_info().rss / 1024 / 1024
-    print(f"Initial memory usage: {initial_memory:.1f} MB")
+    print(f'Initial memory usage: {initial_memory:.1f} MB')
 
   # Build pytest command with safety features
   cmd = ['python', '-m', 'pytest']
@@ -71,7 +72,7 @@ def run_safe_tests(args):
 
   # Limit parallelization in safe mode
   if args.parallel and args.parallel > 2:
-    print(f"Note: Limiting parallel workers to 2 in safe mode (requested: {args.parallel})")
+    print(f'Note: Limiting parallel workers to 2 in safe mode (requested: {args.parallel})')
     cmd.extend(['-n', '2'])
   elif args.parallel:
     cmd.extend(['-n', str(args.parallel)])
@@ -79,18 +80,18 @@ def run_safe_tests(args):
   # Add test selection
   if args.unit:
     cmd.extend(['-m', 'unit'])
-    test_type = "unit tests"
+    test_type = 'unit tests'
   elif args.integration:
     cmd.extend(['-m', 'integration'])
-    test_type = "integration tests"
+    test_type = 'integration tests'
   elif args.performance:
     cmd.extend(['-m', 'performance'])
-    test_type = "performance tests"
-    print("Warning: Performance tests may require more memory than the safe limit allows")
+    test_type = 'performance tests'
+    print('Warning: Performance tests may require more memory than the safe limit allows')
   else:
     # Default to running a single safe test
     cmd.append('tests/unit/test_config_manager.py::TestKnowledgeBase::test_init_with_kwargs')
-    test_type = "single safe test"
+    test_type = 'single safe test'
 
   # Add other options
   if args.verbose:
@@ -101,19 +102,20 @@ def run_safe_tests(args):
 
   if args.file:
     cmd.append(args.file)
-    test_type = f"tests in {args.file}"
+    test_type = f'tests in {args.file}'
 
   # Run the tests
-  print(f"\nRunning {test_type} with safety limits...")
-  print(f"Command: {' '.join(cmd)}")
-  print("-"*60)
+  print(f'\nRunning {test_type} with safety limits...')
+  print(f'Command: {" ".join(cmd)}')
+  print('-' * 60)
 
   start_time = time.time()
 
   try:
     # Run with real-time output
-    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                           text=True, bufsize=1, universal_newlines=True)
+    proc = subprocess.Popen(
+      cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1, universal_newlines=True
+    )
 
     # Stream output in real-time
     for line in proc.stdout:
@@ -122,33 +124,33 @@ def run_safe_tests(args):
     proc.wait()
     duration = time.time() - start_time
 
-    print("-"*60)
-    print(f"Duration: {duration:.1f}s")
+    print('-' * 60)
+    print(f'Duration: {duration:.1f}s')
 
     # Show final memory usage if psutil available
     if HAS_PSUTIL:
       final_memory = process.memory_info().rss / 1024 / 1024
-      print(f"Final memory usage: {final_memory:.1f} MB (delta: {final_memory - initial_memory:.1f} MB)")
+      print(f'Final memory usage: {final_memory:.1f} MB (delta: {final_memory - initial_memory:.1f} MB)')
 
     if proc.returncode == 0:
-      print("\n✅ Tests passed successfully in safe mode!")
+      print('\n✅ Tests passed successfully in safe mode!')
       return 0
     else:
-      print("\n❌ Some tests failed in safe mode!")
+      print('\n❌ Some tests failed in safe mode!')
       return 1
 
   except KeyboardInterrupt:
-    print("\n\nInterrupted by user")
+    print('\n\nInterrupted by user')
     proc.terminate()
     return 1
   except (OSError, subprocess.SubprocessError) as e:
-    print(f"\n\nError running tests: {e}")
+    print(f'\n\nError running tests: {e}')
     return 1
 
 
 def main():
   """Main test runner function."""
-  parser = argparse.ArgumentParser(description="CustomKB Test Runner")
+  parser = argparse.ArgumentParser(description='CustomKB Test Runner')
   parser.add_argument('--unit', action='store_true', help='Run unit tests only')
   parser.add_argument('--integration', action='store_true', help='Run integration tests only')
   parser.add_argument('--performance', action='store_true', help='Run performance tests only')
@@ -169,9 +171,9 @@ def main():
 
   # Install dependencies if requested
   if args.install_deps:
-    print("Installing test dependencies...")
-    cmd = [sys.executable, '-m', 'pip', 'install', '-r', 'requirements-test.txt']
-    if not run_command(cmd, "Installing test dependencies"):
+    print('Installing test dependencies...')
+    cmd = ['uv', 'sync', '--extra', 'test']
+    if not run_command(cmd, 'Installing test dependencies'):
       return 1
 
   # Handle safe mode
@@ -220,66 +222,59 @@ def main():
       cmd.extend(['--cov-report=html'])
 
   # Run the tests
-  success = run_command(cmd, "Running CustomKB tests")
+  success = run_command(cmd, 'Running CustomKB tests')
 
   if success:
-    print("\n" + "="*60)
-    print("✅ All tests passed!")
+    print('\n' + '=' * 60)
+    print('✅ All tests passed!')
     if args.coverage or args.html:
-      print("\n📊 Coverage report generated")
+      print('\n📊 Coverage report generated')
       if args.html:
-        print("   HTML report: htmlcov/index.html")
-    print("="*60)
+        print('   HTML report: htmlcov/index.html')
+    print('=' * 60)
     return 0
   else:
-    print("\n" + "="*60)
-    print("❌ Some tests failed!")
-    print("="*60)
+    print('\n' + '=' * 60)
+    print('❌ Some tests failed!')
+    print('=' * 60)
     return 1
 
 
 def run_quick_check():
   """Run a quick smoke test to verify basic functionality."""
-  print("Running quick smoke test...")
+  print('Running quick smoke test...')
 
-  cmd = [
-    'python', '-m', 'pytest',
-    'tests/unit/test_config_manager.py::TestKnowledgeBase::test_init_with_kwargs',
-    '-v'
-  ]
+  cmd = ['python', '-m', 'pytest', 'tests/unit/test_config_manager.py::TestKnowledgeBase::test_init_with_kwargs', '-v']
 
-  return run_command(cmd, "Quick smoke test")
+  return run_command(cmd, 'Quick smoke test')
 
 
 def run_full_suite():
   """Run the complete test suite with coverage."""
-  print("Running full test suite...")
+  print('Running full test suite...')
 
-  cmd = [
-    'python', '-m', 'pytest',
-    '--cov=.',
-    '--cov-report=term-missing',
-    '--cov-report=html',
-    '-v'
-  ]
+  cmd = ['python', '-m', 'pytest', '--cov=.', '--cov-report=term-missing', '--cov-report=html', '-v']
 
-  return run_command(cmd, "Full test suite with coverage")
+  return run_command(cmd, 'Full test suite with coverage')
 
 
 def run_ci_tests():
   """Run tests suitable for CI/CD pipeline."""
-  print("Running CI/CD test suite...")
+  print('Running CI/CD test suite...')
 
   cmd = [
-    'python', '-m', 'pytest',
-    '-m', 'not requires_api and not requires_data',
+    'python',
+    '-m',
+    'pytest',
+    '-m',
+    'not requires_api and not requires_data',
     '--cov=.',
     '--cov-report=xml',
     '--cov-report=term',
-    '--tb=short'
+    '--tb=short',
   ]
 
-  return run_command(cmd, "CI/CD test suite")
+  return run_command(cmd, 'CI/CD test suite')
 
 
 if __name__ == '__main__':
@@ -298,4 +293,4 @@ if __name__ == '__main__':
   # Otherwise run main argument parser
   sys.exit(main())
 
-#fin
+# fin

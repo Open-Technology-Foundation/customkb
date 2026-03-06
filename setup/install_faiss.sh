@@ -202,11 +202,11 @@ check_existing_faiss() {
 
     # Check which variant is installed
     local installed_variant=""
-    if pip list 2>/dev/null | grep -q "faiss-gpu-cu12"; then
+    if uv pip list 2>/dev/null | grep -q "faiss-gpu-cu12"; then
       installed_variant="gpu-cu12"
-    elif pip list 2>/dev/null | grep -q "faiss-gpu-cu11"; then
+    elif uv pip list 2>/dev/null | grep -q "faiss-gpu-cu11"; then
       installed_variant="gpu-cu11"
-    elif pip list 2>/dev/null | grep -q "faiss-cpu"; then
+    elif uv pip list 2>/dev/null | grep -q "faiss-cpu"; then
       installed_variant="cpu"
     else
       installed_variant="unknown"
@@ -222,17 +222,17 @@ check_existing_faiss() {
 
 install_faiss() {
   local variant="$1"
-  local requirements_file=""
+  local extra_name=""
 
   case "$variant" in
     cpu)
-      requirements_file="$PROJECT_DIR/requirements-faiss-cpu.txt"
+      extra_name="faiss-cpu"
       ;;
     gpu-cu12)
-      requirements_file="$PROJECT_DIR/requirements-faiss-gpu-cu12.txt"
+      extra_name="faiss-gpu-cu12"
       ;;
     gpu-cu11)
-      requirements_file="$PROJECT_DIR/requirements-faiss-gpu-cu11.txt"
+      extra_name="faiss-gpu-cu11"
       ;;
     *)
       print_error "Invalid FAISS variant: $variant"
@@ -240,21 +240,16 @@ install_faiss() {
       ;;
   esac
 
-  if [[ ! -f "$requirements_file" ]]; then
-    print_error "Requirements file not found: $requirements_file"
-    return 1
-  fi
-
   if [[ "$DRY_RUN" == true ]]; then
     print_info "[DRY RUN] Would install FAISS variant: $variant"
-    print_info "[DRY RUN] Would run: pip install -r $requirements_file"
+    print_info "[DRY RUN] Would run: uv sync --extra $extra_name"
     return 0
   fi
 
   print_info "Installing FAISS variant: $variant"
-  print_info "Using requirements file: $requirements_file"
+  print_info "Running: uv sync --extra $extra_name"
 
-  if pip install -r "$requirements_file"; then
+  if uv sync --extra "$extra_name"; then
     print_success "FAISS installed successfully"
     return 0
   else
@@ -287,7 +282,7 @@ main() {
       # Uninstall existing FAISS
       if [[ "$DRY_RUN" != true ]]; then
         print_info "Uninstalling existing FAISS..."
-        pip uninstall -y faiss-cpu faiss-gpu-cu12 faiss-gpu-cu11 2>/dev/null || true
+        uv pip uninstall faiss-cpu faiss-gpu-cu12 faiss-gpu-cu11 2>/dev/null || true
       fi
     fi
   fi

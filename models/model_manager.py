@@ -11,12 +11,13 @@ from typing import Any
 from utils.logging_config import get_logger
 
 # Add this module-level variable for test compatibility
-models_file = os.path.join(os.path.dirname(__file__), "..", "Models.json")
+models_file = os.path.join(os.path.dirname(__file__), '..', 'Models.json')
 
 # Module-level cache for parsed Models.json (performance optimization)
 _models_cache: dict[str, Any] | None = None
 
 logger = get_logger(__name__)
+
 
 def get_canonical_model(model_name: str) -> dict[str, Any]:
   """
@@ -38,11 +39,11 @@ def get_canonical_model(model_name: str) -> dict[str, Any]:
   """
   # Validate input
   if not model_name or not isinstance(model_name, str):
-    raise ValueError("model_name must be a non-empty string")
+    raise ValueError('model_name must be a non-empty string')
 
   model_name = model_name.strip()
   if not model_name:
-    raise ValueError("model_name must be a non-empty string")
+    raise ValueError('model_name must be a non-empty string')
 
   # Check cache first (performance optimization)
   global _models_cache
@@ -56,7 +57,7 @@ def get_canonical_model(model_name: str) -> dict[str, Any]:
         # Populate cache for future calls
         _models_cache = models
     except FileNotFoundError:
-      logger.error(f"Models.json file not found at {models_file}")
+      logger.error(f'Models.json file not found at {models_file}')
       raise
 
   # Try direct lookup by model name
@@ -72,12 +73,13 @@ def get_canonical_model(model_name: str) -> dict[str, Any]:
   for model_id, model_info in models.items():
     if model_name in model_id or (model_info.get('alias') and model_name in model_info['alias']):
       if logger:
-        logger.warning(f"Using partial match: {model_id} for {model_name}")
+        logger.warning(f'Using partial match: {model_id} for {model_name}')
       return model_info
 
   # No matches found
   if logger:
-    logger.error(f"Model {model_name} not found in Models.json")
-  raise KeyError(f"Model {model_name} not found in Models.json")
+    logger.error(f'Model {model_name} not found in Models.json')
+  raise KeyError(f'Model {model_name} not found in Models.json')
 
-#fin
+
+# fin

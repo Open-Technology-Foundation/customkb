@@ -41,7 +41,7 @@ def get_cache_key(query_text: str, model: str) -> str:
   # Create a unique hash based on text
   text_hash = hashlib.sha256(query_text.encode()).hexdigest()
   # Return format that includes model name for cache organization
-  return f"{model}_{text_hash}"
+  return f'{model}_{text_hash}'
 
 
 def get_cache_file_path(cache_key: str) -> str:
@@ -53,11 +53,18 @@ def get_cache_file_path(cache_key: str) -> str:
 
   Returns:
       Full path to cache file
+
+  Raises:
+      ValueError: If constructed path escapes the cache directory
   """
   # Use first 2 chars for directory to avoid too many files in one dir
   subdir = os.path.join(QUERY_CACHE_DIR, cache_key[:2])
   os.makedirs(subdir, exist_ok=True)
-  return os.path.join(subdir, f"{cache_key}.json")
+  full_path = os.path.join(subdir, f'{cache_key}.json')
+  # Validate path stays within cache directory
+  if not os.path.realpath(full_path).startswith(os.path.realpath(QUERY_CACHE_DIR) + os.sep):
+    raise ValueError(f'Cache path escapes cache directory: {cache_key[:20]}...')
+  return full_path
 
 
 def get_cached_query_embedding(query_text: str, model: str, kb=None) -> list[float] | None:
@@ -86,17 +93,16 @@ def get_cached_query_embedding(query_text: str, model: str, kb=None) -> list[flo
           cache_data = json.load(f)
 
         # Validate cache data
-        if (cache_data.get('model') == model and
-            cache_data.get('query_hash') == cache_key):
-          logger.debug("Using cached query embedding")
+        if cache_data.get('model') == model and cache_data.get('query_hash') == cache_key:
+          logger.debug('Using cached query embedding')
           return cache_data['embedding']
       else:
         # Remove expired cache
         os.remove(cache_file)
-        logger.debug("Removed expired query embedding cache")
+        logger.debug('Removed expired query embedding cache')
 
   except (OSError, json.JSONDecodeError, KeyError, ValueError) as e:
-    logger.debug(f"Query embedding cache retrieval failed: {e}")
+    logger.debug(f'Query embedding cache retrieval failed: {e}')
 
   return None
 
@@ -119,16 +125,16 @@ def save_query_embedding_to_cache(query_text: str, model: str, embedding: list[f
       'query_hash': cache_key,
       'embedding': embedding,
       'query_preview': query_text[:100] if len(query_text) > 100 else query_text,
-      'timestamp': time.time()
+      'timestamp': time.time(),
     }
 
     with open(cache_file, 'w') as f:
       json.dump(cache_data, f)
 
-    logger.debug("Query embedding saved to cache")
+    logger.debug('Query embedding saved to cache')
 
   except (OSError, json.JSONDecodeError) as e:
-    logger.debug(f"Query embedding cache save failed: {e}")
+    logger.debug(f'Query embedding cache save failed: {e}')
 
 
 async def generate_query_embedding(query_text: str, model: str, kb=None) -> np.ndarray:
@@ -150,19 +156,19 @@ async def generate_query_embedding(query_text: str, model: str, kb=None) -> np.n
     embeddings = await litellm_embed.get_embeddings([query_text], model)
 
     if not embeddings or not embeddings[0]:
-      raise EmbeddingError("Failed to generate embedding for query")
+      raise EmbeddingError('Failed to generate embedding for query')
 
     embedding = embeddings[0]
 
     # Convert to numpy array
     embedding_array = np.array(embedding, dtype=np.float32)
 
-    logger.debug(f"Generated query embedding: {len(embedding)} dimensions")
+    logger.debug(f'Generated query embedding: {len(embedding)} dimensions')
     return embedding_array
 
   except (ValueError, ImportError, RuntimeError, OSError) as e:
-    logger.error(f"Query embedding generation failed: {e}")
-    raise EmbeddingError(f"Failed to generate query embedding: {e}") from e
+    logger.error(f'Query embedding generation failed: {e}')
+    raise EmbeddingError(f'Failed to generate query embedding: {e}') from e
 
 
 async def get_query_embedding(query_text: str, model: str, kb: Any | None = None) -> np.ndarray:
@@ -197,11 +203,11 @@ async def get_query_embedding(query_text: str, model: str, kb: Any | None = None
     cached_embedding = get_cached_query_embedding(query_for_embedding, model, kb)
 
     if cached_embedding:
-      logger.debug("Using cached query embedding")
+      logger.debug('Using cached query embedding')
       return np.array(cached_embedding, dtype=np.float32)
 
     # Generate new embedding
-    logger.debug(f"Generating new query embedding with model: {model}")
+    logger.debug(f'Generating new query embedding with model: {model}')
     embedding_array = await generate_query_embedding(query_for_embedding, model, kb)
 
     # Cache the embedding
@@ -210,11 +216,11 @@ async def get_query_embedding(query_text: str, model: str, kb: Any | None = None
     return embedding_array
 
   except (ValueError, RuntimeError, OSError) as e:
-    logger.error(f"Failed to get query embedding: {e}")
-    raise EmbeddingError(f"Query embedding failed: {e}") from e
+    logger.error(f'Failed to get query embedding: {e}')
+    raise EmbeddingError(f'Query embedding failed: {e}') from e
 
 
-def clear_query_cache(model: str = None, older_than_hours: int = None) -> int:
+def clear_query_cache(model: str | None = None, older_than_hours: int | None = None) -> int:
   """
   Clear query embedding cache.
 
@@ -229,7 +235,7 @@ def clear_query_cache(model: str = None, older_than_hours: int = None) -> int:
   current_time = time.time()
 
   try:
-    for cache_file in Path(QUERY_CACHE_DIR).rglob("*.json"):
+    for cache_file in Path(QUERY_CACHE_DIR).rglob('*.json'):
       should_remove = False
 
       # Check age filter
@@ -256,10 +262,10 @@ def clear_query_cache(model: str = None, older_than_hours: int = None) -> int:
         except OSError:
           pass
 
-    logger.info(f"Cleared {removed_count} query cache files")
+    logger.info(f'Cleared {removed_count} query cache files')
 
   except (OSError, FileNotFoundError) as e:
-    logger.error(f"Failed to clear query cache: {e}")
+    logger.error(f'Failed to clear query cache: {e}')
 
   return removed_count
 
@@ -277,11 +283,11 @@ def get_query_cache_stats() -> dict:
     'total_size_bytes': 0,
     'models': {},
     'oldest_cache': None,
-    'newest_cache': None
+    'newest_cache': None,
   }
 
   try:
-    cache_files = list(Path(QUERY_CACHE_DIR).rglob("*.json"))
+    cache_files = list(Path(QUERY_CACHE_DIR).rglob('*.json'))
     stats['total_files'] = len(cache_files)
 
     if cache_files:
@@ -314,7 +320,7 @@ def get_query_cache_stats() -> dict:
         stats['newest_cache'] = max(file_times)
 
   except (OSError, FileNotFoundError) as e:
-    logger.error(f"Failed to get query cache stats: {e}")
+    logger.error(f'Failed to get query cache stats: {e}')
 
   return stats
 
@@ -340,15 +346,15 @@ def validate_embedding_dimensions(embedding: np.ndarray, expected_dims: int) -> 
       return False
 
   if embedding.shape != (expected_dims,) and embedding.shape != (1, expected_dims):
-    logger.warning(f"Embedding dimension mismatch: got {embedding.shape}, expected ({expected_dims},)")
+    logger.warning(f'Embedding dimension mismatch: got {embedding.shape}, expected ({expected_dims},)')
     return False
 
   # Check for NaN or infinite values
   if np.any(np.isnan(embedding)) or np.any(np.isinf(embedding)):
-    logger.warning("Embedding contains NaN or infinite values")
+    logger.warning('Embedding contains NaN or infinite values')
     return False
 
   return True
 
 
-#fin
+# fin

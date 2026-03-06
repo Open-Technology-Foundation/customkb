@@ -144,7 +144,7 @@ class TestTextSplitter(unittest.TestCase):
     with self.assertRaises(ChunkingError) as cm:
       init_text_splitter(self.kb, 'text')
 
-    self.assertIn("Text splitter initialization failed", str(cm.exception))
+    self.assertIn('Text splitter initialization failed', str(cm.exception))
 
 
 class TestLanguageSpecificSplitter(unittest.TestCase):
@@ -195,26 +195,22 @@ class TestTextSplitting(unittest.TestCase):
 
   def test_split_text_basic(self):
     """Test basic text splitting."""
-    text = "This is a test document that needs to be split into chunks."
-    self.splitter.split_text.return_value = [
-      "This is a test document",
-      "that needs to be split",
-      "into chunks."
-    ]
+    text = 'This is a test document that needs to be split into chunks.'
+    self.splitter.split_text.return_value = ['This is a test document', 'that needs to be split', 'into chunks.']
 
     chunks = split_text(text, self.splitter)
 
     self.assertEqual(len(chunks), 3)
-    self.assertEqual(chunks[0]['text'], "This is a test document")
+    self.assertEqual(chunks[0]['text'], 'This is a test document')
     self.assertEqual(chunks[0]['chunk_index'], 0)
     self.assertEqual(chunks[0]['total_chunks'], 3)
     self.assertIn('char_count', chunks[0])
 
   def test_split_text_with_metadata(self):
     """Test text splitting with metadata."""
-    text = "Test content"
+    text = 'Test content'
     metadata = {'source': 'test.txt', 'author': 'Test Author'}
-    self.splitter.split_text.return_value = ["Test content"]
+    self.splitter.split_text.return_value = ['Test content']
 
     chunks = split_text(text, self.splitter, metadata)
 
@@ -226,18 +222,18 @@ class TestTextSplitting(unittest.TestCase):
     """Test splitting empty text."""
     self.splitter.split_text.return_value = []
 
-    chunks = split_text("", self.splitter)
+    chunks = split_text('', self.splitter)
 
     self.assertEqual(chunks, [])
 
   def test_split_text_error(self):
     """Test error handling in text splitting."""
-    self.splitter.split_text.side_effect = RuntimeError("Split failed")
+    self.splitter.split_text.side_effect = RuntimeError('Split failed')
 
     with self.assertRaises(ChunkingError) as cm:
-      split_text("Test text", self.splitter)
+      split_text('Test text', self.splitter)
 
-    self.assertIn("Failed to split text", str(cm.exception))
+    self.assertIn('Failed to split text', str(cm.exception))
 
 
 class TestChunkStatistics(unittest.TestCase):
@@ -245,11 +241,7 @@ class TestChunkStatistics(unittest.TestCase):
 
   def test_calculate_statistics(self):
     """Test statistics calculation for chunks."""
-    chunks = [
-      {'text': 'Short'},
-      {'text': 'A medium chunk'},
-      {'text': 'This is a longer chunk of text'}
-    ]
+    chunks = [{'text': 'Short'}, {'text': 'A medium chunk'}, {'text': 'This is a longer chunk of text'}]
 
     stats = calculate_chunk_statistics(chunks)
 
@@ -317,7 +309,7 @@ class TestChunkMerging(unittest.TestCase):
     chunks = [
       {'text': 'Small', 'chunk_index': 0},
       {'text': 'Tiny', 'chunk_index': 1},
-      {'text': 'This is a normal sized chunk that should not be merged', 'chunk_index': 2}
+      {'text': 'This is a normal sized chunk that should not be merged', 'chunk_index': 2},
     ]
 
     merged = merge_small_chunks(chunks, min_size=20)
@@ -330,11 +322,7 @@ class TestChunkMerging(unittest.TestCase):
 
   def test_merge_all_small_chunks(self):
     """Test merging when all chunks are small."""
-    chunks = [
-      {'text': 'A'},
-      {'text': 'B'},
-      {'text': 'C'}
-    ]
+    chunks = [{'text': 'A'}, {'text': 'B'}, {'text': 'C'}]
 
     merged = merge_small_chunks(chunks, min_size=10)
 
@@ -353,7 +341,7 @@ class TestChunkMerging(unittest.TestCase):
     chunks = [
       {'text': 'Small', 'chunk_index': 0, 'total_chunks': 3},
       {'text': 'Tiny', 'chunk_index': 1, 'total_chunks': 3},
-      {'text': 'Normal chunk', 'chunk_index': 2, 'total_chunks': 3}
+      {'text': 'Normal chunk', 'chunk_index': 2, 'total_chunks': 3},
     ]
 
     merged = merge_small_chunks(chunks, min_size=10)
@@ -375,11 +363,7 @@ class TestChunkValidation(unittest.TestCase):
 
   def test_validate_valid_chunks(self):
     """Test validation of valid chunks."""
-    chunks = [
-      {'text': 'This is a valid chunk'},
-      {'text': 'Another valid chunk of text'},
-      {'text': 'A third chunk'}
-    ]
+    chunks = [{'text': 'This is a valid chunk'}, {'text': 'Another valid chunk of text'}, {'text': 'A third chunk'}]
 
     result = validate_chunks(chunks, self.kb)
     self.assertTrue(result)
@@ -389,19 +373,16 @@ class TestChunkValidation(unittest.TestCase):
     with self.assertRaises(ProcessingError) as cm:
       validate_chunks([], self.kb)
 
-    self.assertIn("No chunks to validate", str(cm.exception))
+    self.assertIn('No chunks to validate', str(cm.exception))
 
   def test_validate_missing_text(self):
     """Test validation fails for chunk without text."""
-    chunks = [
-      {'text': 'Valid chunk'},
-      {'no_text': 'Missing text key'}
-    ]
+    chunks = [{'text': 'Valid chunk'}, {'no_text': 'Missing text key'}]
 
     with self.assertRaises(ProcessingError) as cm:
       validate_chunks(chunks, self.kb)
 
-    self.assertIn("Chunk 1 has no text", str(cm.exception))
+    self.assertIn('Chunk 1 has no text', str(cm.exception))
 
   def test_validate_empty_text(self):
     """Test validation fails for empty text."""
@@ -410,7 +391,7 @@ class TestChunkValidation(unittest.TestCase):
     with self.assertRaises(ProcessingError) as cm:
       validate_chunks(chunks, self.kb)
 
-    self.assertIn("Chunk 0 has no text", str(cm.exception))
+    self.assertIn('Chunk 0 has no text', str(cm.exception))
 
   def test_validate_exceeds_max_size(self):
     """Test validation fails for oversized chunks."""
@@ -419,14 +400,14 @@ class TestChunkValidation(unittest.TestCase):
     with self.assertRaises(ProcessingError) as cm:
       validate_chunks(chunks, self.kb)
 
-    self.assertIn("exceeds maximum size", str(cm.exception))
+    self.assertIn('exceeds maximum size', str(cm.exception))
 
   @patch('database.chunking.logger')
   def test_validate_below_min_size_warning(self, mock_logger):
     """Test validation warns for undersized non-final chunks."""
     chunks = [
       {'text': 'tiny'},  # Below min_chunk_size of 10
-      {'text': 'This is a normal chunk'}
+      {'text': 'This is a normal chunk'},
     ]
 
     result = validate_chunks(chunks, self.kb)
@@ -439,7 +420,7 @@ class TestChunkValidation(unittest.TestCase):
     """Test that last chunk is allowed to be small."""
     chunks = [
       {'text': 'This is a normal chunk'},
-      {'text': 'tiny'}  # Below min but it's the last chunk
+      {'text': 'tiny'},  # Below min but it's the last chunk
     ]
 
     # Should not raise
@@ -453,7 +434,7 @@ class TestChunkValidation(unittest.TestCase):
 
     chunks = [
       {'text': 'Valid'},  # Exactly at min
-      {'text': 'x' * 50}  # Exactly at max
+      {'text': 'x' * 50},  # Exactly at max
     ]
 
     result = validate_chunks(chunks, self.kb)
@@ -466,33 +447,37 @@ class TestTokenCounter(unittest.TestCase):
   def test_get_token_counter_returns_callable(self):
     """Test that get_token_counter returns a callable function."""
     from database.chunking import get_token_counter
+
     counter = get_token_counter()
     self.assertTrue(callable(counter))
 
   def test_token_counter_counts_tokens(self):
     """Test that token counter returns integer counts."""
     from database.chunking import get_token_counter
+
     counter = get_token_counter()
 
-    result = counter("Hello world")
+    result = counter('Hello world')
     self.assertIsInstance(result, int)
     self.assertGreater(result, 0)
 
   def test_token_counter_empty_string(self):
     """Test token counter with empty string."""
     from database.chunking import get_token_counter
+
     counter = get_token_counter()
 
-    result = counter("")
+    result = counter('')
     self.assertEqual(result, 0)
 
   def test_token_counter_longer_text(self):
     """Test that longer text produces more tokens."""
     from database.chunking import get_token_counter
+
     counter = get_token_counter()
 
-    short_text = "Hello"
-    long_text = "Hello world, this is a much longer sentence with more tokens."
+    short_text = 'Hello'
+    long_text = 'Hello world, this is a much longer sentence with more tokens.'
 
     short_count = counter(short_text)
     long_count = counter(long_text)
@@ -502,9 +487,10 @@ class TestTokenCounter(unittest.TestCase):
   def test_token_counter_vs_character_count(self):
     """Test that token count differs from character count."""
     from database.chunking import get_token_counter
+
     counter = get_token_counter()
 
-    text = "This is a test sentence with multiple words."
+    text = 'This is a test sentence with multiple words.'
     token_count = counter(text)
     char_count = len(text)
 
@@ -516,11 +502,11 @@ class TestTokenCounter(unittest.TestCase):
     from database.chunking import _tiktoken_encodings, get_token_counter
 
     # First call should populate cache
-    get_token_counter("cl100k_base")
+    get_token_counter('cl100k_base')
     cache_size_after_first = len(_tiktoken_encodings)
 
     # Second call should reuse cached encoding
-    get_token_counter("cl100k_base")
+    get_token_counter('cl100k_base')
     cache_size_after_second = len(_tiktoken_encodings)
 
     # Cache should not grow
@@ -530,4 +516,4 @@ class TestTokenCounter(unittest.TestCase):
 if __name__ == '__main__':
   unittest.main()
 
-#fin
+# fin

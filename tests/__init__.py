@@ -8,4 +8,4 @@ Comprehensive testing framework for CustomKB components including:
 - Mock fixtures for external dependencies
 """
 
-__version__ = "1.0.0"
+__version__ = '1.0.0'

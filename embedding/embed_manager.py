@@ -1,10 +1,11 @@
 #!/usr/bin/env python
 """
-Improved Embedding management for CustomKB.
-Handles the generation and storage of vector embeddings with:
-- Checkpoint updating after each batch
-- Forced delay between API calls
-- More robust error handling
+Embedding management for CustomKB.
+
+Orchestrates the generation and storage of vector embeddings for knowledgebase
+chunks. Handles batch processing with checkpoint updating, API rate limiting
+with exponential backoff, two-tier caching (memory + disk), and FAISS index
+creation with automatic index type selection based on dataset size.
 """
 
 import argparse
@@ -29,13 +30,18 @@ def get_faiss_instance():
   global _faiss, _FAISS_GPU_AVAILABLE
   if _faiss is None:
     from utils.faiss_loader import get_faiss
+
     _faiss, _FAISS_GPU_AVAILABLE = get_faiss()
   return _faiss, _FAISS_GPU_AVAILABLE
 
-# Import cache manager from cache module
-# LiteLLM-based embedding provider (unified interface for OpenAI, Google, local models)
+
+# Import cache manager and LiteLLM-based embedding provider
 import embedding.litellm_provider as litellm_embed
-from embedding.cache import CacheThreadManager, cache_manager, get_cache_file_path
+from embedding.cache import (  # noqa: F401 (CacheThreadManager re-exported for tests)
+  CacheThreadManager,
+  cache_manager,
+  get_cache_file_path,
+)
 
 logger = get_logger(__name__)
 
@@ -44,97 +50,7 @@ CACHE_DIR = os.path.join(os.getenv('VECTORDBS', '/var/lib/vectordbs'), '.embeddi
 
 # Configuration constants - these are now loaded from KnowledgeBase config
 
-# Thread-safe backward compatibility proxies
-# DEPRECATED: These will be removed in v1.1.0 (target: 2026-01-01)
-# Use cache_manager.get_from_memory_cache() and cache_manager.add_to_memory_cache() instead
-class ThreadSafeCacheProxy:
-  """Thread-safe proxy for backward compatibility with direct cache access.
 
-  DEPRECATED: This class is deprecated and will be removed in v1.1.0.
-  Use cache_manager methods directly instead.
-  """
-
-  def __init__(self, cache_manager: CacheThreadManager):
-    self._cache_manager = cache_manager
-
-  def __contains__(self, key):
-    with self._cache_manager._lock:
-      return key in self._cache_manager._memory_cache
-
-  def __getitem__(self, key):
-    with self._cache_manager._lock:
-      return self._cache_manager._memory_cache[key]
-
-  def __setitem__(self, key, value):
-    # Deprecated - use cache_manager.add_to_memory_cache instead
-    import warnings
-    warnings.warn("Direct cache assignment is deprecated. Use cache_manager.add_to_memory_cache()",
-                  DeprecationWarning, stacklevel=2)
-    self._cache_manager.add_to_memory_cache(key, value)
-
-  def get(self, key, default=None):
-    result = self._cache_manager.get_from_memory_cache(key)
-    return result if result is not None else default
-
-  def keys(self):
-    with self._cache_manager._lock:
-      return list(self._cache_manager._memory_cache.keys())
-
-  def values(self):
-    with self._cache_manager._lock:
-      return list(self._cache_manager._memory_cache.values())
-
-  def items(self):
-    with self._cache_manager._lock:
-      return list(self._cache_manager._memory_cache.items())
-
-  def __len__(self):
-    with self._cache_manager._lock:
-      return len(self._cache_manager._memory_cache)
-
-class ThreadSafeCacheKeysProxy:
-  """Thread-safe proxy for backward compatibility with direct cache keys access.
-
-  DEPRECATED: This class is deprecated and will be removed in v1.1.0.
-  Cache keys are managed automatically by cache_manager.
-  """
-
-  def __init__(self, cache_manager: CacheThreadManager):
-    self._cache_manager = cache_manager
-
-  def __len__(self):
-    with self._cache_manager._lock:
-      return len(self._cache_manager._memory_cache_keys)
-
-  def __contains__(self, key):
-    with self._cache_manager._lock:
-      return key in self._cache_manager._memory_cache_keys
-
-  def __iter__(self):
-    with self._cache_manager._lock:
-      return iter(self._cache_manager._memory_cache_keys.copy())
-
-  def __getitem__(self, index):
-    with self._cache_manager._lock:
-      return self._cache_manager._memory_cache_keys[index]
-
-  def append(self, key):
-    # Deprecated - use cache_manager.add_to_memory_cache instead
-    import warnings
-    warnings.warn("Direct cache keys manipulation is deprecated. Use cache_manager.add_to_memory_cache()",
-                  DeprecationWarning, stacklevel=2)
-
-  def remove(self, key):
-    # Deprecated - managed automatically by cache_manager
-    import warnings
-    warnings.warn("Direct cache keys manipulation is deprecated. Cache keys are managed automatically.",
-                  DeprecationWarning, stacklevel=2)
-
-# Backward compatibility - these use thread-safe proxies
-# DEPRECATED: Will be removed in v1.1.0 - use cache_manager directly
-# Note: Not a memory leak (singletons only), just technical debt
-embedding_memory_cache = ThreadSafeCacheProxy(cache_manager)
-embedding_memory_cache_keys = ThreadSafeCacheKeysProxy(cache_manager)
 
 def configure_cache_manager(kb: 'KnowledgeBase') -> None:
   """
@@ -148,10 +64,9 @@ def configure_cache_manager(kb: 'KnowledgeBase') -> None:
   cache_memory_limit_mb = getattr(kb, 'cache_memory_limit_mb', 500)
 
   cache_manager.configure(
-    max_workers=cache_thread_pool_size,
-    memory_cache_size=memory_cache_size,
-    max_memory_mb=cache_memory_limit_mb
+    max_workers=cache_thread_pool_size, memory_cache_size=memory_cache_size, max_memory_mb=cache_memory_limit_mb
   )
+
 
 def get_cache_key(text: str, model: str) -> str:
   """
@@ -166,7 +81,8 @@ def get_cache_key(text: str, model: str) -> str:
   """
   # Use SHA256 for consistency with other cache key generation
   text_hash = hashlib.sha256(text.encode('utf-8')).hexdigest()
-  return f"{model}_{text_hash}"
+  return f'{model}_{text_hash}'
+
 
 def get_cached_embedding(text: str, model: str) -> list[float] | None:
   """
@@ -201,6 +117,7 @@ def get_cached_embedding(text: str, model: str) -> list[float] | None:
 
   return None
 
+
 def add_to_memory_cache(cache_key: str, embedding: list[float], kb=None) -> None:
   """
   Add an embedding to the in-memory cache with LRU eviction.
@@ -211,6 +128,7 @@ def add_to_memory_cache(cache_key: str, embedding: list[float], kb=None) -> None
       kb: KnowledgeBase instance for configuration (optional).
   """
   cache_manager.add_to_memory_cache(cache_key, embedding, kb)
+
 
 def save_embedding_to_cache(text: str, model: str, embedding: list[float], kb=None) -> None:
   """
@@ -235,10 +153,11 @@ def save_embedding_to_cache(text: str, model: str, embedding: list[float], kb=No
       with open(cache_file, 'w') as f:
         json.dump(embedding, f)
     except OSError as e:
-      logger.warning(f"Failed to cache embedding: {e}")
+      logger.warning(f'Failed to cache embedding: {e}')
 
   # Use shared thread pool - no resource leak
   cache_manager.submit_cache_task(save_to_disk)
+
 
 def get_optimal_faiss_index(dimensions: int, dataset_size: int, kb=None):
   """
@@ -265,7 +184,7 @@ def get_optimal_faiss_index(dimensions: int, dataset_size: int, kb=None):
   # For high-dimensional vectors, use a flat index
   # which doesn't require training and works with any dimensionality
   if dimensions > high_dim_threshold:
-    logger.info(f"Using IndexFlatIP due to high dimensionality: {dimensions}")
+    logger.info(f'Using IndexFlatIP due to high dimensionality: {dimensions}')
     index = faiss.IndexFlatIP(dimensions)
     return faiss.IndexIDMap(index)
 
@@ -274,21 +193,24 @@ def get_optimal_faiss_index(dimensions: int, dataset_size: int, kb=None):
     index = faiss.IndexFlatIP(dimensions)
   elif dataset_size < medium_dataset_threshold:
     # For medium datasets, use IVF with configurable centroids
-    n_centroids = min(int(ivf_centroid_multiplier * (dataset_size ** 0.5)), max_centroids)  # Limit number of centroids
+    n_centroids = min(int(ivf_centroid_multiplier * (dataset_size**0.5)), max_centroids)  # Limit number of centroids
     quantizer = faiss.IndexFlatIP(dimensions)
     index = faiss.IndexIVFFlat(quantizer, dimensions, n_centroids, faiss.METRIC_INNER_PRODUCT)
+    index.train_mode = True
     # IVF index will be trained later with actual embedding data
   else:
     # For large datasets, use IVF with PQ for compression
     large_max_centroids = max_centroids * 2  # Allow more centroids for large datasets
-    n_centroids = min(int(ivf_centroid_multiplier * (dataset_size ** 0.5)), large_max_centroids)  # Limit number of centroids
+    n_centroids = min(int(ivf_centroid_multiplier * (dataset_size**0.5)), large_max_centroids)  # Limit number of centroids
     quantizer = faiss.IndexFlatIP(dimensions)
     # Use 8-bit quantization with 16 subquantizers
     n_subquantizers = min(16, dimensions // 64)  # Ensure subquantizers fit dimensions
     index = faiss.IndexIVFPQ(quantizer, dimensions, n_centroids, n_subquantizers, 8, faiss.METRIC_INNER_PRODUCT)
+    index.train_mode = True
     # IVF index will be trained later with actual embedding data
 
   return faiss.IndexIDMap(index)
+
 
 def calculate_optimal_batch_size(chunks: list[str], model: str, max_batch_size: int, kb=None) -> int:
   """
@@ -315,10 +237,10 @@ def calculate_optimal_batch_size(chunks: list[str], model: str, max_batch_size: 
 
   # Token limits per model
   model_limits = {
-    "text-embedding-3-small": 8191,
-    "text-embedding-3-large": 8191,
-    "text-embedding-ada-002": 8191,
-    "gemini-embedding-001": 30720  # Google model supports longer context
+    'text-embedding-3-small': 8191,
+    'text-embedding-3-large': 8191,
+    'text-embedding-ada-002': 8191,
+    'gemini-embedding-001': 30720,  # Google model supports longer context
   }
 
   token_limit = model_limits.get(model, 8191)
@@ -332,6 +254,7 @@ def calculate_optimal_batch_size(chunks: list[str], model: str, max_batch_size: 
 
   # Ensure at least one chunk per batch
   return max(1, max_chunks)
+
 
 async def process_embedding_batch_async(kb: KnowledgeBase, chunks: list[str]) -> list[list[float]]:
   """
@@ -363,8 +286,8 @@ async def process_embedding_batch_async(kb: KnowledgeBase, chunks: list[str]) ->
     max_batch_size_config = min(max_batch_size_config, 100)
 
   sub_batch_size = min(max_batch_size_config, len(uncached_chunks))
-  sub_batches = [uncached_chunks[i:i+sub_batch_size] for i in range(0, len(uncached_chunks), sub_batch_size)]
-  sub_indices = [uncached_indices[i:i+sub_batch_size] for i in range(0, len(uncached_indices), sub_batch_size)]
+  sub_batches = [uncached_chunks[i : i + sub_batch_size] for i in range(0, len(uncached_chunks), sub_batch_size)]
+  sub_indices = [uncached_indices[i : i + sub_batch_size] for i in range(0, len(uncached_indices), sub_batch_size)]
 
   all_embeddings = []
   all_indices = []
@@ -389,19 +312,20 @@ async def process_embedding_batch_async(kb: KnowledgeBase, chunks: list[str]) ->
         break
       except (ConnectionError, TimeoutError, OSError, ValueError) as e:
         from utils.security_utils import safe_log_error
-        safe_log_error(f"Embedding API error: {e}")
-        safe_log_error(f"Retry attempt {tries} for model {kb.vector_model}")
+
+        safe_log_error(f'Embedding API error: {e}')
+        safe_log_error(f'Retry attempt {tries} for model {kb.vector_model}')
         tries += 1
         if tries > max_tries:
-          safe_log_error("Max retries reached for sub-batch. Skipping batch.")
-          safe_log_error(f"Failed after {tries} attempts with model {kb.vector_model}")
+          safe_log_error('Max retries reached for sub-batch. Skipping batch.')
+          safe_log_error(f'Failed after {tries} attempts with model {kb.vector_model}')
           # Skip this batch instead of exiting the program
           break
         # Exponential backoff with jitter
         backoff_exponent = getattr(kb, 'backoff_exponent', 2)
         backoff_jitter = getattr(kb, 'backoff_jitter', 0.1)
-        backoff = (tries ** backoff_exponent) + (backoff_jitter * np.random.random())
-        logger.info(f"Rate limit hit. Backing off for {backoff:.2f} seconds")
+        backoff = (tries**backoff_exponent) + (backoff_jitter * np.random.random())
+        logger.info(f'Rate limit hit. Backing off for {backoff:.2f} seconds')
         await asyncio.sleep(backoff)
 
   # Merge cached and new embeddings
@@ -410,6 +334,7 @@ async def process_embedding_batch_async(kb: KnowledgeBase, chunks: list[str]) ->
     result[idx] = emb
 
   return [emb for emb in result if emb is not None]
+
 
 async def get_embeddings_for_batch(kb: KnowledgeBase, chunks: list[str]) -> list[list[float]]:
   """
@@ -453,17 +378,17 @@ async def get_embeddings_for_batch(kb: KnowledgeBase, chunks: list[str]) -> list
         save_embedding_to_cache(uncached_texts[idx], kb.vector_model, embedding, kb)
 
     if cache_hits > 0:
-      logger.debug(f"Cache hits: {cache_hits}/{len(chunks)}")
+      logger.debug(f'Cache hits: {cache_hits}/{len(chunks)}')
 
     # Filter out any None values (shouldn't happen but be safe)
     return [emb for emb in embeddings_list if emb is not None]
 
   except (ValueError, KeyError, IndexError, RuntimeError, OSError) as e:
-    logger.error(f"Error getting embeddings for batch: {e}")
+    logger.error(f'Error getting embeddings for batch: {e}')
     return []
 
-async def process_batch_and_update(kb: KnowledgeBase, index,
-                                 chunks: list[str], ids: list[int]) -> set[int]:
+
+async def process_batch_and_update(kb: KnowledgeBase, index, chunks: list[str], ids: list[int]) -> set[int]:
   """
   Process a batch and update the database with success status.
 
@@ -481,7 +406,7 @@ async def process_batch_and_update(kb: KnowledgeBase, index,
     embeddings_list = await process_embedding_batch_async(kb, chunks)
 
     if not embeddings_list:
-      logger.warning("No embeddings were generated for batch")
+      logger.warning('No embeddings were generated for batch')
       return set()
 
     # Add embeddings to index
@@ -492,11 +417,13 @@ async def process_batch_and_update(kb: KnowledgeBase, index,
     # Return successfully processed IDs
     return set(ids)
   except (ValueError, TypeError, RuntimeError, IndexError) as e:
-    logger.error(f"Error processing batch: {e}")
+    logger.error(f'Error processing batch: {e}')
     return set()
 
-async def process_all_batches_with_checkpoints(kb: KnowledgeBase, index,
-                                          all_chunks: list[list[str]], all_ids: list[list[int]]) -> set[int]:
+
+async def process_all_batches_with_checkpoints(
+  kb: KnowledgeBase, index, all_chunks: list[list[str]], all_ids: list[list[int]]
+) -> set[int]:
   """
   Process all batches of embeddings with checkpointing and concurrency.
 
@@ -520,14 +447,14 @@ async def process_all_batches_with_checkpoints(kb: KnowledgeBase, index,
   max_concurrency = getattr(kb, 'api_max_concurrency', 8)
   min_concurrency = getattr(kb, 'api_min_concurrency', 3)
   concurrency_limit = min(max_concurrency, max(min_concurrency, dataset_size // 1000))
-  logger.info(f"Using concurrency limit of {concurrency_limit} for embedding API calls")
+  logger.info(f'Using concurrency limit of {concurrency_limit} for embedding API calls')
 
   # Process batches in parallel with a semaphore to limit concurrent API calls
   semaphore = asyncio.Semaphore(concurrency_limit)
 
   async def process_batch_with_semaphore(i, chunks, ids):
     async with semaphore:
-      logger.info(f"Processing batch {i+1}/{len(all_chunks)}")
+      logger.info(f'Processing batch {i + 1}/{len(all_chunks)}')
       return await process_batch_and_update(kb, index, chunks, ids)
 
   # Create tasks for batch processing with the semaphore for concurrent processing
@@ -535,8 +462,8 @@ async def process_all_batches_with_checkpoints(kb: KnowledgeBase, index,
   checkpoint_interval = getattr(kb, 'checkpoint_interval', 10)
   for batch_group_idx in range(0, len(all_chunks), checkpoint_interval):
     # Get a group of batches to process
-    batch_group = all_chunks[batch_group_idx:batch_group_idx + checkpoint_interval]
-    id_group = all_ids[batch_group_idx:batch_group_idx + checkpoint_interval]
+    batch_group = all_chunks[batch_group_idx : batch_group_idx + checkpoint_interval]
+    id_group = all_ids[batch_group_idx : batch_group_idx + checkpoint_interval]
 
     # Process this group of batches concurrently
     tasks = []
@@ -551,7 +478,7 @@ async def process_all_batches_with_checkpoints(kb: KnowledgeBase, index,
       all_processed_ids.update(successful_ids)
 
     # Checkpoint after each group
-    logger.info(f"Checkpoint: saving progress after {len(batch_group)} batches")
+    logger.info(f'Checkpoint: saving progress after {len(batch_group)} batches')
 
     # Save FAISS index
     faiss.write_index(index, kb.knowledge_base_vector)
@@ -563,10 +490,11 @@ async def process_all_batches_with_checkpoints(kb: KnowledgeBase, index,
       processed_ids_list = list(all_processed_ids)
 
       for i in range(0, len(processed_ids_list), sql_batch_size):
-        batch = processed_ids_list[i:i+sql_batch_size]
+        batch = processed_ids_list[i : i + sql_batch_size]
         from utils.security_utils import safe_sql_in_query
+
         # Use safe SQL execution for ID list
-        query_template = "UPDATE docs SET embedded=1 WHERE id IN ({placeholders})"
+        query_template = 'UPDATE docs SET embedded=1 WHERE id IN ({placeholders})'
         safe_sql_in_query(kb.sql_cursor, query_template, batch)
 
       kb.sql_connection.commit()
@@ -574,6 +502,7 @@ async def process_all_batches_with_checkpoints(kb: KnowledgeBase, index,
   # Final save
   faiss.write_index(index, kb.knowledge_base_vector)
   return all_processed_ids
+
 
 def process_embeddings(args: argparse.Namespace, logger) -> str:
   """
@@ -602,7 +531,7 @@ def process_embeddings(args: argparse.Namespace, logger) -> str:
   if not config_file:
     return f"Error: Knowledge base '{args.config_file}' not found."
 
-  logger.info(f"{config_file=}")
+  logger.info(f'{config_file=}')
   reset_database = args.reset_database
 
   # Initialize knowledge base
@@ -616,22 +545,22 @@ def process_embeddings(args: argparse.Namespace, logger) -> str:
   from utils.logging_utils import log_model_operation
 
   # Log embedding operation start
-  log_model_operation(logger, "embedding_start", kb.vector_model,
-                     vector_dimensions=kb.vector_dimensions,
-                     vector_chunks=kb.vector_chunks)
+  log_model_operation(
+    logger, 'embedding_start', kb.vector_model, vector_dimensions=kb.vector_dimensions, vector_chunks=kb.vector_chunks
+  )
 
-  logger.info(f"Embedding data from database {kb.knowledge_base_db} to vector file {kb.knowledge_base_vector}.")
+  logger.info(f'Embedding data from database {kb.knowledge_base_db} to vector file {kb.knowledge_base_vector}.')
 
   # Check if database exists
   if not os.path.exists(kb.knowledge_base_db):
-    return f"Error: Database {kb.knowledge_base_db} does not yet exist!"
+    return f'Error: Database {kb.knowledge_base_db} does not yet exist!'
 
   # Connect to database
   connect_to_database(kb)
 
   # Reset embedded flag if requested or if vector file doesn't exist
   if not os.path.exists(kb.knowledge_base_vector) or reset_database:
-    kb.sql_cursor.execute("UPDATE docs SET embedded=0;")
+    kb.sql_cursor.execute('UPDATE docs SET embedded=0;')
     kb.sql_connection.commit()
 
   # Get rows to embed
@@ -639,9 +568,9 @@ def process_embeddings(args: argparse.Namespace, logger) -> str:
   rows = kb.sql_cursor.fetchall()
   if not rows:
     close_database(kb)
-    return "No rows were found to embed."
+    return 'No rows were found to embed.'
 
-  logger.info(f"{len(rows)} found for embedding.")
+  logger.info(f'{len(rows)} found for embedding.')
 
   # Initialize or load FAISS index
   if os.path.exists(kb.knowledge_base_vector):
@@ -653,10 +582,10 @@ def process_embeddings(args: argparse.Namespace, logger) -> str:
 
     # Auto-enable memory mapping for files over 1GB
     if not use_mmap and file_size_mb > 1024:
-      logger.warning(f"Large index file ({file_size_mb:.1f}MB). Consider enabling memory-mapped FAISS.")
+      logger.warning(f'Large index file ({file_size_mb:.1f}MB). Consider enabling memory-mapped FAISS.')
 
     if use_mmap:
-      logger.info(f"Using memory-mapped FAISS for {file_size_mb:.1f}MB index")
+      logger.info(f'Using memory-mapped FAISS for {file_size_mb:.1f}MB index')
       # Create IO flags for memory mapping
       io_flags = faiss.IO_FLAG_MMAP | faiss.IO_FLAG_READ_ONLY
       index = faiss.read_index(kb.knowledge_base_vector, io_flags)
@@ -674,14 +603,14 @@ def process_embeddings(args: argparse.Namespace, logger) -> str:
       embedding_dimensions = len(embedding)
       save_embedding_to_cache(rows[0][1], kb.vector_model, embedding, kb)
 
-    logger.info(f"Using {embedding_dimensions=}")
+    logger.info(f'Using {embedding_dimensions=}')
     index = get_optimal_faiss_index(embedding_dimensions, len(rows), kb)
     reset_database = True
 
   # Reset embedded flag if needed
   if reset_database:
     logger.info('Resetting already-embedded flag in database')
-    kb.sql_cursor.execute("UPDATE docs SET embedded=0;")
+    kb.sql_cursor.execute('UPDATE docs SET embedded=0;')
     kb.sql_connection.commit()
 
   # Prepare batches for async processing
@@ -691,27 +620,31 @@ def process_embeddings(args: argparse.Namespace, logger) -> str:
   current_ids = []
 
   # Calculate optimal batch size
-  sample_chunks = [row[1] for row in rows[:min(100, len(rows))]]
+  sample_chunks = [row[1] for row in rows[: min(100, len(rows))]]
   configured_batch_size = kb.vector_chunks
   optimal_batch_size = calculate_optimal_batch_size(sample_chunks, kb.vector_model, configured_batch_size, kb)
 
   # Apply provider-specific batch size limits (configurable)
   # Google Gemini has a hard API limit of 100 items per batch
   # Local models have lower limits to manage memory usage
-  provider_batch_limits = getattr(kb, 'provider_batch_limits', {
-    'gemini-': 100,
-    'text-embedding-': 2048,  # OpenAI default
-    'bge-': 64,               # Local models - conservative for memory
-    'all-minilm': 128,        # Smaller model, can handle more
-  })
+  provider_batch_limits = getattr(
+    kb,
+    'provider_batch_limits',
+    {
+      'gemini-': 100,
+      'text-embedding-': 2048,  # OpenAI default
+      'bge-': 64,  # Local models - conservative for memory
+      'all-minilm': 128,  # Smaller model, can handle more
+    },
+  )
 
   for provider_prefix, limit in provider_batch_limits.items():
     if kb.vector_model.startswith(provider_prefix) and optimal_batch_size > limit:
-      logger.info(f"Provider API limit ({provider_prefix}): reducing batch size from {optimal_batch_size} to {limit}")
+      logger.info(f'Provider API limit ({provider_prefix}): reducing batch size from {optimal_batch_size} to {limit}')
       optimal_batch_size = limit
       break
 
-  logger.info(f"Using optimal batch size of {optimal_batch_size} (configured max: {configured_batch_size})")
+  logger.info(f'Using optimal batch size of {optimal_batch_size} (configured max: {configured_batch_size})')
 
   # Deduplicate texts to avoid embedding the same text multiple times
   text_to_ids: dict[str, list[int]] = {}
@@ -722,11 +655,13 @@ def process_embeddings(args: argparse.Namespace, logger) -> str:
       text_to_ids[text] = [row_id]
 
   unique_rows = [(text_to_ids[text][0], text) for text in text_to_ids]
-  logger.info(f"Reduced to {len(unique_rows)} unique texts (from {len(rows)} total)")
+  logger.info(f'Reduced to {len(unique_rows)} unique texts (from {len(rows)} total)')
 
   for progress_counter, (row_id, text) in enumerate(unique_rows, 1):
     if (progress_counter % optimal_batch_size) == 0:
-      logger.info(f"{progress_counter}/{len(unique_rows)} ~{time_to_finish(kb.start_time, progress_counter, len(unique_rows))}")
+      logger.info(
+        f'{progress_counter}/{len(unique_rows)} ~{time_to_finish(kb.start_time, progress_counter, len(unique_rows))}'
+      )
 
     current_chunks.append(text)
     current_ids.append(row_id)
@@ -744,18 +679,18 @@ def process_embeddings(args: argparse.Namespace, logger) -> str:
 
   # Train the index if it requires training (IVF indexes need training)
   if hasattr(index.index, 'is_trained') and not index.index.is_trained:
-    logger.info("Training FAISS index on sample data...")
+    logger.info('Training FAISS index on sample data...')
     # Collect sample texts for training
     train_sample_size = min(getattr(kb, 'faiss_train_sample_size', 10000), len(unique_rows))
     train_texts = [text for _, text in unique_rows[:train_sample_size]]
 
     # Get embeddings for training samples
-    logger.info(f"Getting embeddings for {len(train_texts)} training samples...")
+    logger.info(f'Getting embeddings for {len(train_texts)} training samples...')
     train_embeddings = []
 
     # Process training samples in batches
     for i in range(0, len(train_texts), optimal_batch_size):
-      batch = train_texts[i:i + optimal_batch_size]
+      batch = train_texts[i : i + optimal_batch_size]
       batch_embeddings = asyncio.run(get_embeddings_for_batch(kb, batch))
       if batch_embeddings:
         train_embeddings.extend(batch_embeddings)
@@ -763,13 +698,13 @@ def process_embeddings(args: argparse.Namespace, logger) -> str:
     if train_embeddings:
       # Convert to numpy array
       train_embeddings_np = np.array(train_embeddings, dtype=np.float32)
-      logger.info(f"Training index with {len(train_embeddings_np)} samples...")
+      logger.info(f'Training index with {len(train_embeddings_np)} samples...')
       index.index.train(train_embeddings_np)
-      logger.info("Index training completed")
+      logger.info('Index training completed')
     else:
-      error_msg = "Failed to get training embeddings - index requires training data"
+      error_msg = 'Failed to get training embeddings - index requires training data'
       logger.error(error_msg)
-      return f"Error: {error_msg}. Cannot proceed with untrained index."
+      return f'Error: {error_msg}. Cannot proceed with untrained index.'
 
   # Process all batches using asyncio with checkpointing
   all_processed_ids = asyncio.run(process_all_batches_with_checkpoints(kb, index, all_chunks, all_ids))
@@ -788,10 +723,11 @@ def process_embeddings(args: argparse.Namespace, logger) -> str:
     duplicate_ids_list = list(all_duplicate_ids)
 
     for i in range(0, len(duplicate_ids_list), batch_size):
-      batch = duplicate_ids_list[i:i+batch_size]
+      batch = duplicate_ids_list[i : i + batch_size]
       from utils.security_utils import safe_sql_in_query
+
       # Use safe SQL execution for ID list
-      query_template = "UPDATE docs SET embedded=1 WHERE id IN ({placeholders})"
+      query_template = 'UPDATE docs SET embedded=1 WHERE id IN ({placeholders})'
       safe_sql_in_query(kb.sql_cursor, query_template, batch)
 
     kb.sql_connection.commit()
@@ -804,6 +740,7 @@ def process_embeddings(args: argparse.Namespace, logger) -> str:
   # Close database connection
   close_database(kb)
 
-  return f"{len(all_duplicate_ids)} embeddings (from {len(rows)} total rows with {len(unique_rows)} unique texts) saved to {kb.knowledge_base_vector}"
+  return f'{len(all_duplicate_ids)} embeddings (from {len(rows)} total rows with {len(unique_rows)} unique texts) saved to {kb.knowledge_base_vector}'
 
-#fin
+
+# fin

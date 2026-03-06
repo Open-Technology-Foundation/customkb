@@ -34,10 +34,7 @@ logger = get_logger(__name__)
 
 @contextmanager
 def database_connection(
-  db_path: str,
-  timeout: float = 30.0,
-  check_same_thread: bool = False,
-  read_only: bool = False
+  db_path: str, timeout: float = 30.0, check_same_thread: bool = False, read_only: bool = False
 ) -> Generator[tuple[sqlite3.Connection, sqlite3.Cursor], None, None]:
   """
   Context manager for SQLite database connections.
@@ -64,23 +61,23 @@ def database_connection(
     # Validate database path
     db_file = Path(db_path)
     if not db_file.exists():
-      raise CustomConnectionError(f"Database not found: {db_path}")
+      raise CustomConnectionError(f'Database not found: {db_path}')
 
     # Open connection with appropriate mode
     if read_only:
-      uri = f"file:{db_path}?mode=ro"
+      uri = f'file:{db_path}?mode=ro'
       conn = sqlite3.connect(uri, uri=True, timeout=timeout, check_same_thread=check_same_thread)
     else:
       conn = sqlite3.connect(db_path, timeout=timeout, check_same_thread=check_same_thread)
 
     # Set pragmas for performance
     cursor = conn.cursor()
-    cursor.execute("PRAGMA journal_mode=WAL")
-    cursor.execute("PRAGMA synchronous=NORMAL")
-    cursor.execute("PRAGMA cache_size=-64000")  # 64MB cache
-    cursor.execute("PRAGMA temp_store=MEMORY")
+    cursor.execute('PRAGMA journal_mode=WAL')
+    cursor.execute('PRAGMA synchronous=NORMAL')
+    cursor.execute('PRAGMA cache_size=-64000')  # 64MB cache
+    cursor.execute('PRAGMA temp_store=MEMORY')
 
-    logger.debug(f"Database connection established: {db_path}")
+    logger.debug(f'Database connection established: {db_path}')
 
     yield conn, cursor
 
@@ -89,14 +86,14 @@ def database_connection(
       conn.commit()
 
   except sqlite3.Error as e:
-    logger.error(f"Database error: {e}")
+    logger.error(f'Database error: {e}')
     if conn:
       conn.rollback()
-    raise DatabaseError(f"Database operation failed: {e}") from e
+    raise DatabaseError(f'Database operation failed: {e}') from e
 
   except (FileNotFoundError, PermissionError, OSError, AttributeError) as e:
-    logger.error(f"Unexpected error in database connection: {e}")
-    raise CustomConnectionError(f"Failed to connect to database: {e}") from e
+    logger.error(f'Unexpected error in database connection: {e}')
+    raise CustomConnectionError(f'Failed to connect to database: {e}') from e
 
   finally:
     # Clean up resources
@@ -104,15 +101,12 @@ def database_connection(
       cursor.close()
     if conn:
       conn.close()
-    logger.debug(f"Database connection closed: {db_path}")
+    logger.debug(f'Database connection closed: {db_path}')
 
 
 @contextmanager
 def atomic_write(
-  filepath: str | Path,
-  mode: str = 'w',
-  encoding: str = 'utf-8',
-  create_dirs: bool = True
+  filepath: str | Path, mode: str = 'w', encoding: str = 'utf-8', create_dirs: bool = True
 ) -> Generator[Any, None, None]:
   """
   Context manager for atomic file writes.
@@ -142,16 +136,12 @@ def atomic_write(
       filepath.parent.mkdir(parents=True, exist_ok=True)
 
     # Create temporary file in same directory (for atomic rename)
-    temp_fd, temp_path = tempfile.mkstemp(
-      dir=filepath.parent,
-      prefix=f'.{filepath.name}.',
-      suffix='.tmp'
-    )
+    temp_fd, temp_path = tempfile.mkstemp(dir=filepath.parent, prefix=f'.{filepath.name}.', suffix='.tmp')
 
     # Open temp file with appropriate mode
     temp_file = os.fdopen(temp_fd, mode) if 'b' in mode else os.fdopen(temp_fd, mode, encoding=encoding)
 
-    logger.debug(f"Writing to temporary file: {temp_path}")
+    logger.debug(f'Writing to temporary file: {temp_path}')
 
     yield temp_file
 
@@ -161,20 +151,20 @@ def atomic_write(
 
     # Atomic rename (on same filesystem)
     Path(temp_path).replace(filepath)
-    logger.debug(f"Atomic write completed: {filepath}")
+    logger.debug(f'Atomic write completed: {filepath}')
 
   except PermissionError as e:
-    logger.error(f"Permission denied writing to {filepath}: {e}")
-    raise CustomPermissionError(str(filepath), "write") from e
+    logger.error(f'Permission denied writing to {filepath}: {e}')
+    raise CustomPermissionError(str(filepath), 'write') from e
 
   except OSError as e:
-    logger.error(f"Failed to write file {filepath}: {e}")
+    logger.error(f'Failed to write file {filepath}: {e}')
     # Clean up temp file on error
     if temp_file:
       temp_file.close()
     if temp_path and Path(temp_path).exists():
       Path(temp_path).unlink()
-    raise FileSystemError(f"Failed to write file: {e}") from e
+    raise FileSystemError(f'Failed to write file: {e}') from e
 
   finally:
     # Ensure temp file is closed
@@ -184,9 +174,7 @@ def atomic_write(
 
 @contextmanager
 def timed_operation(
-  operation_name: str,
-  timeout: float | None = None,
-  logger_instance: Any | None = None
+  operation_name: str, timeout: float | None = None, logger_instance: Any | None = None
 ) -> Generator[dict, None, None]:
   """
   Context manager for timing operations.
@@ -210,7 +198,7 @@ def timed_operation(
   start_time = time.time()
   metrics = {'operation': operation_name, 'start_time': start_time}
 
-  logger_instance.debug(f"Starting operation: {operation_name}")
+  logger_instance.debug(f'Starting operation: {operation_name}')
 
   try:
     yield metrics
@@ -242,10 +230,7 @@ def timed_operation(
 
 
 @contextmanager
-def resource_limit(
-  max_memory_mb: int | None = None,
-  max_cpu_percent: float | None = None
-) -> Generator[None, None, None]:
+def resource_limit(max_memory_mb: int | None = None, max_cpu_percent: float | None = None) -> Generator[None, None, None]:
   """
   Context manager for resource limiting.
 
@@ -263,13 +248,14 @@ def resource_limit(
   """
   try:
     import psutil
+
     process = psutil.Process()
 
     # Get initial resource usage
     initial_memory = process.memory_info().rss / 1024 / 1024
     process.cpu_percent(interval=0.1)
 
-    logger.debug(f"Resource limits: memory={max_memory_mb}MB, cpu={max_cpu_percent}%")
+    logger.debug(f'Resource limits: memory={max_memory_mb}MB, cpu={max_cpu_percent}%')
 
     yield
 
@@ -281,18 +267,18 @@ def resource_limit(
 
     # Check limits
     if max_memory_mb and final_memory > max_memory_mb:
-      raise ResourceError(f"Memory limit exceeded: {final_memory:.1f}MB > {max_memory_mb}MB")
+      raise ResourceError(f'Memory limit exceeded: {final_memory:.1f}MB > {max_memory_mb}MB')
 
     if max_cpu_percent and final_cpu > max_cpu_percent:
-      raise ResourceError(f"CPU limit exceeded: {final_cpu:.1f}% > {max_cpu_percent}%")
+      raise ResourceError(f'CPU limit exceeded: {final_cpu:.1f}% > {max_cpu_percent}%')
 
-    logger.debug(f"Resource usage: memory_delta={memory_used:.1f}MB, cpu={final_cpu:.1f}%")
+    logger.debug(f'Resource usage: memory_delta={memory_used:.1f}MB, cpu={final_cpu:.1f}%')
 
   except ImportError:
-    logger.warning("psutil not available, resource limiting disabled")
+    logger.warning('psutil not available, resource limiting disabled')
     yield
   except (AttributeError, RuntimeError, OSError) as e:
-    logger.error(f"Resource monitoring error: {e}")
+    logger.error(f'Resource monitoring error: {e}')
     raise
 
 
@@ -301,7 +287,7 @@ def retry_on_error(
   max_retries: int = 3,
   delay: float = 1.0,
   backoff: float = 2.0,
-  exceptions: tuple = (TemporaryError, TimeoutError, ConnectionError)
+  exceptions: tuple = (TemporaryError, TimeoutError, ConnectionError),
 ) -> Generator[dict, None, None]:
   """
   Context manager for automatic retry logic.
@@ -320,11 +306,7 @@ def retry_on_error(
   Raises:
       The last exception if all retries fail
   """
-  retry_info = {
-    'attempt': 0,
-    'max_retries': max_retries,
-    'delays': []
-  }
+  retry_info = {'attempt': 0, 'max_retries': max_retries, 'delays': []}
 
   last_exception = None
   current_delay = delay
@@ -334,7 +316,7 @@ def retry_on_error(
 
     try:
       if attempt > 0:
-        logger.info(f"Retry attempt {attempt}/{max_retries} after {current_delay:.1f}s delay")
+        logger.info(f'Retry attempt {attempt}/{max_retries} after {current_delay:.1f}s delay')
         time.sleep(current_delay)
         retry_info['delays'].append(current_delay)
         current_delay *= backoff
@@ -347,15 +329,15 @@ def retry_on_error(
     except exceptions as e:
       last_exception = e
       if attempt < max_retries:
-        logger.warning(f"Retryable error (attempt {attempt + 1}/{max_retries + 1}): {e}")
+        logger.warning(f'Retryable error (attempt {attempt + 1}/{max_retries + 1}): {e}')
         continue
       else:
-        logger.error(f"All retry attempts failed: {e}")
+        logger.error(f'All retry attempts failed: {e}')
         raise
 
     except Exception as e:
       # Non-retryable error
-      logger.error(f"Non-retryable error: {e}")
+      logger.error(f'Non-retryable error: {e}')
       raise
 
   # Should not reach here, but just in case
@@ -365,9 +347,7 @@ def retry_on_error(
 
 @contextmanager
 def batch_processor(
-  items: list,
-  batch_size: int = 100,
-  progress_callback: callable | None = None
+  items: list, batch_size: int = 100, progress_callback: callable | None = None
 ) -> Generator[list, None, None]:
   """
   Context manager for batch processing.
@@ -385,15 +365,15 @@ def batch_processor(
   total_items = len(items)
   processed = 0
 
-  logger.info(f"Starting batch processing: {total_items} items in batches of {batch_size}")
+  logger.info(f'Starting batch processing: {total_items} items in batches of {batch_size}')
 
   try:
     for i in range(0, total_items, batch_size):
-      batch = items[i:i + batch_size]
+      batch = items[i : i + batch_size]
       batch_num = (i // batch_size) + 1
       total_batches = (total_items + batch_size - 1) // batch_size
 
-      logger.debug(f"Processing batch {batch_num}/{total_batches} ({len(batch)} items)")
+      logger.debug(f'Processing batch {batch_num}/{total_batches} ({len(batch)} items)')
 
       yield batch
 
@@ -406,12 +386,12 @@ def batch_processor(
       # Log progress at intervals
       if processed % (batch_size * 10) == 0 or processed == total_items:
         progress_pct = (processed / total_items) * 100
-        logger.info(f"Progress: {processed}/{total_items} ({progress_pct:.1f}%)")
+        logger.info(f'Progress: {processed}/{total_items} ({progress_pct:.1f}%)')
 
-    logger.info(f"Batch processing completed: {processed} items processed")
+    logger.info(f'Batch processing completed: {processed} items processed')
 
   except Exception as e:
-    logger.error(f"Batch processing failed at item {processed}: {e}")
+    logger.error(f'Batch processing failed at item {processed}: {e}')
     raise
 
 
@@ -436,7 +416,7 @@ def safe_import(module_name: str, package: str | None = None) -> Generator[Any, 
   try:
     module = importlib.import_module(module_name, package) if package else importlib.import_module(module_name)
 
-    logger.debug(f"Successfully imported module: {module_name}")
+    logger.debug(f'Successfully imported module: {module_name}')
     yield module
 
   except ImportError as e:
@@ -452,25 +432,25 @@ def safe_import(module_name: str, package: str | None = None) -> Generator[Any, 
 def example_database_usage():
   """Example of using database_connection context manager."""
   with database_connection('/path/to/db.sqlite') as (conn, cursor):
-    cursor.execute("SELECT COUNT(*) FROM table")
+    cursor.execute('SELECT COUNT(*) FROM table')
     count = cursor.fetchone()[0]
-    print(f"Row count: {count}")
+    print(f'Row count: {count}')
 
 
 def example_atomic_write_usage():
   """Example of using atomic_write context manager."""
   with atomic_write('/path/to/file.txt') as f:
-    f.write("This write is atomic!\n")
-    f.write("Either all of this is written, or none of it is.\n")
+    f.write('This write is atomic!\n')
+    f.write('Either all of this is written, or none of it is.\n')
 
 
 def example_retry_usage():
   """Example of using retry_on_error context manager."""
   with retry_on_error(max_retries=3, delay=1.0) as retry_info:
-    print(f"Attempt {retry_info['attempt']}")
+    print(f'Attempt {retry_info["attempt"]}')
     # Potentially failing operation here
     if retry_info['attempt'] < 3:
-      raise TemporaryError("Simulated temporary failure")
+      raise TemporaryError('Simulated temporary failure')
 
 
-#fin
+# fin

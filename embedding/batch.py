@@ -13,10 +13,19 @@ from typing import Any
 
 import numpy as np
 
-# Load FAISS with proper GPU initialization
-from utils.faiss_loader import get_faiss
+# Lazy FAISS loading to avoid import failures when FAISS is not installed
+_faiss = None
+_FAISS_GPU_AVAILABLE = None
 
-faiss, FAISS_GPU_AVAILABLE = get_faiss()
+
+def _get_faiss():
+  global _faiss, _FAISS_GPU_AVAILABLE
+  if _faiss is None:
+    from utils.faiss_loader import get_faiss
+
+    _faiss, _FAISS_GPU_AVAILABLE = get_faiss()
+  return _faiss, _FAISS_GPU_AVAILABLE
+
 
 from utils.exceptions import BatchError, ProcessingError
 from utils.logging_config import get_logger
@@ -62,11 +71,7 @@ def calculate_optimal_batch_size(chunks: list[str], model: str, max_batch_size: 
     return min(max_batch_size, len(chunks))
 
   # Calculate how many chunks can fit in one batch
-  optimal_batch = min(
-    max_batch_size,
-    safe_token_limit // avg_chunk_tokens,
-    len(chunks)
-  )
+  optimal_batch = min(max_batch_size, safe_token_limit // avg_chunk_tokens, len(chunks))
 
   # Ensure at least 1
   optimal_batch = max(1, optimal_batch)
@@ -81,12 +86,11 @@ def calculate_optimal_batch_size(chunks: list[str], model: str, max_batch_size: 
     if hasattr(kb, 'force_batch_size'):
       optimal_batch = min(kb.force_batch_size, optimal_batch)
 
-  logger.debug(f"Calculated optimal batch size: {optimal_batch} for {len(chunks)} chunks")
+  logger.debug(f'Calculated optimal batch size: {optimal_batch} for {len(chunks)} chunks')
   return optimal_batch
 
 
-def save_checkpoint(kb: Any, index: faiss.Index, doc_ids: list[int],
-                   processed_count: int, checkpoint_file: str) -> None:
+def save_checkpoint(kb: Any, index: Any, doc_ids: list[int], processed_count: int, checkpoint_file: str) -> None:
   """
   Save processing checkpoint.
 
@@ -103,7 +107,7 @@ def save_checkpoint(kb: Any, index: faiss.Index, doc_ids: list[int],
       'doc_ids': doc_ids[:processed_count],
       'index_size': index.ntotal,
       'knowledge_base': kb.knowledge_base_db,
-      'model': kb.vector_model
+      'model': kb.vector_model,
     }
 
     # Save checkpoint data
@@ -111,16 +115,17 @@ def save_checkpoint(kb: Any, index: faiss.Index, doc_ids: list[int],
       json.dump(checkpoint_data, f)
 
     # Save FAISS index
+    faiss, _ = _get_faiss()
     faiss.write_index(index, checkpoint_file + '.faiss')
 
-    logger.debug(f"Checkpoint saved: {processed_count} documents processed")
+    logger.debug(f'Checkpoint saved: {processed_count} documents processed')
 
   except (OSError, json.JSONDecodeError, RuntimeError) as e:
-    logger.error(f"Failed to save checkpoint: {e}")
-    raise ProcessingError(f"Checkpoint save failed: {e}") from e
+    logger.error(f'Failed to save checkpoint: {e}')
+    raise ProcessingError(f'Checkpoint save failed: {e}') from e
 
 
-def load_checkpoint(checkpoint_file: str) -> tuple[faiss.Index | None, dict | None]:
+def load_checkpoint(checkpoint_file: str) -> tuple[Any, dict | None]:
   """
   Load processing checkpoint.
 
@@ -141,16 +146,17 @@ def load_checkpoint(checkpoint_file: str) -> tuple[faiss.Index | None, dict | No
 
     # Load FAISS index
     if os.path.exists(checkpoint_file + '.faiss'):
+      faiss, _ = _get_faiss()
       index = faiss.read_index(checkpoint_file + '.faiss')
     else:
-      logger.warning("Checkpoint index file not found")
+      logger.warning('Checkpoint index file not found')
       return None, None
 
-    logger.info(f"Checkpoint loaded: {checkpoint_data['processed_count']} documents already processed")
+    logger.info(f'Checkpoint loaded: {checkpoint_data["processed_count"]} documents already processed')
     return index, checkpoint_data
 
   except (FileNotFoundError, json.JSONDecodeError, OSError, RuntimeError) as e:
-    logger.warning(f"Failed to load checkpoint: {e}")
+    logger.warning(f'Failed to load checkpoint: {e}')
     return None, None
 
 
@@ -166,13 +172,14 @@ def remove_checkpoint(checkpoint_file: str) -> None:
     if os.path.exists(file_path):
       try:
         os.remove(file_path)
-        logger.debug(f"Removed checkpoint file: {file_path}")
+        logger.debug(f'Removed checkpoint file: {file_path}')
       except OSError as e:
-        logger.warning(f"Failed to remove checkpoint file {file_path}: {e}")
+        logger.warning(f'Failed to remove checkpoint file {file_path}: {e}')
 
 
-async def process_batch_with_retry(process_func, batch: list[str], max_retries: int = 3,
-                                  retry_delay: float = 1.0) -> list[list[float]]:
+async def process_batch_with_retry(
+  process_func, batch: list[str], max_retries: int = 3, retry_delay: float = 1.0
+) -> list[list[float]]:
   """
   Process a batch with retry logic.
 
@@ -196,16 +203,17 @@ async def process_batch_with_retry(process_func, batch: list[str], max_retries: 
     except (ConnectionError, TimeoutError, OSError, ValueError) as e:
       last_error = e
       if attempt < max_retries - 1:
-        logger.warning(f"Batch processing failed (attempt {attempt + 1}/{max_retries}): {e}")
-        await asyncio.sleep(retry_delay * (2 ** attempt))  # Exponential backoff
+        logger.warning(f'Batch processing failed (attempt {attempt + 1}/{max_retries}): {e}')
+        await asyncio.sleep(retry_delay * (2**attempt))  # Exponential backoff
       else:
-        logger.error(f"Batch processing failed after {max_retries} attempts: {e}")
+        logger.error(f'Batch processing failed after {max_retries} attempts: {e}')
 
-  raise BatchError("batch_unknown", f"Batch processing failed after {max_retries} retries: {last_error}") from last_error
+  raise BatchError('batch_unknown', f'Batch processing failed after {max_retries} retries: {last_error}') from last_error
 
 
-async def process_batches_parallel(process_func, chunks: list[str], batch_size: int,
-                                  max_concurrent: int = 3) -> list[list[float]]:
+async def process_batches_parallel(
+  process_func, chunks: list[str], batch_size: int, max_concurrent: int = 3
+) -> list[list[float]]:
   """
   Process batches in parallel with concurrency control.
 
@@ -229,7 +237,7 @@ async def process_batches_parallel(process_func, chunks: list[str], batch_size: 
   # Create tasks for all batches
   tasks = []
   for i in range(0, len(chunks), batch_size):
-    batch = chunks[i:i + batch_size]
+    batch = chunks[i : i + batch_size]
     batch_idx = i // batch_size
     tasks.append(process_with_semaphore(batch, batch_idx))
 
@@ -244,8 +252,7 @@ async def process_batches_parallel(process_func, chunks: list[str], batch_size: 
   return embeddings
 
 
-def validate_batch_consistency(embeddings: list[list[float]], expected_count: int,
-                              expected_dims: int) -> bool:
+def validate_batch_consistency(embeddings: list[list[float]], expected_count: int, expected_dims: int) -> bool:
   """
   Validate batch processing results.
 
@@ -261,22 +268,27 @@ def validate_batch_consistency(embeddings: list[list[float]], expected_count: in
       BatchError: If validation fails
   """
   if len(embeddings) != expected_count:
-    raise BatchError("validation", f"Embedding count mismatch: got {len(embeddings)}, expected {expected_count}")
+    raise BatchError('validation', f'Embedding count mismatch: got {len(embeddings)}, expected {expected_count}')
 
   for i, emb in enumerate(embeddings):
     if len(emb) != expected_dims:
-      raise BatchError(f"embedding_{i}", f"Embedding {i} has wrong dimensions: got {len(emb)}, expected {expected_dims}")
+      raise BatchError(f'embedding_{i}', f'Embedding {i} has wrong dimensions: got {len(emb)}, expected {expected_dims}')
 
     # Check for NaN or infinite values
     emb_array = np.array(emb)
     if np.any(np.isnan(emb_array)) or np.any(np.isinf(emb_array)):
-      raise BatchError(f"embedding_{i}", f"Embedding {i} contains NaN or infinite values")
+      raise BatchError(f'embedding_{i}', f'Embedding {i} contains NaN or infinite values')
 
   return True
 
 
 class BatchProcessor:
-  """Manages batch processing with progress tracking."""
+  """Manages batch processing with progress tracking.
+
+  Lifecycle: start() -> update() per batch -> get_summary() at end.
+  Tracks processed/failed item counts, elapsed time, and estimates
+  remaining time via per-item average throughput.
+  """
 
   def __init__(self, kb: Any, total_items: int):
     """
@@ -294,8 +306,9 @@ class BatchProcessor:
     self.batch_times = []
 
   def start(self):
-    """Start processing timer."""
+    """Record the start timestamp for elapsed-time and ETA calculations."""
     import time
+
     self.start_time = time.time()
 
   def update(self, batch_size: int, success: bool = True):
@@ -327,17 +340,18 @@ class BatchProcessor:
 
         # Log progress
         progress_pct = (self.processed_items / self.total_items) * 100
-        logger.info(f"Progress: {self.processed_items}/{self.total_items} ({progress_pct:.1f}%), "
-                   f"ETA: {self._format_time(eta_seconds)}")
+        logger.info(
+          f'Progress: {self.processed_items}/{self.total_items} ({progress_pct:.1f}%), ETA: {self._format_time(eta_seconds)}'
+        )
 
   def _format_time(self, seconds: float) -> str:
-    """Format seconds into human-readable time."""
+    """Format seconds into a compact human-readable string (e.g. '45s', '3.2m', '1.5h')."""
     if seconds < 60:
-      return f"{seconds:.0f}s"
+      return f'{seconds:.0f}s'
     elif seconds < 3600:
-      return f"{seconds/60:.1f}m"
+      return f'{seconds / 60:.1f}m'
     else:
-      return f"{seconds/3600:.1f}h"
+      return f'{seconds / 3600:.1f}h'
 
   def get_summary(self) -> dict[str, Any]:
     """
@@ -357,8 +371,8 @@ class BatchProcessor:
       'success_rate': self.processed_items / self.total_items if self.total_items > 0 else 0,
       'total_time_seconds': elapsed,
       'avg_time_per_item': elapsed / self.processed_items if self.processed_items > 0 else 0,
-      'items_per_second': self.processed_items / elapsed if elapsed > 0 else 0
+      'items_per_second': self.processed_items / elapsed if elapsed > 0 else 0,
     }
 
 
-#fin
+# fin

@@ -22,8 +22,10 @@ def _get_faiss():
   global _faiss, _FAISS_GPU_AVAILABLE
   if _faiss is None:
     from utils.faiss_loader import get_faiss
+
     _faiss, _FAISS_GPU_AVAILABLE = get_faiss()
   return _faiss, _FAISS_GPU_AVAILABLE
+
 
 from utils.exceptions import DatabaseError, SearchError
 from utils.logging_config import get_logger
@@ -46,6 +48,8 @@ def get_context_range(index_start: int, context_n: int) -> list[int]:
   if context_n < 1:
     context_n = 1
 
+  # Center a window of size context_n around the matched segment.
+  # Clamp start to 0, then recompute to ensure the window stays full-sized.
   half_context = (context_n - 1) // 2
   start_index = max(0, index_start - half_context)
   end_index = start_index + context_n
@@ -69,26 +73,27 @@ def fetch_document_by_id(kb: Any, doc_id: int) -> tuple[int, int, str] | None:
     # Validate table name for security
     table_name = getattr(kb, 'table_name', 'docs')
     if not validate_table_name(table_name):
-      raise DatabaseError(f"Invalid table name: {table_name}")
+      raise DatabaseError(f'Invalid table name: {table_name}')
 
     # Get the document's location info for context retrieval
-    query = f"SELECT id, sid, sourcedoc FROM {table_name} WHERE id = ? LIMIT 1"
+    query = f'SELECT id, sid, sourcedoc FROM {table_name} WHERE id = ? LIMIT 1'
     kb.sql_cursor.execute(query, (int(doc_id),))
     result = kb.sql_cursor.fetchone()
 
     if result:
       return result
     else:
-      logger.warning(f"Document ID {doc_id} not found in database")
+      logger.warning(f'Document ID {doc_id} not found in database')
       return None
 
   except sqlite3.Error as e:
-    logger.error(f"Database error fetching document {doc_id}: {e}")
-    raise DatabaseError(f"Failed to fetch document: {e}") from e
+    logger.error(f'Database error fetching document {doc_id}: {e}')
+    raise DatabaseError(f'Failed to fetch document: {e}') from e
 
 
-async def filter_results_by_category(kb: Any, results: list[tuple[int, float]],
-                                    categories: list[str]) -> list[tuple[int, float]]:
+async def filter_results_by_category(
+  kb: Any, results: list[tuple[int, float]], categories: list[str]
+) -> list[tuple[int, float]]:
   """
   Filter search results by category if categorization is enabled.
 
@@ -105,18 +110,18 @@ async def filter_results_by_category(kb: Any, results: list[tuple[int, float]],
 
   # Check if categorization is enabled
   if not getattr(kb, 'enable_categorization', False):
-    logger.warning("Category filtering requested but enable_categorization=false in config")
+    logger.warning('Category filtering requested but enable_categorization=false in config')
     return results
 
   if not hasattr(kb, 'sql_cursor') or not kb.sql_cursor:
-    logger.warning("No database connection for category filtering")
+    logger.warning('No database connection for category filtering')
     return results
 
   try:
     # Validate table name
     table_name = getattr(kb, 'table_name', 'docs')
     if not validate_table_name(table_name):
-      raise DatabaseError(f"Invalid table name: {table_name}")
+      raise DatabaseError(f'Invalid table name: {table_name}')
 
     # Extract document IDs
     doc_ids = [doc_id for doc_id, _ in results]
@@ -124,7 +129,7 @@ async def filter_results_by_category(kb: Any, results: list[tuple[int, float]],
       return results
 
     # First check if category columns exist
-    kb.sql_cursor.execute(f"PRAGMA table_info({table_name})")
+    kb.sql_cursor.execute(f'PRAGMA table_info({table_name})')
     columns = {col[1] for col in kb.sql_cursor.fetchall()}
 
     if 'primary_category' not in columns and 'categories' not in columns:
@@ -140,12 +145,12 @@ async def filter_results_by_category(kb: Any, results: list[tuple[int, float]],
     params = doc_ids.copy()
 
     if 'primary_category' in columns:
-      conditions.append(f"primary_category IN ({category_placeholders})")
+      conditions.append(f'primary_category IN ({category_placeholders})')
       params.extend(categories)
 
     if 'categories' in columns:
       for cat in categories:
-        conditions.append("categories LIKE ?")
+        conditions.append('categories LIKE ?')
         params.append(f'%{cat}%')
 
     if not conditions:
@@ -165,20 +170,18 @@ async def filter_results_by_category(kb: Any, results: list[tuple[int, float]],
     matching_ids = {row[0] for row in kb.sql_cursor.fetchall()}
 
     # Filter original results
-    filtered_results = [(doc_id, score) for doc_id, score in results
-                       if doc_id in matching_ids]
+    filtered_results = [(doc_id, score) for doc_id, score in results if doc_id in matching_ids]
 
-    logger.info(f"Category filtering: {len(results)} -> {len(filtered_results)} results")
+    logger.info(f'Category filtering: {len(results)} -> {len(filtered_results)} results')
     return filtered_results
 
   except sqlite3.Error as e:
-    logger.error(f"Category filtering failed: {e}")
+    logger.error(f'Category filtering failed: {e}')
     # Return unfiltered results rather than failing completely
     return results
 
 
-async def perform_vector_search(kb: Any, query_embedding: np.ndarray,
-                               top_k: int = 10) -> list[tuple[int, float]]:
+async def perform_vector_search(kb: Any, query_embedding: np.ndarray, top_k: int = 10) -> list[tuple[int, float]]:
   """
   Perform vector similarity search using FAISS index.
 
@@ -194,9 +197,9 @@ async def perform_vector_search(kb: Any, query_embedding: np.ndarray,
     # Load FAISS index
     if not hasattr(kb, 'faiss_index') or kb.faiss_index is None:
       if not os.path.exists(kb.knowledge_base_vector):
-        raise SearchError(f"Vector index not found: {kb.knowledge_base_vector}")
+        raise SearchError(f'Vector index not found: {kb.knowledge_base_vector}')
 
-      logger.debug(f"Loading FAISS index from {kb.knowledge_base_vector}")
+      logger.debug(f'Loading FAISS index from {kb.knowledge_base_vector}')
       faiss, _ = _get_faiss()
       kb.faiss_index = faiss.read_index(kb.knowledge_base_vector)
 
@@ -208,7 +211,7 @@ async def perform_vector_search(kb: Any, query_embedding: np.ndarray,
         nprobe = getattr(kb, 'faiss_nprobe', 32)
         if ivf_index.nprobe != nprobe:
           ivf_index.nprobe = nprobe
-          logger.info(f"Set FAISS nprobe={nprobe}")
+          logger.info(f'Set FAISS nprobe={nprobe}')
     except RuntimeError:
       pass  # Not an IVF index
 
@@ -230,8 +233,8 @@ async def perform_vector_search(kb: Any, query_embedding: np.ndarray,
 
     # Check if using Inner Product (IP) or L2 distance
     uses_ip_metric = (
-      'IP' in type(inner_index).__name__ or
-      (hasattr(inner_index, 'metric_type') and inner_index.metric_type == 1)  # 1 = METRIC_INNER_PRODUCT
+      'IP' in type(inner_index).__name__
+      or (hasattr(inner_index, 'metric_type') and inner_index.metric_type == 1)  # 1 = METRIC_INNER_PRODUCT
     )
 
     # For Inner Product, higher scores are already better (no conversion needed)
@@ -244,16 +247,15 @@ async def perform_vector_search(kb: Any, query_embedding: np.ndarray,
       if idx != -1:  # FAISS returns -1 for empty slots
         results.append((int(idx), float(similarity)))
 
-    logger.debug(f"Vector search found {len(results)} results")
+    logger.debug(f'Vector search found {len(results)} results')
     return results
 
   except (FileNotFoundError, OSError, RuntimeError, ValueError) as e:
-    logger.error(f"Vector search failed: {e}")
-    raise SearchError(f"Vector search error: {e}") from e
+    logger.error(f'Vector search failed: {e}')
+    raise SearchError(f'Vector search error: {e}') from e
 
 
-async def perform_bm25_search(kb: Any, query_text: str,
-                             top_k: int = 10) -> list[tuple[int, float]]:
+async def perform_bm25_search(kb: Any, query_text: str, top_k: int = 10) -> list[tuple[int, float]]:
   """
   Perform BM25 keyword search if enabled.
 
@@ -276,23 +278,23 @@ async def perform_bm25_search(kb: Any, query_text: str,
     bm25_results = search_bm25(kb, query_text, top_k * 2)  # Get more for merging
 
     if not bm25_results:
-      logger.debug("No BM25 results found")
+      logger.debug('No BM25 results found')
       return []
 
-    logger.debug(f"BM25 search found {len(bm25_results)} results")
+    logger.debug(f'BM25 search found {len(bm25_results)} results')
     return bm25_results
 
   except ImportError:
-    logger.warning("BM25 search not available")
+    logger.warning('BM25 search not available')
     return []
   except (ValueError, RuntimeError, AttributeError) as e:
-    logger.error(f"BM25 search failed: {e}")
+    logger.error(f'BM25 search failed: {e}')
     return []
 
 
-def merge_search_results_rrf(vector_results: list[tuple[int, float]],
-                             bm25_results: list[tuple[int, float]],
-                             k: int = 60) -> list[tuple[int, float]]:
+def merge_search_results_rrf(
+  vector_results: list[tuple[int, float]], bm25_results: list[tuple[int, float]], k: int = 60
+) -> list[tuple[int, float]]:
   """
   Merge results using Reciprocal Rank Fusion (RRF).
 
@@ -324,16 +326,17 @@ def merge_search_results_rrf(vector_results: list[tuple[int, float]],
   # Sort by RRF score descending
   merged_results = sorted(rrf_scores.items(), key=lambda x: x[1], reverse=True)
 
-  logger.debug(f"RRF merged {len(vector_results)} vector + {len(bm25_results)} BM25 "
-              f"= {len(merged_results)} total results")
+  logger.debug(f'RRF merged {len(vector_results)} vector + {len(bm25_results)} BM25 = {len(merged_results)} total results')
 
   return merged_results
 
 
-def merge_search_results_weighted(vector_results: list[tuple[int, float]],
-                                  bm25_results: list[tuple[int, float]],
-                                  vector_weight: float = 0.7,
-                                  bm25_weight: float = 0.3) -> list[tuple[int, float]]:
+def merge_search_results_weighted(
+  vector_results: list[tuple[int, float]],
+  bm25_results: list[tuple[int, float]],
+  vector_weight: float = 0.7,
+  bm25_weight: float = 0.3,
+) -> list[tuple[int, float]]:
   """
   Merge vector and BM25 search results with weighted scoring (legacy method).
 
@@ -365,14 +368,12 @@ def merge_search_results_weighted(vector_results: list[tuple[int, float]],
   if vector_scores:
     max_vector_score = max(vector_scores.values())
     if max_vector_score > 0:
-      vector_scores = {doc_id: score / max_vector_score
-                      for doc_id, score in vector_scores.items()}
+      vector_scores = {doc_id: score / max_vector_score for doc_id, score in vector_scores.items()}
 
   if bm25_scores:
     max_bm25_score = max(bm25_scores.values())
     if max_bm25_score > 0:
-      bm25_scores = {doc_id: score / max_bm25_score
-                    for doc_id, score in bm25_scores.items()}
+      bm25_scores = {doc_id: score / max_bm25_score for doc_id, score in bm25_scores.items()}
 
   # Combine scores
   combined_results = []
@@ -380,26 +381,28 @@ def merge_search_results_weighted(vector_results: list[tuple[int, float]],
     vector_score = vector_scores.get(doc_id, 0.0)
     bm25_score = bm25_scores.get(doc_id, 0.0)
 
-    combined_score = (vector_weight * vector_score +
-                     bm25_weight * bm25_score)
+    combined_score = vector_weight * vector_score + bm25_weight * bm25_score
 
     combined_results.append((doc_id, combined_score))
 
   # Sort by combined score (descending)
   combined_results.sort(key=lambda x: x[1], reverse=True)
 
-  logger.debug(f"Weighted merged {len(vector_results)} vector + {len(bm25_results)} BM25 "
-              f"= {len(combined_results)} total results")
+  logger.debug(
+    f'Weighted merged {len(vector_results)} vector + {len(bm25_results)} BM25 = {len(combined_results)} total results'
+  )
 
   return combined_results
 
 
-def merge_search_results(vector_results: list[tuple[int, float]],
-                        bm25_results: list[tuple[int, float]],
-                        vector_weight: float = 0.7,
-                        bm25_weight: float = 0.3,
-                        fusion_method: str = "rrf",
-                        rrf_k: int = 60) -> list[tuple[int, float]]:
+def merge_search_results(
+  vector_results: list[tuple[int, float]],
+  bm25_results: list[tuple[int, float]],
+  vector_weight: float = 0.7,
+  bm25_weight: float = 0.3,
+  fusion_method: str = 'rrf',
+  rrf_k: int = 60,
+) -> list[tuple[int, float]]:
   """
   Merge vector and BM25 search results using specified fusion method.
 
@@ -414,18 +417,15 @@ def merge_search_results(vector_results: list[tuple[int, float]],
   Returns:
       Merged and sorted list of (doc_id, combined_score) tuples
   """
-  if fusion_method == "rrf":
+  if fusion_method == 'rrf':
     return merge_search_results_rrf(vector_results, bm25_results, k=rrf_k)
   else:
-    return merge_search_results_weighted(vector_results, bm25_results,
-                                         vector_weight, bm25_weight)
+    return merge_search_results_weighted(vector_results, bm25_results, vector_weight, bm25_weight)
 
 
-async def perform_hybrid_search(kb: Any, query_text: str,
-                               query_embedding: np.ndarray,
-                               top_k: int = 10,
-                               categories: list[str] = None,
-                               rerank: bool = False) -> list[tuple[int, float]]:
+async def perform_hybrid_search(
+  kb: Any, query_text: str, query_embedding: np.ndarray, top_k: int = 10, categories: list[str] = None, rerank: bool = False
+) -> list[tuple[int, float]]:
   """
   Perform hybrid search combining vector similarity and BM25 keyword search.
 
@@ -456,18 +456,19 @@ async def perform_hybrid_search(kb: Any, query_text: str,
       rrf_k = getattr(kb, 'rrf_k', 60)
 
       results = merge_search_results(
-        vector_results, bm25_results,
+        vector_results,
+        bm25_results,
         vector_weight=vector_weight,
         bm25_weight=bm25_weight,
         fusion_method=fusion_method,
-        rrf_k=rrf_k
+        rrf_k=rrf_k,
       )
     elif vector_results:
       results = vector_results
     elif bm25_results:
       results = bm25_results
     else:
-      logger.warning("No search results found")
+      logger.warning('No search results found')
       return []
 
     # Apply category filtering if specified
@@ -478,20 +479,21 @@ async def perform_hybrid_search(kb: Any, query_text: str,
     if rerank and getattr(kb, 'enable_reranking', False):
       try:
         from embedding.rerank_manager import rerank_search_results
+
         results = await rerank_search_results(kb, query_text, results)
-        logger.debug("Applied reranking to search results")
+        logger.debug('Applied reranking to search results')
       except (ImportError, RuntimeError, ValueError) as e:
-        logger.warning(f"Reranking failed: {e}")
+        logger.warning(f'Reranking failed: {e}')
 
     # Limit to top_k results
     results = results[:top_k]
 
-    logger.info(f"Hybrid search completed: {len(results)} results")
+    logger.info(f'Hybrid search completed: {len(results)} results')
     return results
 
   except (ValueError, RuntimeError, OSError, sqlite3.Error) as e:
-    logger.error(f"Hybrid search failed: {e}")
-    raise SearchError(f"Search error: {e}") from e
+    logger.error(f'Hybrid search failed: {e}')
+    raise SearchError(f'Search error: {e}') from e
 
 
 async def process_reference_batch(kb: Any, batch: list[tuple[int, float]]) -> list[list[Any]]:
@@ -514,21 +516,21 @@ async def process_reference_batch(kb: Any, batch: list[tuple[int, float]]) -> li
   # Validate table name once
   table_name = getattr(kb, 'table_name', 'docs')
   if not validate_table_name(table_name):
-    raise DatabaseError(f"Invalid table name: {table_name}")
+    raise DatabaseError(f'Invalid table name: {table_name}')
 
   try:
     # Check if category columns exist
-    kb.sql_cursor.execute(f"PRAGMA table_info({table_name})")
+    kb.sql_cursor.execute(f'PRAGMA table_info({table_name})')
     columns = {col[1] for col in kb.sql_cursor.fetchall()}
     has_primary_category = 'primary_category' in columns
     has_categories = 'categories' in columns
 
     # Build query with optional category columns
-    select_fields = ["id", "sid", "sourcedoc", "originaltext", "metadata"]
+    select_fields = ['id', 'sid', 'sourcedoc', 'originaltext', 'metadata']
     if has_primary_category:
-      select_fields.append("primary_category")
+      select_fields.append('primary_category')
     if has_categories:
-      select_fields.append("categories")
+      select_fields.append('categories')
 
     for doc_id, distance in batch:
       # Adjust context scope based on similarity (configurable thresholds)
@@ -573,7 +575,7 @@ async def process_reference_batch(kb: Any, batch: list[tuple[int, float]]) -> li
 
           # Structure: [rid, rsrc, rsid, originaltext, distance, metadata, primary_category, categories]
           references.append([rid, rsrc, rsid, originaltext, distance, metadata, primary_category, categories])
-          logger.debug(f"Context doc: id={rid}, sid={rsid}, src={rsrc}, distance={distance}")
+          logger.debug(f'Context doc: id={rid}, sid={rsid}, src={rsrc}, distance={distance}')
         logger.debug('---')
       else:
         logger.warning(f'No rows found for {sourcedoc} with sid range {stsid}-{endsid}')
@@ -581,8 +583,8 @@ async def process_reference_batch(kb: Any, batch: list[tuple[int, float]]) -> li
     return references
 
   except sqlite3.Error as e:
-    logger.error(f"Database error processing reference batch: {e}")
-    raise DatabaseError(f"Failed to process reference batch: {e}") from e
+    logger.error(f'Database error processing reference batch: {e}')
+    raise DatabaseError(f'Failed to process reference batch: {e}') from e
 
 
-#fin
+# fin

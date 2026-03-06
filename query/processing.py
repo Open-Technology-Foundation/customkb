@@ -42,17 +42,21 @@ def read_context_file(file_path: str) -> tuple[str, str]:
     # Get just the filename for reference
     file_name = os.path.basename(file_path)
 
-    logger.debug(f"Read context file: {file_name} ({len(content)} characters)")
+    logger.debug(f'Read context file: {file_name} ({len(content)} characters)')
     return content, file_name
 
   except (FileNotFoundError, OSError, UnicodeDecodeError) as e:
-    logger.error(f"Failed to read context file {file_path}: {e}")
-    raise ProcessingError(f"Context file read failed: {e}") from e
+    logger.error(f'Failed to read context file {file_path}: {e}')
+    raise ProcessingError(f'Context file read failed: {e}') from e
 
 
-def build_reference_string(kb: Any, reference: list[list[Any]],
-                          context_files_content: list[tuple[str, str]] = None,
-                          debug: bool = False, format_type: str = None) -> str:
+def build_reference_string(
+  kb: Any,
+  reference: list[list[Any]],
+  context_files_content: list[tuple[str, str]] | None = None,
+  debug: bool = False,
+  format_type: str | None = None,
+) -> str:
   """
   Build a reference string from the retrieved documents.
 
@@ -67,7 +71,7 @@ def build_reference_string(kb: Any, reference: list[list[Any]],
       Formatted reference string.
   """
   if not reference:
-    return ""
+    return ''
 
   try:
     # Import formatter
@@ -79,23 +83,19 @@ def build_reference_string(kb: Any, reference: list[list[Any]],
 
     # Format the references
     reference_string = format_references(
-      references=reference,
-      format_type=format_type,
-      context_files=context_files_content,
-      debug=debug
+      references=reference, format_type=format_type, context_files=context_files_content, debug=debug
     )
 
-    logger.debug(f"Built reference string: {len(reference_string)} characters, format: {format_type}")
+    logger.debug(f'Built reference string: {len(reference_string)} characters, format: {format_type}')
     return reference_string
 
   except (ImportError, AttributeError, ValueError, TypeError) as e:
-    logger.error(f"Failed to build reference string: {e}")
+    logger.error(f'Failed to build reference string: {e}')
     # Fallback to simple text format
     return build_simple_reference_string(reference, context_files_content)
 
 
-def build_simple_reference_string(reference: list[list[Any]],
-                                 context_files_content: list[tuple[str, str]] = None) -> str:
+def build_simple_reference_string(reference: list[list[Any]], context_files_content: list[tuple[str, str]] = None) -> str:
   """
   Build a simple text reference string as fallback.
 
@@ -111,22 +111,22 @@ def build_simple_reference_string(reference: list[list[Any]],
   # Add context files if provided
   if context_files_content:
     for content, filename in context_files_content:
-      parts.append(f"=== Context File: {filename} ===")
+      parts.append(f'=== Context File: {filename} ===')
       parts.append(content)
-      parts.append("")
+      parts.append('')
 
   # Add search results
   if reference:
-    parts.append("=== Search Results ===")
+    parts.append('=== Search Results ===')
     for i, ref in enumerate(reference, 1):
       if len(ref) >= 4:  # [id, sid, sourcedoc, originaltext, ...]
-        sourcedoc = ref[2] if ref[2] else "Unknown"
-        text = ref[3] if ref[3] else ""
-        parts.append(f"--- Result {i}: {sourcedoc} ---")
+        sourcedoc = ref[2] if ref[2] else 'Unknown'
+        text = ref[3] if ref[3] else ''
+        parts.append(f'--- Result {i}: {sourcedoc} ---')
         parts.append(text)
-        parts.append("")
+        parts.append('')
 
-  return "\n".join(parts)
+  return '\n'.join(parts)
 
 
 async def process_query_async(args: argparse.Namespace, logger) -> str:
@@ -172,38 +172,38 @@ async def process_query_async(args: argparse.Namespace, logger) -> str:
       categories = [cat.strip() for cat in categories.split(',')]
 
     logger.info(f"Processing query: '{query_text[:50]}{'...' if len(query_text) > 50 else ''}'")
-    logger.info(f"Parameters: top_k={top_k}, context_scope={context_scope}, categories={categories}")
+    logger.info(f'Parameters: top_k={top_k}, context_scope={context_scope}, categories={categories}')
 
     # Connect to database
     connect_to_database(kb)
 
     try:
       # Generate query embedding
-      logger.debug("Generating query embedding...")
+      logger.debug('Generating query embedding...')
       query_embedding = await get_query_embedding(query_text, kb.vector_model, kb)
 
       # Perform hybrid search
-      logger.debug("Performing hybrid search...")
+      logger.debug('Performing hybrid search...')
       search_results = await perform_hybrid_search(
         kb=kb,
         query_text=query_text,
         query_embedding=query_embedding,
         top_k=top_k,
         categories=categories,
-        rerank=getattr(kb, 'enable_reranking', False)
+        rerank=getattr(kb, 'enable_reranking', False),
       )
 
       if not search_results:
-        return "No relevant results found for your query."
+        return 'No relevant results found for your query.'
 
-      logger.info(f"Found {len(search_results)} relevant results")
+      logger.info(f'Found {len(search_results)} relevant results')
 
       # Process search results to get document content
-      logger.debug("Processing reference batch...")
+      logger.debug('Processing reference batch...')
       reference_data = await process_reference_batch(kb, search_results)
 
       if not reference_data:
-        return "No document content could be retrieved."
+        return 'No document content could be retrieved.'
 
       # Read context files from configuration or CLI
       context_files_content = []
@@ -214,9 +214,9 @@ async def process_query_async(args: argparse.Namespace, logger) -> str:
           try:
             content, filename = read_context_file(context_file)
             context_files_content.append((content, filename))
-            logger.debug(f"Loaded context file from config: {filename}")
+            logger.debug(f'Loaded context file from config: {filename}')
           except (ProcessingError, FileNotFoundError, OSError) as e:
-            logger.warning(f"Failed to read context file {context_file}: {e}")
+            logger.warning(f'Failed to read context file {context_file}: {e}')
 
       # Then, add any CLI-provided context files (from --context-files)
       context_files_arg = getattr(args, 'context_files', None)
@@ -225,43 +225,36 @@ async def process_query_async(args: argparse.Namespace, logger) -> str:
           try:
             content, filename = read_context_file(context_file)
             context_files_content.append((content, filename))
-            logger.debug(f"Loaded context file from CLI: {filename}")
+            logger.debug(f'Loaded context file from CLI: {filename}')
           except (ProcessingError, FileNotFoundError, OSError) as e:
-            logger.warning(f"Failed to read context file {context_file}: {e}")
+            logger.warning(f'Failed to read context file {context_file}: {e}')
 
       # Build reference string
       format_type = getattr(args, 'format', None)
       debug_mode = getattr(args, 'debug', False)
 
       reference_string = build_reference_string(
-        kb=kb,
-        reference=reference_data,
-        context_files_content=context_files_content,
-        debug=debug_mode,
-        format_type=format_type
+        kb=kb, reference=reference_data, context_files_content=context_files_content, debug=debug_mode, format_type=format_type
       )
 
-      logger.info(f"Context length: {len(reference_string)} characters")
+      logger.info(f'Context length: {len(reference_string)} characters')
 
       # Return context only if requested
       if return_context_only:
-        logger.info("Returning context only (no AI response generation)")
+        logger.info('Returning context only (no AI response generation)')
         return reference_string
 
       # Generate AI response
-      logger.debug("Generating AI response...")
+      logger.debug('Generating AI response...')
       prompt_template = getattr(args, 'prompt_template', None)
       response = await generate_ai_response(
-        kb=kb,
-        reference_string=reference_string,
-        query_text=query_text,
-        prompt_template=prompt_template
+        kb=kb, reference_string=reference_string, query_text=query_text, prompt_template=prompt_template
       )
 
       if not response:
-        return "Failed to generate a response. Please try again."
+        return 'Failed to generate a response. Please try again.'
 
-      logger.info(f"Generated response: {len(response)} characters")
+      logger.info(f'Generated response: {len(response)} characters')
       return response
 
     finally:
@@ -269,8 +262,8 @@ async def process_query_async(args: argparse.Namespace, logger) -> str:
       close_database(kb)
 
   except (ValueError, RuntimeError, OSError, AttributeError, TypeError, sqlite3.Error, CustomKBError) as e:
-    logger.error(f"Query processing failed: {e}")
-    raise QueryError(f"Query processing error: {e}") from e
+    logger.error(f'Query processing failed: {e}')
+    raise QueryError(f'Query processing error: {e}') from e
 
 
 def process_query(args: argparse.Namespace, logger) -> str:
@@ -301,11 +294,11 @@ def process_query(args: argparse.Namespace, logger) -> str:
   try:
     return asyncio.run(process_query_async(args, logger))
   except KeyboardInterrupt:
-    logger.info("Query processing interrupted by user")
-    return "Query processing was interrupted."
+    logger.info('Query processing interrupted by user')
+    return 'Query processing was interrupted.'
   except (QueryError, ValueError, RuntimeError, OSError) as e:
-    logger.error(f"Query processing failed: {e}")
-    return f"Error processing query: {e}"
+    logger.error(f'Query processing failed: {e}')
+    return f'Error processing query: {e}'
 
 
 def validate_query_args(args: argparse.Namespace) -> bool:
@@ -319,29 +312,29 @@ def validate_query_args(args: argparse.Namespace) -> bool:
       True if valid, raises exception otherwise
   """
   if not hasattr(args, 'query_text') or not args.query_text:
-    raise ValueError("Query text is required")
+    raise ValueError('Query text is required')
 
   if not hasattr(args, 'config_file') or not args.config_file:
-    raise ValueError("Configuration file is required")
+    raise ValueError('Configuration file is required')
 
   # Validate top_k
   if hasattr(args, 'top_k') and args.top_k is not None:
     if args.top_k <= 0:
-      raise ValueError("top_k must be positive")
+      raise ValueError('top_k must be positive')
     if args.top_k > 1000:
-      logger.warning(f"Large top_k value: {args.top_k}")
+      logger.warning(f'Large top_k value: {args.top_k}')
 
   # Validate context_scope
   if hasattr(args, 'context_scope') and args.context_scope is not None and args.context_scope <= 0:
-    raise ValueError("context_scope must be positive")
+    raise ValueError('context_scope must be positive')
 
   # Validate temperature
   if hasattr(args, 'temperature') and args.temperature is not None and not 0.0 <= args.temperature <= 2.0:
-    raise ValueError("temperature must be between 0.0 and 2.0")
+    raise ValueError('temperature must be between 0.0 and 2.0')
 
   # Validate max_tokens
   if hasattr(args, 'max_tokens') and args.max_tokens is not None and args.max_tokens <= 0:
-    raise ValueError("max_tokens must be positive")
+    raise ValueError('max_tokens must be positive')
 
   return True
 
@@ -367,16 +360,15 @@ def prepare_query_context(query_text: str, context_files: list[str] = None) -> t
         context_files_content.append((content, filename))
 
         # Optionally enhance query with context file information
-        enhanced_query += f"\n\nAdditional context from {filename}:\n{content[:500]}..."
+        enhanced_query += f'\n\nAdditional context from {filename}:\n{content[:500]}...'
 
       except (ProcessingError, FileNotFoundError, OSError) as e:
-        logger.warning(f"Could not read context file {context_file}: {e}")
+        logger.warning(f'Could not read context file {context_file}: {e}')
 
   return enhanced_query, context_files_content
 
 
-async def batch_process_queries(queries: list[str], config_file: str,
-                               **kwargs) -> list[tuple[str, str]]:
+async def batch_process_queries(queries: list[str], config_file: str, **kwargs) -> list[tuple[str, str]]:
   """
   Process multiple queries in batch.
 
@@ -397,7 +389,7 @@ async def batch_process_queries(queries: list[str], config_file: str,
     connect_to_database(kb)
 
     for i, query in enumerate(queries, 1):
-      logger.info(f"Processing query {i}/{len(queries)}: {query[:50]}...")
+      logger.info(f'Processing query {i}/{len(queries)}: {query[:50]}...')
 
       try:
         # Create mock args object
@@ -420,13 +412,13 @@ async def batch_process_queries(queries: list[str], config_file: str,
 
       except (QueryError, ValueError, RuntimeError, OSError) as e:
         logger.error(f"Failed to process query '{query}': {e}")
-        results.append((query, f"Error: {e}"))
+        results.append((query, f'Error: {e}'))
 
   finally:
     close_database(kb)
 
-  logger.info(f"Batch processing complete: {len(results)} queries processed")
+  logger.info(f'Batch processing complete: {len(results)} queries processed')
   return results
 
 
-#fin
+# fin

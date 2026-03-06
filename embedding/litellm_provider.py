@@ -7,7 +7,6 @@ models are delegated back to the existing SentenceTransformerProvider since
 LiteLLM does not support local models.
 """
 
-
 from pathlib import Path
 
 import litellm
@@ -26,9 +25,13 @@ logger = get_logger(__name__)
 # Suppress LiteLLM's verbose logging
 litellm.suppress_debug_info = True
 
-# Models that require local SentenceTransformer (not supported by LiteLLM)
+# Models that run locally via SentenceTransformer instead of LiteLLM.
+# LiteLLM only supports API-based providers, so local models must be
+# routed to SentenceTransformerProvider from providers.py.
 LOCAL_MODELS = {'bge-m3', 'all-minilm-l6-v2'}
-_local_provider_cache = {}  # Cache local model providers to avoid reloading
+# Reuse SentenceTransformerProvider instances across calls to avoid
+# reloading heavy model weights on every embedding request.
+_local_provider_cache = {}
 
 
 def _to_litellm_embedding_model(model: str) -> str:
@@ -81,35 +84,36 @@ async def get_embeddings(
   # Delegate local models to SentenceTransformerProvider
   if model_lower in LOCAL_MODELS or model_lower.startswith('sentence-transformers/'):
     from embedding.providers import SentenceTransformerProvider
+
     if model_lower not in _local_provider_cache:
       _local_provider_cache[model_lower] = SentenceTransformerProvider(model)
     return await _local_provider_cache[model_lower].get_embeddings(texts, model)
 
   litellm_model = _to_litellm_embedding_model(model)
-  logger.info(f"LiteLLM embedding: model={litellm_model}, texts={len(texts)}")
+  logger.info(f'LiteLLM embedding: model={litellm_model}, texts={len(texts)}')
 
   try:
     response = await litellm.aembedding(
       model=litellm_model,
       input=texts,
-      **({"dimensions": dimensions} if dimensions else {}),
+      **({'dimensions': dimensions} if dimensions else {}),
     )
     embeddings = [item['embedding'] for item in response.data]
-    logger.info(f"LiteLLM embedding: {len(embeddings)} vectors, dims={len(embeddings[0]) if embeddings else 0}")
+    logger.info(f'LiteLLM embedding: {len(embeddings)} vectors, dims={len(embeddings[0]) if embeddings else 0}')
     return embeddings
 
   except litellm.AuthenticationError as e:
-    logger.error(f"Embedding auth failed for {litellm_model}: {e}")
-    raise APIError(f"Authentication failed for embedding model {litellm_model}: {e}") from e
+    logger.error(f'Embedding auth failed for {litellm_model}: {e}')
+    raise APIError(f'Authentication failed for embedding model {litellm_model}: {e}') from e
   except litellm.RateLimitError as e:
-    logger.error(f"Embedding rate limit for {litellm_model}: {e}")
-    raise APIError(f"Rate limit exceeded for embedding model {litellm_model}: {e}") from e
+    logger.error(f'Embedding rate limit for {litellm_model}: {e}')
+    raise APIError(f'Rate limit exceeded for embedding model {litellm_model}: {e}') from e
   except litellm.APIConnectionError as e:
-    logger.error(f"Embedding connection error for {litellm_model}: {e}")
-    raise APIError(f"Connection error for embedding model {litellm_model}: {e}") from e
+    logger.error(f'Embedding connection error for {litellm_model}: {e}')
+    raise APIError(f'Connection error for embedding model {litellm_model}: {e}') from e
   except litellm.APIError as e:
-    logger.error(f"Embedding API error for {litellm_model}: {e}")
-    raise APIError(f"LiteLLM embedding error for {litellm_model}: {e}") from e
+    logger.error(f'Embedding API error for {litellm_model}: {e}')
+    raise APIError(f'LiteLLM embedding error for {litellm_model}: {e}') from e
 
 
 def get_embedding_sync(text: str, model: str) -> list[float]:
@@ -132,6 +136,7 @@ def get_embedding_sync(text: str, model: str) -> list[float]:
   # Delegate local models
   if model_lower in LOCAL_MODELS or model_lower.startswith('sentence-transformers/'):
     from embedding.providers import SentenceTransformerProvider
+
     if model_lower not in _local_provider_cache:
       _local_provider_cache[model_lower] = SentenceTransformerProvider(model)
     return _local_provider_cache[model_lower].get_embedding_sync(text, model)
@@ -145,10 +150,9 @@ def get_embedding_sync(text: str, model: str) -> list[float]:
     )
     return response.data[0]['embedding']
 
-  except (litellm.AuthenticationError, litellm.RateLimitError,
-          litellm.APIConnectionError, litellm.APIError) as e:
-    logger.error(f"Sync embedding error for {litellm_model}: {e}")
-    raise APIError(f"Embedding failed for {litellm_model}: {e}") from e
+  except (litellm.AuthenticationError, litellm.RateLimitError, litellm.APIConnectionError, litellm.APIError) as e:
+    logger.error(f'Sync embedding error for {litellm_model}: {e}')
+    raise APIError(f'Embedding failed for {litellm_model}: {e}') from e
 
 
 def get_embedding_dimensions(model: str) -> int:
@@ -171,4 +175,4 @@ def get_embedding_dimensions(model: str) -> int:
   return dimensions.get(model.lower(), 1536)
 
 
-#fin
+# fin

@@ -24,7 +24,7 @@ class ReferenceFormatter(ABC):
     pass
 
   @abstractmethod
-  def format_document_start(self, source: str, sid: int, display_source: str = None) -> str:
+  def format_document_start(self, source: str, sid: int, display_source: str | None = None) -> str:
     """Format the start of a document context."""
     pass
 
@@ -43,9 +43,9 @@ class ReferenceFormatter(ABC):
     """Format the end of a document context."""
     pass
 
-  def format_section_header(self, source: str, sid: int, display_source: str = None) -> str:
+  def format_section_header(self, source: str, sid: int, display_source: str | None = None) -> str:
     """Format a section header within a grouped context (optional override)."""
-    return ""  # Default: no additional header for grouped sections
+    return ''  # Default: no additional header for grouped sections
 
   @abstractmethod
   def finalize(self, content: str) -> str:
@@ -66,7 +66,7 @@ class XMLFormatter(ReferenceFormatter):
     safe_content = xml.sax.saxutils.escape(str(content))
     return f'<reference src="{safe_filename}">\n{safe_content}\n</reference>\n\n'
 
-  def format_document_start(self, source: str, sid: int, display_source: str = None) -> str:
+  def format_document_start(self, source: str, sid: int, display_source: str | None = None) -> str:
     """Format the start of a document context."""
     src = display_source or source
     # Ensure src is a string (in case it's an int or other type)
@@ -76,7 +76,7 @@ class XMLFormatter(ReferenceFormatter):
   def format_metadata(self, metadata_elems: list[str], similarity_score: str, debug: bool) -> str:
     """Format metadata section as XML."""
     if not metadata_elems and not (similarity_score and debug):
-      return ""
+      return ''
 
     parts = []
     if metadata_elems:
@@ -86,23 +86,23 @@ class XMLFormatter(ReferenceFormatter):
 
     if parts:
       return f'<metadata>\n{chr(10).join(parts)}\n</metadata>\n'
-    return ""
+    return ''
 
   def format_document_content(self, content: str) -> str:
     """Format document content - escape XML entities."""
     # Ensure content is a string and escape XML entities
     safe_content = xml.sax.saxutils.escape(str(content))
-    return safe_content + "\n"
+    return safe_content + '\n'
 
   def format_document_end(self) -> str:
     """Format the end of a document context."""
-    return "</context>\n\n"
+    return '</context>\n\n'
 
   def finalize(self, content: str) -> str:
     """Wrap content in root element for valid XML."""
     if content:
-      return f"<results>\n{content}</results>\n"
-    return "<results/>\n"
+      return f'<results>\n{content}</results>\n'
+    return '<results/>\n'
 
 
 class JSONFormatter(ReferenceFormatter):
@@ -115,27 +115,24 @@ class JSONFormatter(ReferenceFormatter):
 
   def format_context_file(self, content: str, filename: str) -> str:
     """Store context file for JSON output."""
-    self.context_files.append({
-      "source": filename,
-      "content": content
-    })
-    return ""  # Build JSON at the end
+    self.context_files.append({'source': filename, 'content': content})
+    return ''  # Build JSON at the end
 
-  def format_document_start(self, source: str, sid: int, display_source: str = None) -> str:
+  def format_document_start(self, source: str, sid: int, display_source: str | None = None) -> str:
     """Start a new reference document."""
     self.current_ref = {
-      "source": source,
-      "display_source": display_source or source,
-      "sid": sid,
-      "content": "",
-      "metadata": {}
+      'source': source,
+      'display_source': display_source or source,
+      'sid': sid,
+      'content': '',
+      'metadata': {},
     }
-    return ""
+    return ''
 
   def format_metadata(self, metadata_elems: list[str], similarity_score: str, debug: bool) -> str:
     """Store metadata for current reference."""
     if not self.current_ref:
-      return ""
+      return ''
 
     # Parse XML meta tags back to dict
     for elem in metadata_elems:
@@ -150,40 +147,37 @@ class JSONFormatter(ReferenceFormatter):
 
         # Unescape XML entities
         value = xml.sax.saxutils.unescape(value)
-        self.current_ref["metadata"][key] = value
+        self.current_ref['metadata'][key] = value
 
     # Add similarity if in debug mode
     if similarity_score and debug and '<meta name="similarity">' in similarity_score:
       start = similarity_score.find('>') + 1
       end = similarity_score.find('</meta>')
-      self.current_ref["similarity"] = float(similarity_score[start:end])
+      self.current_ref['similarity'] = float(similarity_score[start:end])
 
-    return ""
+    return ''
 
   def format_document_content(self, content: str) -> str:
     """Add content to current reference."""
     if self.current_ref:
       # Unescape XML entities
       content = xml.sax.saxutils.unescape(content.strip())
-      if self.current_ref["content"]:
-        self.current_ref["content"] += "\n" + content
+      if self.current_ref['content']:
+        self.current_ref['content'] += '\n' + content
       else:
-        self.current_ref["content"] = content
-    return ""
+        self.current_ref['content'] = content
+    return ''
 
   def format_document_end(self) -> str:
     """Complete current reference."""
     if self.current_ref:
       self.references.append(self.current_ref)
       self.current_ref = None
-    return ""
+    return ''
 
   def finalize(self, content: str) -> str:
     """Build final JSON output."""
-    output = {
-      "context_files": self.context_files,
-      "references": self.references
-    }
+    output = {'context_files': self.context_files, 'references': self.references}
     return json.dumps(output, indent=2, ensure_ascii=False)
 
   def needs_document_grouping(self) -> bool:
@@ -201,28 +195,28 @@ class MarkdownFormatter(ReferenceFormatter):
 
   def format_context_file(self, content: str, filename: str) -> str:
     """Format a context file as Markdown."""
-    header = ""
+    header = ''
     if not self.has_context_files:
-      header = "## Context Files\n\n"
+      header = '## Context Files\n\n'
       self.has_context_files = True
 
-    return f"{header}### {filename}\n\n{content}\n\n"
+    return f'{header}### {filename}\n\n{content}\n\n'
 
-  def format_document_start(self, source: str, sid: int, display_source: str = None) -> str:
+  def format_document_start(self, source: str, sid: int, display_source: str | None = None) -> str:
     """Format the start of a document context."""
-    header = ""
+    header = ''
     if not self.has_references:
-      header = "## References\n\n"
+      header = '## References\n\n'
       self.has_references = True
 
     src = display_source or source
     self.in_document_group = True
-    return f"{header}### {src}:{sid}\n\n"
+    return f'{header}### {src}:{sid}\n\n'
 
   def format_metadata(self, metadata_elems: list[str], similarity_score: str, debug: bool) -> str:
     """Format metadata section as Markdown."""
     if not metadata_elems and not (similarity_score and debug):
-      return ""
+      return ''
 
     lines = []
 
@@ -242,38 +236,38 @@ class MarkdownFormatter(ReferenceFormatter):
 
         # Format key nicely
         nice_key = key.replace('_', ' ').title()
-        lines.append(f"**{nice_key}:** {value}")
+        lines.append(f'**{nice_key}:** {value}')
 
     # Add similarity if in debug mode
     if similarity_score and debug and '<meta name="similarity">' in similarity_score:
       start = similarity_score.find('>') + 1
       end = similarity_score.find('</meta>')
       sim_value = similarity_score[start:end]
-      lines.append(f"**Similarity:** {sim_value}")
+      lines.append(f'**Similarity:** {sim_value}')
 
     if lines:
-      return '\n'.join(lines) + "\n\n"
-    return ""
+      return '\n'.join(lines) + '\n\n'
+    return ''
 
   def format_document_content(self, content: str) -> str:
     """Format document content - unescape XML."""
     unescaped = xml.sax.saxutils.unescape(content.strip())
-    return unescaped + "\n\n"
+    return unescaped + '\n\n'
 
   def format_document_end(self) -> str:
     """Add separator between documents."""
     self.in_document_group = False
-    return "---\n\n"
+    return '---\n\n'
 
-  def format_section_header(self, source: str, sid: int, display_source: str = None) -> str:
+  def format_section_header(self, source: str, sid: int, display_source: str | None = None) -> str:
     """Format a section header within a grouped context."""
     if self.in_document_group:
-      return f"#### Section {sid}\n\n"
-    return ""
+      return f'#### Section {sid}\n\n'
+    return ''
 
   def finalize(self, content: str) -> str:
     """Remove trailing separator."""
-    if content.endswith("---\n\n"):
+    if content.endswith('---\n\n'):
       content = content[:-5]
     return content
 
@@ -283,17 +277,17 @@ class PlainTextFormatter(ReferenceFormatter):
 
   def format_context_file(self, content: str, filename: str) -> str:
     """Format a context file as plain text."""
-    return f"=== Context File: {filename} ===\n{content}\n\n"
+    return f'=== Context File: {filename} ===\n{content}\n\n'
 
-  def format_document_start(self, source: str, sid: int, display_source: str = None) -> str:
+  def format_document_start(self, source: str, sid: int, display_source: str | None = None) -> str:
     """Format the start of a document context."""
     src = display_source or source
-    return f"--- {src}:{sid} ---\n"
+    return f'--- {src}:{sid} ---\n'
 
   def format_metadata(self, metadata_elems: list[str], similarity_score: str, debug: bool) -> str:
     """Format metadata inline for plain text."""
     if not debug:
-      return ""  # Skip metadata in plain text unless debugging
+      return ''  # Skip metadata in plain text unless debugging
 
     lines = []
 
@@ -310,31 +304,31 @@ class PlainTextFormatter(ReferenceFormatter):
 
         # Unescape XML entities
         value = xml.sax.saxutils.unescape(value)
-        lines.append(f"[{key}: {value}]")
+        lines.append(f'[{key}: {value}]')
 
     # Add similarity if in debug mode
     if similarity_score and debug and '<meta name="similarity">' in similarity_score:
       start = similarity_score.find('>') + 1
       end = similarity_score.find('</meta>')
       sim_value = similarity_score[start:end]
-      lines.append(f"[similarity: {sim_value}]")
+      lines.append(f'[similarity: {sim_value}]')
 
     if lines:
-      return ' '.join(lines) + "\n"
-    return ""
+      return ' '.join(lines) + '\n'
+    return ''
 
   def format_document_content(self, content: str) -> str:
     """Format document content - unescape XML."""
     unescaped = xml.sax.saxutils.unescape(content.strip())
-    return unescaped + "\n\n"
+    return unescaped + '\n\n'
 
   def format_document_end(self) -> str:
     """Plain text doesn't need end markers."""
-    return ""
+    return ''
 
   def finalize(self, content: str) -> str:
     """Clean up any extra whitespace."""
-    return content.rstrip() + "\n"
+    return content.rstrip() + '\n'
 
 
 def get_formatter(format_type: str | ReferenceFormat) -> ReferenceFormatter:
@@ -362,11 +356,11 @@ def get_formatter(format_type: str | ReferenceFormat) -> ReferenceFormatter:
         'markdown': MarkdownFormatter,
         'md': MarkdownFormatter,
         'plain': PlainTextFormatter,
-        'text': PlainTextFormatter
+        'text': PlainTextFormatter,
       }
       format_lower = format_type.lower()
       if format_lower not in formatters_legacy:
-        raise ValueError(f"Unsupported format type: {format_type}. Supported: {list(formatters_legacy.keys())}") from None
+        raise ValueError(f'Unsupported format type: {format_type}. Supported: {list(formatters_legacy.keys())}') from None
       return formatters_legacy[format_lower]()
   else:
     format_enum = format_type
@@ -382,9 +376,12 @@ def get_formatter(format_type: str | ReferenceFormat) -> ReferenceFormatter:
   return formatters[format_enum]()
 
 
-def format_references(references: list[tuple], format_type: str | ReferenceFormat = 'xml',
-                     context_files: list[str] | None = None,
-                     debug: bool = False) -> str:
+def format_references(
+  references: list[tuple],
+  format_type: str | ReferenceFormat = 'xml',
+  context_files: list[str] | None = None,
+  debug: bool = False,
+) -> str:
   """
   Format references using the appropriate formatter.
 
@@ -410,7 +407,7 @@ def format_references(references: list[tuple], format_type: str | ReferenceForma
         content, filename = file_data
       else:
         content = file_data
-        filename = "context_file.txt"
+        filename = 'context_file.txt'
       content_parts.append(formatter.format_context_file(content, filename))
 
   # Track document grouping
@@ -442,6 +439,7 @@ def format_references(references: list[tuple], format_type: str | ReferenceForma
         # Try to parse as JSON
         try:
           import json
+
           metadata_dict = json.loads(metadata_str)
 
           # Add category fields to metadata if they exist
@@ -453,8 +451,8 @@ def format_references(references: list[tuple], format_type: str | ReferenceForma
           # Format metadata as XML meta tags (filtered by debug mode)
           for key, value in metadata_dict.items():
             if value and (debug or key in ['heading', 'section_type', 'primary_category', 'categories']):
-                safe_value = xml.sax.saxutils.escape(str(value))
-                metadata_elems.append(f'<meta name="{key}">{safe_value}</meta>')
+              safe_value = xml.sax.saxutils.escape(str(value))
+              metadata_elems.append(f'<meta name="{key}">{safe_value}</meta>')
         except (json.JSONDecodeError, TypeError):
           # If not JSON, treat as plain text
           if metadata_str:
@@ -525,4 +523,4 @@ def format_references(references: list[tuple], format_type: str | ReferenceForma
   return formatter.finalize(full_content)
 
 
-#fin
+# fin

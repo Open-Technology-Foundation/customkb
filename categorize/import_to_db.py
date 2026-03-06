@@ -1,5 +1,13 @@
-"""
-Import categorization results into the knowledgebase database.
+"""Import categorization results into the knowledgebase SQLite database.
+
+This module is the final step of the categorization pipeline:
+
+1. ``categorize_manager`` generates per-article ``ArticleCategories`` results.
+2. This module writes those results into the KB's SQLite ``docs`` (or
+   ``chunks``) table by adding ``categories`` and ``primary_category``
+   columns (created automatically if missing) and building indexes on them.
+
+After import, downstream query commands can filter by category.
 """
 
 import sqlite3
@@ -8,8 +16,10 @@ from typing import Any
 
 from config.config_manager import KnowledgeBase
 from utils.logging_config import get_logger
+from utils.security_utils import validate_table_name
 
 logger = get_logger(__name__)
+
 
 def import_categories(kb: KnowledgeBase, results: list[Any]) -> str:
   """
@@ -32,20 +42,22 @@ def import_categories(kb: KnowledgeBase, results: list[Any]) -> str:
     cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name IN ('chunks', 'docs')")
     result = cursor.fetchone()
     table_name = result[0] if result else 'docs'
-    logger.debug(f"Using table name: {table_name}")
+    if not validate_table_name(table_name):
+      raise ValueError(f'Invalid table name: {table_name}')
+    logger.debug(f'Using table name: {table_name}')
 
     # Check if categories column exists in the table
-    cursor.execute(f"PRAGMA table_info({table_name})")
+    cursor.execute(f'PRAGMA table_info({table_name})')
     columns = [col[1] for col in cursor.fetchall()]
 
     if 'categories' not in columns:
-      logger.info(f"Adding categories column to {table_name} table")
-      cursor.execute(f"ALTER TABLE {table_name} ADD COLUMN categories TEXT")
+      logger.info(f'Adding categories column to {table_name} table')
+      cursor.execute(f'ALTER TABLE {table_name} ADD COLUMN categories TEXT')
       conn.commit()
 
     if 'primary_category' not in columns:
-      logger.info(f"Adding primary_category column to {table_name} table")
-      cursor.execute(f"ALTER TABLE {table_name} ADD COLUMN primary_category TEXT")
+      logger.info(f'Adding primary_category column to {table_name} table')
+      cursor.execute(f'ALTER TABLE {table_name} ADD COLUMN primary_category TEXT')
       conn.commit()
 
     # Import categories for each article
@@ -71,29 +83,35 @@ def import_categories(kb: KnowledgeBase, results: list[Any]) -> str:
         source_col = 'sourcedoc' if table_name == 'docs' else 'source_doc'
 
         # Try to match by filename at the end of the path (using LIKE pattern)
-        cursor.execute(f"""
+        cursor.execute(
+          f"""
           UPDATE {table_name}
           SET categories = ?, primary_category = ?
           WHERE {source_col} LIKE ?
-        """, (categories, primary_category, f'%/{source_doc_name}'))
+        """,
+          (categories, primary_category, f'%/{source_doc_name}'),
+        )
 
         # If no rows affected, try exact match with just the filename
         if cursor.rowcount == 0:
-          cursor.execute(f"""
+          cursor.execute(
+            f"""
             UPDATE {table_name}
             SET categories = ?, primary_category = ?
             WHERE {source_col} = ?
-          """, (categories, primary_category, source_doc_name))
+          """,
+            (categories, primary_category, source_doc_name),
+          )
 
         rows_affected = cursor.rowcount
         if rows_affected > 0:
           updated_count += 1
-          logger.debug(f"Updated {rows_affected} records for {source_doc_name}")
+          logger.debug(f'Updated {rows_affected} records for {source_doc_name}')
         else:
-          logger.warning(f"No records found for source document: {source_doc_name}")
+          logger.warning(f'No records found for source document: {source_doc_name}')
 
       except (sqlite3.Error, ValueError, AttributeError) as e:
-        logger.error(f"Error importing categories for {result.article_path}: {e}")
+        logger.error(f'Error importing categories for {result.article_path}: {e}')
         error_count += 1
 
     # Commit all changes
@@ -101,12 +119,12 @@ def import_categories(kb: KnowledgeBase, results: list[Any]) -> str:
 
     # Create indexes for category columns if they don't exist
     try:
-      cursor.execute(f"CREATE INDEX IF NOT EXISTS idx_primary_category ON {table_name}(primary_category)")
-      cursor.execute(f"CREATE INDEX IF NOT EXISTS idx_categories ON {table_name}(categories)")
+      cursor.execute(f'CREATE INDEX IF NOT EXISTS idx_primary_category ON {table_name}(primary_category)')
+      cursor.execute(f'CREATE INDEX IF NOT EXISTS idx_categories ON {table_name}(categories)')
       conn.commit()
-      logger.info("Created category indexes")
+      logger.info('Created category indexes')
     except sqlite3.Error as e:
-      logger.warning(f"Could not create category indexes: {e}")
+      logger.warning(f'Could not create category indexes: {e}')
 
     # Close connection
     conn.close()
@@ -127,7 +145,8 @@ You can now use --category and --categories filters in queries.
     return summary
 
   except (sqlite3.Error, FileNotFoundError, OSError) as e:
-    logger.error(f"Failed to import categories to database: {e}")
-    return f"Error importing categories: {e}"
+    logger.error(f'Failed to import categories to database: {e}')
+    return f'Error importing categories: {e}'
 
-#fin
+
+# fin

@@ -78,11 +78,7 @@ CustomKB implements a modular, three-tier architecture designed for scalability 
 
 3. **Install dependencies**
    ```bash
-   # Core dependencies
-   pip install -r requirements.txt
-   
-   # Development dependencies
-   pip install -r requirements-test.txt
+   uv sync --extra test --extra dev --extra faiss-gpu-cu12 --extra mcp
    ```
 
 4. **Set up environment variables**
@@ -678,7 +674,7 @@ is_valid = validate_api_key(key, min_length=20)
 
 3. **Memory Profiling**:
    ```bash
-   pip install memory_profiler
+   uv pip install memory_profiler
    python -m memory_profiler your_script.py
    ```
 

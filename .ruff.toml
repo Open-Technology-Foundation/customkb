@@ -4,6 +4,9 @@
 # Line length (global setting)
 line-length = 127
 
+# Use 2-space indentation (CustomKB standard)
+indent-width = 2
+
 # Exclude directories
 exclude = [
   ".mailer",
@@ -41,7 +44,6 @@ ignore = [
 "__init__.py" = ["F401"]
 
 [format]
-# Use 2-space indentation (CustomKB standard, documented in CLAUDE.md)
 indent-style = "space"
 
 # Quote style

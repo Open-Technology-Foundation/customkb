@@ -12,12 +12,12 @@ from pathlib import Path
 
 try:
   from langdetect import LangDetectException, detect_langs
+
   HAS_LANGDETECT = True
 except ImportError:
   HAS_LANGDETECT = False
 
-from database.db_manager import get_iso_code
-from utils.text_utils import read_text_file
+from utils.text_utils import get_iso_code, read_text_file
 
 logger = logging.getLogger(__name__)
 
@@ -32,11 +32,9 @@ LANGDETECT_TO_ISO = {
   # Most others match ISO 639-1
 }
 
+
 def detect_file_language(
-    file_path: str,
-    sample_size: int = 3072,
-    min_confidence: float = 0.95,
-    fallback_language: str = 'en'
+  file_path: str, sample_size: int = 3072, min_confidence: float = 0.95, fallback_language: str = 'en'
 ) -> tuple[str, float]:
   """
   Detect the language of a file by sampling its content.
@@ -51,7 +49,7 @@ def detect_file_language(
       Tuple of (ISO language code, confidence score).
   """
   if not HAS_LANGDETECT:
-    logger.warning("langdetect not installed, using fallback language")
+    logger.warning('langdetect not installed, using fallback language')
     return fallback_language, 0.0
 
   # Check cache first
@@ -65,7 +63,7 @@ def detect_file_language(
     sample_text = full_text[:sample_size]
 
     if len(sample_text.strip()) < 20:  # Too short for reliable detection
-      logger.debug(f"File {file_path} too short for language detection")
+      logger.debug(f'File {file_path} too short for language detection')
       return fallback_language, 0.0
 
     # Detect language with confidence scores
@@ -92,7 +90,9 @@ def detect_file_language(
 
     # Check confidence threshold
     if confidence < min_confidence:
-      logger.info(f"Low confidence {confidence:.2f} for language '{iso_code}' in {os.path.basename(file_path)}, using fallback")
+      logger.info(
+        f"Low confidence {confidence:.2f} for language '{iso_code}' in {os.path.basename(file_path)}, using fallback"
+      )
       return fallback_language, confidence
 
     logger.info(f"Detected language '{iso_code}' (confidence: {confidence:.2f}) for {os.path.basename(file_path)}")
@@ -103,11 +103,12 @@ def detect_file_language(
     return iso_code, confidence
 
   except LangDetectException as e:
-    logger.debug(f"Language detection failed for {file_path}: {e}")
+    logger.debug(f'Language detection failed for {file_path}: {e}')
     return fallback_language, 0.0
   except (FileNotFoundError, OSError, UnicodeDecodeError) as e:
-    logger.warning(f"Error detecting language for {file_path}: {e}")
+    logger.warning(f'Error detecting language for {file_path}: {e}')
     return fallback_language, 0.0
+
 
 def should_skip_detection(file_path: str) -> str | None:
   """
@@ -123,9 +124,26 @@ def should_skip_detection(file_path: str) -> str | None:
 
   # Code files are typically in English
   code_extensions = {
-    '.py', '.js', '.java', '.c', '.cpp', '.h', '.hpp',
-    '.go', '.rs', '.php', '.rb', '.ts', '.swift', '.kt',
-    '.scala', '.r', '.m', '.sh', '.bash', '.zsh'
+    '.py',
+    '.js',
+    '.java',
+    '.c',
+    '.cpp',
+    '.h',
+    '.hpp',
+    '.go',
+    '.rs',
+    '.php',
+    '.rb',
+    '.ts',
+    '.swift',
+    '.kt',
+    '.scala',
+    '.r',
+    '.m',
+    '.sh',
+    '.bash',
+    '.zsh',
   }
 
   if ext in code_extensions:
@@ -152,16 +170,16 @@ def should_skip_detection(file_path: str) -> str | None:
 
   return None
 
+
 def clear_detection_cache():
   """Clear the language detection cache."""
   _detection_cache.clear()
-  logger.debug("Language detection cache cleared")
+  logger.debug('Language detection cache cleared')
+
 
 def get_cache_stats() -> dict[str, int]:
   """Get statistics about the detection cache."""
-  return {
-    'cache_size': len(_detection_cache),
-    'cached_files': list(_detection_cache.keys())
-  }
+  return {'cache_size': len(_detection_cache), 'cached_files': list(_detection_cache.keys())}
 
-#fin
+
+# fin

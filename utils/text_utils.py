@@ -16,6 +16,64 @@ nlp = None
 
 logger = get_logger(__name__)
 
+# Language codes mapping - Limited to languages with NLTK support that we use
+language_codes = {
+  'zh': 'chinese',
+  'da': 'danish',
+  'nl': 'dutch',
+  'en': 'english',
+  'fi': 'finnish',
+  'fr': 'french',
+  'de': 'german',
+  'id': 'indonesian',
+  'it': 'italian',
+  'pt': 'portuguese',
+  'es': 'spanish',
+  'sv': 'swedish',
+}
+
+# Reverse mapping: full name to ISO code
+language_names_to_codes = {v: k for k, v in language_codes.items()}
+
+
+def get_iso_code(language: str) -> str:
+  """
+  Convert language to ISO code.
+
+  Args:
+      language: Either ISO code (e.g., 'en') or full name (e.g., 'english').
+
+  Returns:
+      ISO code.
+
+  Raises:
+      ValueError: If language is not recognized.
+  """
+  if language in language_codes:
+    return language
+  if language in language_names_to_codes:
+    return language_names_to_codes[language]
+  raise ValueError(f"Unrecognized language: '{language}'. Use ISO 639-1 code (e.g., 'en') or full name (e.g., 'english').")
+
+
+def get_full_language_name(iso_code: str) -> str:
+  """
+  Convert ISO code to full language name for NLTK.
+
+  Args:
+      iso_code: ISO 639-1 language code (e.g., 'en').
+
+  Returns:
+      Full language name (e.g., 'english').
+
+  Raises:
+      ValueError: If ISO code is not recognized.
+  """
+  if iso_code in language_codes:
+    return language_codes[iso_code]
+  raise ValueError(f"Unrecognized ISO code: '{iso_code}'")
+
+
 def clean_text(text: str, stop_words: set[str] | None = None) -> str:
   """
   Basic text cleaning for embeddings.
@@ -37,15 +95,14 @@ def clean_text(text: str, stop_words: set[str] | None = None) -> str:
   if stop_words:
     # Lazy import to avoid loading NLTK unless needed
     from nltk.tokenize import word_tokenize
-    filtered_text = ' '.join(
-      w for w in word_tokenize(text) if w not in stop_words
-    )
+
+    filtered_text = ' '.join(w for w in word_tokenize(text) if w not in stop_words)
     return filtered_text.strip()
 
   return text.strip()
 
-def enhanced_clean_text(text: str, stop_words: set[str] | None = None,
-                       lemmatizer: Any | None = None) -> str:
+
+def enhanced_clean_text(text: str, stop_words: set[str] | None = None, lemmatizer: Any | None = None) -> str:
   """
   Advanced text cleaning that preserves semantic structure and named entities.
 
@@ -67,10 +124,10 @@ def enhanced_clean_text(text: str, stop_words: set[str] | None = None,
   emails = email_pattern.findall(text)
 
   for i, url in enumerate(urls):
-    text = text.replace(url, f"__URL_{i}__")
+    text = text.replace(url, f'__URL_{i}__')
 
   for i, email in enumerate(emails):
-    text = text.replace(email, f"__EMAIL_{i}__")
+    text = text.replace(email, f'__EMAIL_{i}__')
 
   # Preserve named entities if spaCy is available
   entities = []
@@ -78,8 +135,8 @@ def enhanced_clean_text(text: str, stop_words: set[str] | None = None,
     try:
       doc = nlp(text)
       for i, ent in enumerate(doc.ents):
-        if ent.label_ in ["PERSON", "ORG", "GPE", "LOC", "PRODUCT", "WORK_OF_ART"]:
-          placeholder = f"__ENTITY_{i}_{ent.label_}__"
+        if ent.label_ in ['PERSON', 'ORG', 'GPE', 'LOC', 'PRODUCT', 'WORK_OF_ART']:
+          placeholder = f'__ENTITY_{i}_{ent.label_}__'
           text = text.replace(ent.text, placeholder)
           entities.append((placeholder, ent.text))
     except (AttributeError, RuntimeError, ValueError):
@@ -102,32 +159,32 @@ def enhanced_clean_text(text: str, stop_words: set[str] | None = None,
   if lemmatizer:
     # Lazy import to avoid loading NLTK unless needed
     from nltk.tokenize import word_tokenize
+
     tokens = word_tokenize(text)
     if stop_words:
-      tokens = [lemmatizer.lemmatize(w) for w in tokens if w not in stop_words
-                and not all(c in '.,!?:;-' for c in w)]
+      tokens = [lemmatizer.lemmatize(w) for w in tokens if w not in stop_words and not all(c in '.,!?:;-' for c in w)]
     else:
-      tokens = [lemmatizer.lemmatize(w) for w in tokens
-                if not all(c in '.,!?:;-' for c in w)]
+      tokens = [lemmatizer.lemmatize(w) for w in tokens if not all(c in '.,!?:;-' for c in w)]
 
     text = ' '.join(tokens)
   elif stop_words:
     # Lazy import to avoid loading NLTK unless needed
     from nltk.tokenize import word_tokenize
-    text = ' '.join(w for w in word_tokenize(text) if w not in stop_words
-                   and not all(c in '.,!?:;-' for c in w))
+
+    text = ' '.join(w for w in word_tokenize(text) if w not in stop_words and not all(c in '.,!?:;-' for c in w))
 
   # Restore entities, URLs and emails (placeholders are now lowercase)
   for placeholder, original in entities:
     text = text.replace(placeholder.lower(), original.lower())
 
   for i, url in enumerate(urls):
-    text = text.replace(f"__url_{i}__", url)
+    text = text.replace(f'__url_{i}__', url)
 
   for i, email in enumerate(emails):
-    text = text.replace(f"__email_{i}__", email)
+    text = text.replace(f'__email_{i}__', email)
 
   return text.strip()
+
 
 def get_files(pathspec: str) -> list[str]:
   """
@@ -140,10 +197,11 @@ def get_files(pathspec: str) -> list[str]:
       A sorted list of matching file paths, excluding directories.
   """
   if os.path.isdir(pathspec):
-    pathspec = f"{pathspec}/**"
+    pathspec = f'{pathspec}/**'
 
   files = sorted(glob.glob(pathspec, recursive=True))
   return [f for f in files if not os.path.isdir(f)]
+
 
 def split_filepath(filepath: str, *, adddir: bool = True, realpath: bool = True) -> tuple[str, str, str, str]:
   """
@@ -169,6 +227,7 @@ def split_filepath(filepath: str, *, adddir: bool = True, realpath: bool = True)
   fqfn = f'{directory}/{basename}{extension}'
   return directory, basename, extension, fqfn
 
+
 def find_file(filename: str, search_path: str = './', followsymlinks: bool = True) -> str | None:
   """
   Search for a file in a directory tree.
@@ -192,6 +251,7 @@ def find_file(filename: str, search_path: str = './', followsymlinks: bool = Tru
 
   return None
 
+
 def tokenize_for_bm25(text: str, language: str = 'en') -> tuple[str, int]:
   """
   Tokenize text specifically for BM25 indexing.
@@ -204,9 +264,6 @@ def tokenize_for_bm25(text: str, language: str = 'en') -> tuple[str, int]:
   Returns:
       Tuple of (space-separated tokens string, document length).
   """
-  # Import here to avoid circular imports
-  from database.db_manager import get_full_language_name, get_iso_code
-
   # Convert to lowercase but preserve acronyms and important terms
   text = text.lower()
 
@@ -226,6 +283,7 @@ def tokenize_for_bm25(text: str, language: str = 'en') -> tuple[str, int]:
   # Tokenize using NLTK (lazy import to avoid loading unless needed)
   try:
     from nltk.tokenize import word_tokenize
+
     tokens = word_tokenize(text, language=full_language)
   except (LookupError, FileNotFoundError, OSError, AttributeError, ImportError):
     # Fallback to basic split when NLTK fails (test environments or missing data)
@@ -255,6 +313,7 @@ def tokenize_for_bm25(text: str, language: str = 'en') -> tuple[str, int]:
 
   return ' '.join(filtered_tokens), len(filtered_tokens)
 
+
 def get_env(var_name: str, default: Any, cast_type: Any = str) -> Any:
   """
   Get environment variable with type casting and default value.
@@ -275,6 +334,7 @@ def get_env(var_name: str, default: Any, cast_type: Any = str) -> Any:
     return cast_type(value)
   except (ValueError, TypeError):
     return default
+
 
 def detect_file_encoding(file_path: str, sample_size: int = 65536) -> str:
   """
@@ -303,8 +363,9 @@ def detect_file_encoding(file_path: str, sample_size: int = 65536) -> str:
 
   except (FileNotFoundError, OSError, ImportError) as e:
     # Log error but only once to avoid spam
-    logger.error(f"Encoding detection failed for {file_path}: {e}")
+    logger.error(f'Encoding detection failed for {file_path}: {e}')
     return 'utf-8'
+
 
 def read_text_file(file_path: str, config: dict | None = None) -> str:
   """
@@ -340,7 +401,7 @@ def read_text_file(file_path: str, config: dict | None = None) -> str:
         return f.read()
     except (UnicodeDecodeError, OSError, FileNotFoundError) as e:
       # Only log if detection was explicitly requested
-      logger.error(f"Failed to read {file_path} with detected encoding: {e}")
+      logger.error(f'Failed to read {file_path} with detected encoding: {e}')
 
   # Try fallback encodings
   for encoding in fallback_encodings:
@@ -357,7 +418,8 @@ def read_text_file(file_path: str, config: dict | None = None) -> str:
       logger.error(f"File {file_path} read with errors='replace' using {default_encoding}")
       return content
   except (FileNotFoundError, OSError, PermissionError) as e:
-    logger.error(f"Failed to read {file_path}: {e}")
+    logger.error(f'Failed to read {file_path}: {e}')
     raise
 
-#fin
+
+# fin

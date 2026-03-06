@@ -40,12 +40,12 @@ class TestValidateFilePath:
 
   def test_validate_file_path_absolute_not_allowed(self):
     """Test that absolute paths are rejected without allow_absolute."""
-    with pytest.raises(ValueError, match="Absolute paths not allowed"):
+    with pytest.raises(ValueError, match='Absolute paths not allowed'):
       validate_file_path('/etc/passwd', None)
 
   def test_validate_file_path_outside_base_dir(self):
     """Test that paths outside base_dir are rejected."""
-    with tempfile.TemporaryDirectory() as tmpdir, pytest.raises(ValueError, match="File path outside allowed directory"):
+    with tempfile.TemporaryDirectory() as tmpdir, pytest.raises(ValueError, match='File path outside allowed directory'):
       validate_file_path('/etc/passwd', None, base_dir=tmpdir, allow_absolute=True)
 
   def test_validate_file_path_relative_paths(self):
@@ -73,11 +73,11 @@ class TestValidateFilePath:
     assert result == 'test.cfg'
 
     # Invalid extension
-    with pytest.raises(ValueError, match="Invalid file extension"):
+    with pytest.raises(ValueError, match='Invalid file extension'):
       validate_file_path('test.txt', ['.cfg'])
 
     # No extension when required
-    with pytest.raises(ValueError, match="Invalid file extension"):
+    with pytest.raises(ValueError, match='Invalid file extension'):
       validate_file_path('test', ['.cfg'])
 
     # Empty string in allowed extensions (allows no extension)
@@ -87,7 +87,7 @@ class TestValidateFilePath:
   def test_validate_file_path_traversal_prevention(self):
     """Test path traversal prevention."""
     # Without allow_relative_traversal, .. should be rejected
-    with pytest.raises(ValueError, match="path traversal detected"):
+    with pytest.raises(ValueError, match='path traversal detected'):
       validate_file_path('../etc/passwd', None)
 
     # With allow_relative_traversal, .. is allowed
@@ -99,16 +99,16 @@ class TestValidateFilePath:
     # The function checks dangerous characters in filename only (basename), not full path
     # So 'test|cat /etc/passwd' won't fail because basename is 'passwd'
     dangerous_paths = [
-      'test;cmd.txt',        # semicolon in filename
-      'test|pipe.txt',       # pipe in filename
-      'test`whoami`.txt',    # backticks in filename
-      'test$(whoami).txt',   # command substitution in filename
-      'test<script>.txt',    # angle bracket in filename
-      'test>output.txt'      # output redirect in filename
+      'test;cmd.txt',  # semicolon in filename
+      'test|pipe.txt',  # pipe in filename
+      'test`whoami`.txt',  # backticks in filename
+      'test$(whoami).txt',  # command substitution in filename
+      'test<script>.txt',  # angle bracket in filename
+      'test>output.txt',  # output redirect in filename
     ]
 
     for path in dangerous_paths:
-      with pytest.raises(ValueError, match="dangerous characters"):
+      with pytest.raises(ValueError, match='dangerous characters'):
         validate_file_path(path, None)
 
   def test_validate_file_path_null_bytes(self):
@@ -119,10 +119,10 @@ class TestValidateFilePath:
 
   def test_validate_file_path_empty_input(self):
     """Test empty input handling."""
-    with pytest.raises(ValueError, match="empty"):
+    with pytest.raises(ValueError, match='empty'):
       validate_file_path('', None)
 
-    with pytest.raises(ValueError, match="empty"):
+    with pytest.raises(ValueError, match='empty'):
       validate_file_path('   ', None)
 
 
@@ -184,7 +184,7 @@ class TestSanitizeQueryText:
     """Test query length limiting."""
     long_query = 'a' * 20000
     # Function raises error instead of truncating
-    with pytest.raises(ValueError, match="Query too long"):
+    with pytest.raises(ValueError, match='Query too long'):
       sanitize_query_text(long_query, max_length=10000)
 
     # Valid length query passes
@@ -222,4 +222,4 @@ class TestMaskSensitiveData:
 if __name__ == '__main__':
   pytest.main([__file__, '-v'])
 
-#fin
+# fin

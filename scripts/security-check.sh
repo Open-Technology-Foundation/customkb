@@ -18,7 +18,7 @@ fi
 
 # Install security tools if not present
 echo "📦 Ensuring security tools are installed..."
-pip install -q safety bandit
+uv pip install -q safety bandit
 
 # Run Safety check for known vulnerabilities
 echo ""

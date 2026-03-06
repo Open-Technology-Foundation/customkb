@@ -243,8 +243,7 @@ $VECTORDBS/
 
 **Installation:**
 ```bash
-pip install -r requirements.txt
-./setup/install_faiss.sh  # Auto-detects GPU
+uv sync --extra faiss-gpu-cu12 --extra mcp  # or faiss-cpu for CPU-only
 ```
 
 ---

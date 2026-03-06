@@ -12,6 +12,7 @@ import faiss
 
 logger = logging.getLogger(__name__)
 
+
 def configure_gpu_resources_for_large_index(temp_memory_gb=2.0, pinned_memory_gb=4.0):
   """
   Configure GPU resources optimized for large indexes.
@@ -36,6 +37,7 @@ def configure_gpu_resources_for_large_index(temp_memory_gb=2.0, pinned_memory_gb
 
   return res
 
+
 def create_gpu_index_config(use_float16=True, use_precomputed_tables=True):
   """
   Create GPU index configuration options.
@@ -54,6 +56,7 @@ def create_gpu_index_config(use_float16=True, use_precomputed_tables=True):
   config.storeTransposed = True  # Better memory access pattern
 
   return config
+
 
 def estimate_gpu_memory_usage(index_size_bytes, use_float16=True):
   """
@@ -83,6 +86,7 @@ def estimate_gpu_memory_usage(index_size_bytes, use_float16=True):
 
   return index_memory_gb, temp_memory_gb, total_memory_gb
 
+
 def use_gpu_index_subset(index, gpu_resources, subset_size=1000000):
   """
   For very large indexes, keep only a subset on GPU.
@@ -103,11 +107,12 @@ def use_gpu_index_subset(index, gpu_resources, subset_size=1000000):
     return faiss.index_cpu_to_gpu(gpu_resources, 0, index)
 
   # Create a subset index
-  logger.info(f"Creating GPU index subset with {subset_size} vectors")
+  logger.info(f'Creating GPU index subset with {subset_size} vectors')
 
   # For now, return None - this would require more complex implementation
   # involving index sharding or hierarchical search
   return None
+
 
 # Example usage in query_manager.py:
 """

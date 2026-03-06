@@ -42,7 +42,7 @@ reranking_top_k = 5
 reranking_batch_size = 16
 reranking_device = cpu
 """
-    config_file = tmp_path / "test_reranking.cfg"
+    config_file = tmp_path / 'test_reranking.cfg'
     config_file.write_text(config_content)
     return str(config_file)
 
@@ -58,13 +58,13 @@ reranking_device = cpu
 
     # Rename files to match config basename (test_reranking.cfg -> test_reranking.db/faiss)
     cfg_basename = os.path.splitext(os.path.basename(temp_config_file))[0]
-    shutil.copy(str(tmp_path / "test.db"), str(tmp_path / f"{cfg_basename}.db"))
-    shutil.copy(str(tmp_path / "test.faiss"), str(tmp_path / f"{cfg_basename}.faiss"))
+    shutil.copy(str(tmp_path / 'test.db'), str(tmp_path / f'{cfg_basename}.db'))
+    shutil.copy(str(tmp_path / 'test.faiss'), str(tmp_path / f'{cfg_basename}.faiss'))
 
     # Mock query arguments — explicitly set all attributes to prevent Mock leakage
     mock_args = Mock()
     mock_args.config_file = temp_config_file
-    mock_args.query_text = "What is artificial intelligence?"
+    mock_args.query_text = 'What is artificial intelligence?'
     mock_args.query_file = None
     mock_args.context_only = True  # Only get context, not LLM response
     mock_args.verbose = False
@@ -85,8 +85,10 @@ reranking_device = cpu
       mock_load_model.return_value = mock_model
 
       # Mock vector search and FAISS internals
-      with patch('query.processing.get_query_embedding') as mock_embed, \
-           patch('faiss.extract_index_ivf', side_effect=RuntimeError("not an IVF index")):
+      with (
+        patch('query.processing.get_query_embedding') as mock_embed,
+        patch('faiss.extract_index_ivf', side_effect=RuntimeError('not an IVF index')),
+      ):
         mock_embed.return_value = np.array([[0.1] * 1536])
 
         # Run query
@@ -108,12 +110,12 @@ query_model = gpt-4o-mini
 [ALGORITHMS]
 enable_reranking = false
 """
-    config_file = tmp_path / "test_no_reranking.cfg"
+    config_file = tmp_path / 'test_no_reranking.cfg'
     config_file.write_text(config_content)
 
     mock_args = Mock()
     mock_args.config_file = str(config_file)
-    mock_args.query_text = "Test query"
+    mock_args.query_text = 'Test query'
     mock_args.query_file = None
     mock_args.context_only = True
     mock_args.verbose = False
@@ -125,12 +127,14 @@ enable_reranking = false
     mock_args.format = None
     mock_args.prompt_template = None
 
-    with patch('embedding.rerank_manager.load_reranking_model') as mock_load_model, \
-         patch('query.processing.get_query_embedding') as mock_embed, \
-         patch('query.processing.perform_hybrid_search') as mock_search, \
-         patch('query.processing.connect_to_database'), \
-         patch('query.processing.close_database'), \
-         patch('query.processing.process_reference_batch') as mock_process:
+    with (
+      patch('embedding.rerank_manager.load_reranking_model') as mock_load_model,
+      patch('query.processing.get_query_embedding') as mock_embed,
+      patch('query.processing.perform_hybrid_search') as mock_search,
+      patch('query.processing.connect_to_database'),
+      patch('query.processing.close_database'),
+      patch('query.processing.process_reference_batch') as mock_process,
+    ):
       mock_embed.return_value = Mock()
       mock_search.return_value = [(1, 0.5), (2, 0.6)]
       mock_process.return_value = []
@@ -148,7 +152,7 @@ enable_reranking = false
     """Test that query continues with original results if reranking fails."""
     mock_args = Mock()
     mock_args.config_file = temp_config_file
-    mock_args.query_text = "Test query with error"
+    mock_args.query_text = 'Test query with error'
     mock_args.query_file = None
     mock_args.context_only = True
     mock_args.verbose = False
@@ -161,24 +165,24 @@ enable_reranking = false
     mock_args.prompt_template = None
 
     # Mock reranking to raise an error
-    with patch('embedding.rerank_manager.load_reranking_model') as mock_load_model, \
-         patch('query.processing.get_query_embedding') as mock_embed, \
-         patch('query.processing.perform_hybrid_search') as mock_search, \
-         patch('query.processing.connect_to_database'), \
-         patch('query.processing.close_database'), \
-         patch('query.processing.process_reference_batch') as mock_process:
-      mock_load_model.side_effect = Exception("Model loading failed")
+    with (
+      patch('embedding.rerank_manager.load_reranking_model') as mock_load_model,
+      patch('query.processing.get_query_embedding') as mock_embed,
+      patch('query.processing.perform_hybrid_search') as mock_search,
+      patch('query.processing.connect_to_database'),
+      patch('query.processing.close_database'),
+      patch('query.processing.process_reference_batch') as mock_process,
+    ):
+      mock_load_model.side_effect = Exception('Model loading failed')
       mock_embed.return_value = Mock()
       mock_search.return_value = [(1, 0.5), (2, 0.6)]
-      mock_process.return_value = [
-        [1, "doc1.txt", 0, "Test content", 0.5, "{}"]
-      ]
+      mock_process.return_value = [[1, 'doc1.txt', 0, 'Test content', 0.5, '{}']]
 
       # Should not raise error, should continue with original results
       result = await process_query_async(mock_args, logger)
 
       assert result is not None
-      assert "Test content" in result
+      assert 'Test content' in result
 
 
 class TestRerankingPerformance:
@@ -201,15 +205,12 @@ class TestRerankingPerformance:
     mock_kb.reranking_top_k = 5
     mock_kb.reranking_cache_size = 100
 
-    query = "performance test query"
-    documents = [
-      (i, f"Document {i} content for testing", 0.5 + i*0.01)
-      for i in range(10)
-    ]
+    query = 'performance test query'
+    documents = [(i, f'Document {i} content for testing', 0.5 + i * 0.01) for i in range(10)]
 
     with patch('embedding.rerank_manager.load_reranking_model') as mock_load:
       mock_model = Mock()
-      mock_model.predict.return_value = [0.8 - i*0.1 for i in range(5)]
+      mock_model.predict.return_value = [0.8 - i * 0.1 for i in range(5)]
       mock_load.return_value = mock_model
 
       # First run - no cache
@@ -228,8 +229,8 @@ class TestRerankingPerformance:
       # that prediction was only called once
 
 
-if __name__ == "__main__":
-  pytest.main([__file__, "-v"])
+if __name__ == '__main__':
+  pytest.main([__file__, '-v'])
 
 
-#fin
+# fin

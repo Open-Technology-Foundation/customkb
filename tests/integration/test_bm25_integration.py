@@ -32,7 +32,7 @@ class TestBM25DatabaseIntegration:
     # Create legacy database structure
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
-    cursor.execute('''
+    cursor.execute("""
       CREATE TABLE docs (
         id INTEGER PRIMARY KEY,
         sid INTEGER,
@@ -44,15 +44,15 @@ class TestBM25DatabaseIntegration:
         metadata TEXT,
         keyphrase_processed INTEGER DEFAULT 0
       )
-    ''')
+    """)
 
     # Add some test data
-    cursor.execute('''
+    cursor.execute("""
       INSERT INTO docs (id, sid, sourcedoc, originaltext, embedtext, embedded,
                        language, metadata, keyphrase_processed)
       VALUES (1, 0, 'test.txt', 'Machine learning algorithms',
               'machine learning algorithms', 1, 'en', '{}', 0)
-    ''')
+    """)
     conn.commit()
     conn.close()
 
@@ -72,7 +72,7 @@ class TestBM25DatabaseIntegration:
 
     # Verify migration worked
     cursor = mock_kb.sql_cursor
-    cursor.execute("PRAGMA table_info(docs)")
+    cursor.execute('PRAGMA table_info(docs)')
     columns = cursor.fetchall()
     column_names = [col[1] for col in columns]
 
@@ -80,7 +80,7 @@ class TestBM25DatabaseIntegration:
     assert 'doc_length' in column_names
 
     # Verify existing data is preserved
-    cursor.execute("SELECT originaltext FROM docs WHERE id = 1")
+    cursor.execute('SELECT originaltext FROM docs WHERE id = 1')
     result = cursor.fetchone()
     assert result[0] == 'Machine learning algorithms'
 
@@ -88,7 +88,7 @@ class TestBM25DatabaseIntegration:
 
   def test_bm25_data_processing_during_ingestion(self, temp_data_manager, sample_texts, monkeypatch):
     """Test that BM25 tokens are generated during text ingestion."""
-    kb_name = "bm25_ingest"
+    kb_name = 'bm25_ingest'
 
     # Create config with BM25 enabled
     config_content = """[DEFAULT]
@@ -125,7 +125,7 @@ bm25_b = 0.75
     with patch('builtins.input', return_value='y'):
       result = process_database(db_args, mock_logger)
 
-    assert "files added" in result
+    assert 'files added' in result
 
     # Verify BM25 data was processed
     kb = KnowledgeBase(kb_name)  # Use KB name, not full path
@@ -142,7 +142,7 @@ bm25_b = 0.75
 
     assert len(results) > 0
     for tokens, length, processed in results:
-      assert tokens is not None and tokens != ""
+      assert tokens is not None and tokens != ''
       assert length > 0
       assert processed == 1
 
@@ -150,7 +150,7 @@ bm25_b = 0.75
 
   def test_bm25_backward_compatibility(self, temp_data_manager, sample_texts, monkeypatch):
     """Test that BM25 doesn't break existing functionality when disabled."""
-    kb_name = "compat_test"
+    kb_name = 'compat_test'
 
     # Create config with BM25 disabled (default)
     config_content = """[DEFAULT]
@@ -180,7 +180,7 @@ query_model = gpt-4o
     with patch('builtins.input', return_value='y'):
       result = process_database(db_args, mock_logger)
 
-    assert "files added" in result
+    assert 'files added' in result
 
     # Verify that BM25 columns exist but are not populated
     kb = KnowledgeBase(kb_name)  # Use KB name, not full path
@@ -188,18 +188,18 @@ query_model = gpt-4o
     kb.sql_cursor = kb.sql_connection.cursor()
 
     # Check table structure has BM25 columns
-    kb.sql_cursor.execute("PRAGMA table_info(docs)")
+    kb.sql_cursor.execute('PRAGMA table_info(docs)')
     columns = [col[1] for col in kb.sql_cursor.fetchall()]
     assert 'bm25_tokens' in columns
     assert 'doc_length' in columns
 
     # Check that BM25 data is empty since hybrid search is disabled
-    kb.sql_cursor.execute("SELECT bm25_tokens, keyphrase_processed FROM docs")
+    kb.sql_cursor.execute('SELECT bm25_tokens, keyphrase_processed FROM docs')
     results = kb.sql_cursor.fetchall()
 
     for tokens, processed in results:
       # Should be empty/null since BM25 is disabled
-      assert tokens is None or tokens == ""
+      assert tokens is None or tokens == ''
       assert processed == 0
 
     kb.sql_connection.close()
@@ -236,6 +236,7 @@ bm25_rebuild_threshold = 10
   def teardown_method(self):
     """Clean up test environment."""
     import shutil
+
     shutil.rmtree(self.temp_dir, ignore_errors=True)
 
   def create_test_database(self):
@@ -244,7 +245,7 @@ bm25_rebuild_threshold = 10
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
 
-    cursor.execute('''
+    cursor.execute("""
       CREATE TABLE docs (
         id INTEGER PRIMARY KEY,
         sid INTEGER,
@@ -258,29 +259,72 @@ bm25_rebuild_threshold = 10
         bm25_tokens TEXT,
         doc_length INTEGER DEFAULT 0
       )
-    ''')
+    """)
 
     # Insert test data with BM25 tokens
     test_data = [
-      (1, 0, 'doc1.txt', 'Machine learning algorithms are powerful',
-       'machine learning algorithms powerful', 1, 'en', '{}', 1,
-       'machine learning algorithms powerful', 4),
-      (2, 1, 'doc1.txt', 'Deep learning neural networks work well',
-       'deep learning neural networks work well', 1, 'en', '{}', 1,
-       'deep learning neural networks work well', 6),
-      (3, 0, 'doc2.txt', 'Natural language processing techniques',
-       'natural language processing techniques', 1, 'en', '{}', 1,
-       'natural language processing techniques', 4),
-      (4, 1, 'doc2.txt', 'Text classification with transformers',
-       'text classification transformers', 1, 'en', '{}', 1,
-       'text classification transformers', 3)
+      (
+        1,
+        0,
+        'doc1.txt',
+        'Machine learning algorithms are powerful',
+        'machine learning algorithms powerful',
+        1,
+        'en',
+        '{}',
+        1,
+        'machine learning algorithms powerful',
+        4,
+      ),
+      (
+        2,
+        1,
+        'doc1.txt',
+        'Deep learning neural networks work well',
+        'deep learning neural networks work well',
+        1,
+        'en',
+        '{}',
+        1,
+        'deep learning neural networks work well',
+        6,
+      ),
+      (
+        3,
+        0,
+        'doc2.txt',
+        'Natural language processing techniques',
+        'natural language processing techniques',
+        1,
+        'en',
+        '{}',
+        1,
+        'natural language processing techniques',
+        4,
+      ),
+      (
+        4,
+        1,
+        'doc2.txt',
+        'Text classification with transformers',
+        'text classification transformers',
+        1,
+        'en',
+        '{}',
+        1,
+        'text classification transformers',
+        3,
+      ),
     ]
 
-    cursor.executemany('''
+    cursor.executemany(
+      """
       INSERT INTO docs (id, sid, sourcedoc, originaltext, embedtext, embedded,
                        language, metadata, keyphrase_processed, bm25_tokens, doc_length)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ''', test_data)
+    """,
+      test_data,
+    )
 
     conn.commit()
     conn.close()
@@ -357,27 +401,31 @@ bm25_rebuild_threshold = 10
 
     # Add more unprocessed documents (below threshold)
     cursor = kb.sql_cursor
-    cursor.execute('''
+    cursor.execute("""
       INSERT INTO docs (id, sid, sourcedoc, originaltext, embedtext, embedded,
                        language, metadata, keyphrase_processed, bm25_tokens, doc_length)
       VALUES (5, 0, 'doc3.txt', 'New document content', 'new document content',
               1, 'en', '{}', 0, '', 0)
-    ''')
+    """)
     kb.sql_connection.commit()
 
     # Should not rebuild (below threshold)
     from embedding.bm25_manager import rebuild_bm25_if_needed
+
     result = rebuild_bm25_if_needed(kb)
     assert result is True
 
     # Add many more unprocessed documents (above threshold)
     for i in range(6, 20):  # Add 14 more = 15 total unprocessed > threshold of 10
-      cursor.execute('''
+      cursor.execute(
+        """
         INSERT INTO docs (id, sid, sourcedoc, originaltext, embedtext, embedded,
                          language, metadata, keyphrase_processed, bm25_tokens, doc_length)
         VALUES (?, 0, 'doc?.txt', 'More content', 'more content',
                 1, 'en', '{}', 0, '', 0)
-      ''', (i,))
+      """,
+        (i,),
+      )
     kb.sql_connection.commit()
 
     # Should rebuild (above threshold)
@@ -421,6 +469,7 @@ bm25_b = 0.75
   def teardown_method(self):
     """Clean up test environment."""
     import shutil
+
     shutil.rmtree(self.temp_dir, ignore_errors=True)
 
   def create_test_data(self):
@@ -431,7 +480,7 @@ bm25_b = 0.75
     conn = sqlite3.connect(kb.knowledge_base_db)
     cursor = conn.cursor()
 
-    cursor.execute('''
+    cursor.execute("""
       CREATE TABLE docs (
         id INTEGER PRIMARY KEY,
         sid INTEGER,
@@ -445,24 +494,27 @@ bm25_b = 0.75
         bm25_tokens TEXT,
         doc_length INTEGER DEFAULT 0
       )
-    ''')
+    """)
 
     # Insert diverse test documents for better retrieval testing
     test_docs = [
-      "Machine learning algorithms are used in artificial intelligence systems to make predictions and decisions.",
-      "Deep learning neural networks can process complex patterns in large datasets effectively.",
-      "Natural language processing enables computers to understand and generate human language.",
-      "Computer vision algorithms analyze and interpret visual information from images and videos.",
-      "Reinforcement learning teaches agents to make decisions through trial and error interactions."
+      'Machine learning algorithms are used in artificial intelligence systems to make predictions and decisions.',
+      'Deep learning neural networks can process complex patterns in large datasets effectively.',
+      'Natural language processing enables computers to understand and generate human language.',
+      'Computer vision algorithms analyze and interpret visual information from images and videos.',
+      'Reinforcement learning teaches agents to make decisions through trial and error interactions.',
     ]
 
     for i, doc in enumerate(test_docs):
       tokens, length = tokenize_for_bm25(doc, 'en')
-      cursor.execute('''
+      cursor.execute(
+        """
         INSERT INTO docs (id, sid, sourcedoc, originaltext, embedtext, embedded,
                          language, metadata, keyphrase_processed, bm25_tokens, doc_length)
         VALUES (?, 0, ?, ?, ?, 1, 'en', '{}', 1, ?, ?)
-      ''', (i+1, f'doc{i+1}.txt', doc, doc.lower(), tokens, length))
+      """,
+        (i + 1, f'doc{i + 1}.txt', doc, doc.lower(), tokens, length),
+      )
 
     conn.commit()
     conn.close()
@@ -474,7 +526,7 @@ bm25_b = 0.75
     kb.sql_connection.close()
 
   @pytest.mark.asyncio
-  @patch('faiss.extract_index_ivf', side_effect=RuntimeError("not an IVF index"))
+  @patch('faiss.extract_index_ivf', side_effect=RuntimeError('not an IVF index'))
   @patch('query.processing.get_query_embedding')
   @patch('faiss.read_index')
   async def test_hybrid_search_integration(self, mock_read_index, mock_get_embedding, _mock_extract_ivf):
@@ -483,7 +535,7 @@ bm25_b = 0.75
     mock_index = Mock()
     mock_index.search.return_value = (
       np.array([[0.3, 0.5, 0.7, 0.9, 1.1]]),  # distances (lower = more similar)
-      np.array([[0, 1, 2, 3, 4]])  # indices (0-based)
+      np.array([[0, 1, 2, 3, 4]]),  # indices (0-based)
     )
     mock_read_index.return_value = mock_index
     mock_get_embedding.return_value = np.array([[0.1] * 1536])
@@ -500,7 +552,7 @@ bm25_b = 0.75
 
     # Perform hybrid search
     query_vector = np.array([[0.1] * 1536])
-    results = await perform_hybrid_search(kb, "machine learning algorithms", query_vector)
+    results = await perform_hybrid_search(kb, 'machine learning algorithms', query_vector)
 
     # Should return combined results
     assert len(results) > 0
@@ -519,17 +571,14 @@ bm25_b = 0.75
 
     kb.sql_connection.close()
 
-  @patch('faiss.extract_index_ivf', side_effect=RuntimeError("not an IVF index"))
+  @patch('faiss.extract_index_ivf', side_effect=RuntimeError('not an IVF index'))
   @patch('query.processing.get_query_embedding')
   @patch('faiss.read_index')
   def test_query_process_with_hybrid_search(self, mock_read_index, mock_get_embedding, _mock_extract_ivf):
     """Test complete query processing with hybrid search enabled."""
     # Mock components
     mock_index = Mock()
-    mock_index.search.return_value = (
-      np.array([[0.2, 0.4, 0.6]]),
-      np.array([[0, 1, 2]])
-    )
+    mock_index.search.return_value = (np.array([[0.2, 0.4, 0.6]]), np.array([[0, 1, 2]]))
     mock_read_index.return_value = mock_index
     mock_get_embedding.return_value = np.array([[0.1] * 1536])
 
@@ -543,16 +592,16 @@ bm25_b = 0.75
     mock_logger = Mock()
     query_args = Mock()
     query_args.config_file = self.config_file
-    query_args.query_text = "machine learning algorithms"
-    query_args.query_file = ""
+    query_args.query_text = 'machine learning algorithms'
+    query_args.query_file = ''
     query_args.context_only = True  # Avoid LLM API calls
     query_args.verbose = True
     query_args.debug = False
-    query_args.top_k = None       # Use KB default
+    query_args.top_k = None  # Use KB default
     query_args.context_scope = None  # Use KB default
     query_args.categories = None
     query_args.context_files = None
-    query_args.format = None       # Prevent Mock leaking into get_formatter()
+    query_args.format = None  # Prevent Mock leaking into get_formatter()
     query_args.prompt_template = None
 
     # Process query
@@ -563,7 +612,7 @@ bm25_b = 0.75
     assert len(result) > 0
 
     # Should contain some relevant content
-    assert "machine" in result.lower() or "learning" in result.lower()
+    assert 'machine' in result.lower() or 'learning' in result.lower()
 
   def test_hybrid_search_weight_configuration(self):
     """Test that hybrid search respects vector_weight configuration."""
@@ -624,19 +673,15 @@ class TestBM25TokenizationIntegration:
     # Test different content types
     test_contents = [
       # Technical content with hyphens
-      "State-of-the-art machine-learning algorithms achieve 95.5% accuracy on CIFAR-10 dataset.",
-
+      'State-of-the-art machine-learning algorithms achieve 95.5% accuracy on CIFAR-10 dataset.',
       # Content with URLs and emails
-      "Visit https://example.com or contact admin@company.com for API documentation.",
-
+      'Visit https://example.com or contact admin@company.com for API documentation.',
       # Mixed case with acronyms
-      "The REST-API uses HTTP requests to process AI/ML workflows with GPU acceleration.",
-
+      'The REST-API uses HTTP requests to process AI/ML workflows with GPU acceleration.',
       # Content with numbers and versions
-      "Python 3.9 supports type hints and async/await patterns in TensorFlow 2.8 models.",
-
+      'Python 3.9 supports type hints and async/await patterns in TensorFlow 2.8 models.',
       # Natural language
-      "Natural language processing enables computers to understand human communication patterns."
+      'Natural language processing enables computers to understand human communication patterns.',
     ]
 
     for _i, content in enumerate(test_contents):
@@ -649,18 +694,18 @@ class TestBM25TokenizationIntegration:
       assert isinstance(length, int)
 
       # Check that important terms are preserved
-      if "machine-learning" in content:
-        assert "machine-learning" in tokens
-      if "95.5" in content:
-        assert "95.5" in tokens
-      if "example.com" in content:
-        assert "example.com" in tokens
-      if "REST-API" in content.lower():
-        assert "rest-api" in tokens
+      if 'machine-learning' in content:
+        assert 'machine-learning' in tokens
+      if '95.5' in content:
+        assert '95.5' in tokens
+      if 'example.com' in content:
+        assert 'example.com' in tokens
+      if 'REST-API' in content.lower():
+        assert 'rest-api' in tokens
 
   def test_tokenization_consistency_across_database_operations(self, temp_data_manager, sample_texts, monkeypatch):
     """Test that tokenization is consistent across different database operations."""
-    kb_name = "consistency_test"
+    kb_name = 'consistency_test'
 
     # Create config with BM25 enabled
     config_content = """[DEFAULT]
@@ -699,7 +744,7 @@ enable_hybrid_search = true
     kb.sql_connection = sqlite3.connect(kb.knowledge_base_db)
     kb.sql_cursor = kb.sql_connection.cursor()
 
-    kb.sql_cursor.execute("SELECT bm25_tokens, doc_length FROM docs WHERE keyphrase_processed = 1")
+    kb.sql_cursor.execute('SELECT bm25_tokens, doc_length FROM docs WHERE keyphrase_processed = 1')
     db_results = kb.sql_cursor.fetchall()
 
     # Get tokens from direct tokenization
@@ -726,7 +771,7 @@ class TestBM25PerformanceIntegration:
 
   def test_bm25_index_size_and_speed(self, temp_data_manager, monkeypatch):
     """Test BM25 index size and loading speed with realistic data volumes."""
-    kb_name = "performance_test"
+    kb_name = 'performance_test'
 
     config_content = """[DEFAULT]
 vector_model = text-embedding-3-small
@@ -745,7 +790,7 @@ enable_hybrid_search = true
     conn = sqlite3.connect(kb.knowledge_base_db)
     cursor = conn.cursor()
 
-    cursor.execute('''
+    cursor.execute("""
       CREATE TABLE docs (
         id INTEGER PRIMARY KEY,
         sid INTEGER,
@@ -759,18 +804,19 @@ enable_hybrid_search = true
         bm25_tokens TEXT,
         doc_length INTEGER DEFAULT 0
       )
-    ''')
+    """)
 
     # Generate test documents (simulate realistic corpus)
     doc_templates = [
-      "Machine learning algorithms process data patterns using {technique} methods for {domain} applications.",
-      "Deep learning neural networks with {layers} layers achieve {accuracy}% accuracy on {dataset} benchmarks.",
-      "Natural language processing models like {model} use {approach} to understand {language} text.",
-      "Computer vision systems detect {objects} in {context} using {architecture} networks.",
-      "Reinforcement learning agents learn {strategies} through {environment} interactions."
+      'Machine learning algorithms process data patterns using {technique} methods for {domain} applications.',
+      'Deep learning neural networks with {layers} layers achieve {accuracy}% accuracy on {dataset} benchmarks.',
+      'Natural language processing models like {model} use {approach} to understand {language} text.',
+      'Computer vision systems detect {objects} in {context} using {architecture} networks.',
+      'Reinforcement learning agents learn {strategies} through {environment} interactions.',
     ]
 
     import random
+
     techniques = ['supervised', 'unsupervised', 'semi-supervised', 'self-supervised']
     domains = ['healthcare', 'finance', 'robotics', 'autonomous driving', 'recommendation']
     layers = ['12', '24', '48', '96']
@@ -786,28 +832,32 @@ enable_hybrid_search = true
         layers=random.choice(layers),
         accuracy=random.choice(accuracies),
         dataset=random.choice(datasets),
-        model=f"Model-{i%20}",
+        model=f'Model-{i % 20}',
         approach=random.choice(['attention', 'convolution', 'recurrence']),
         language=random.choice(['English', 'Spanish', 'French']),
         objects=random.choice(['faces', 'vehicles', 'buildings']),
         context=random.choice(['urban', 'rural', 'indoor']),
         architecture=random.choice(['ResNet', 'Transformer', 'LSTM']),
         strategies=random.choice(['exploration', 'exploitation', 'planning']),
-        environment=random.choice(['simulated', 'real-world', 'virtual'])
+        environment=random.choice(['simulated', 'real-world', 'virtual']),
       )
 
       tokens, length = tokenize_for_bm25(doc, 'en')
-      cursor.execute('''
+      cursor.execute(
+        """
         INSERT INTO docs (id, sid, sourcedoc, originaltext, embedtext, embedded,
                          language, metadata, keyphrase_processed, bm25_tokens, doc_length)
         VALUES (?, 0, ?, ?, ?, 1, 'en', '{}', 1, ?, ?)
-      ''', (i+1, f'doc{i+1}.txt', doc, doc.lower(), tokens, length))
+      """,
+        (i + 1, f'doc{i + 1}.txt', doc, doc.lower(), tokens, length),
+      )
 
     conn.commit()
     conn.close()
 
     # Test index building speed
     import time
+
     kb.sql_connection = sqlite3.connect(kb.knowledge_base_db)
     kb.sql_cursor = kb.sql_connection.cursor()
 
@@ -835,7 +885,7 @@ enable_hybrid_search = true
 
     # Test search speed
     start_time = time.time()
-    scores = get_bm25_scores(kb, "machine learning algorithms", loaded_data)
+    scores = get_bm25_scores(kb, 'machine learning algorithms', loaded_data)
     search_time = time.time() - start_time
 
     assert len(scores) > 0
@@ -845,7 +895,7 @@ enable_hybrid_search = true
 
   def test_bm25_memory_usage_patterns(self, temp_data_manager, monkeypatch):
     """Test BM25 memory usage with larger datasets."""
-    kb_name = "memory_test"
+    kb_name = 'memory_test'
 
     config_content = """[DEFAULT]
 vector_model = text-embedding-3-small
@@ -863,7 +913,7 @@ enable_hybrid_search = true
     conn = sqlite3.connect(kb.knowledge_base_db)
     cursor = conn.cursor()
 
-    cursor.execute('''
+    cursor.execute("""
       CREATE TABLE docs (
         id INTEGER PRIMARY KEY,
         sid INTEGER,
@@ -877,15 +927,15 @@ enable_hybrid_search = true
         bm25_tokens TEXT,
         doc_length INTEGER DEFAULT 0
       )
-    ''')
+    """)
 
     # Create documents with varying content to ensure diverse BM25 IDF scores
     base_texts = [
-      "Machine learning algorithms process data patterns using computational methods. ",
-      "Database management systems handle large scale storage and retrieval operations. ",
-      "Network protocols define communication standards between distributed systems. ",
-      "User interface design focuses on accessibility and responsive layouts. ",
-      "Security frameworks implement encryption and authentication mechanisms. ",
+      'Machine learning algorithms process data patterns using computational methods. ',
+      'Database management systems handle large scale storage and retrieval operations. ',
+      'Network protocols define communication standards between distributed systems. ',
+      'User interface design focuses on accessibility and responsive layouts. ',
+      'Security frameworks implement encryption and authentication mechanisms. ',
     ]
 
     for i in range(500):  # Moderate size for memory testing
@@ -894,11 +944,14 @@ enable_hybrid_search = true
       doc = base_texts[i % len(base_texts)] * multiplier
 
       tokens, length = tokenize_for_bm25(doc, 'en')
-      cursor.execute('''
+      cursor.execute(
+        """
         INSERT INTO docs (id, sid, sourcedoc, originaltext, embedtext, embedded,
                          language, metadata, keyphrase_processed, bm25_tokens, doc_length)
         VALUES (?, 0, ?, ?, ?, 1, 'en', '{}', 1, ?, ?)
-      ''', (i+1, f'doc{i+1}.txt', doc, doc.lower(), tokens, length))
+      """,
+        (i + 1, f'doc{i + 1}.txt', doc, doc.lower(), tokens, length),
+      )
 
     conn.commit()
     conn.close()
@@ -918,13 +971,7 @@ enable_hybrid_search = true
       assert loaded_data['total_docs'] == 500
 
     # Perform multiple searches
-    test_queries = [
-      "machine learning",
-      "data patterns",
-      "computational methods",
-      "algorithms process",
-      "learning data"
-    ]
+    test_queries = ['machine learning', 'data patterns', 'computational methods', 'algorithms process', 'learning data']
 
     for query in test_queries:
       scores = get_bm25_scores(kb, query, loaded_data)
@@ -946,6 +993,7 @@ class TestBM25ResultLimiting:
   def teardown_method(self):
     """Clean up test environment."""
     import shutil
+
     shutil.rmtree(self.temp_dir, ignore_errors=True)
 
   def create_large_test_dataset(self, num_docs=1000):
@@ -955,7 +1003,7 @@ class TestBM25ResultLimiting:
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
 
-    cursor.execute('''
+    cursor.execute("""
       CREATE TABLE docs (
         id INTEGER PRIMARY KEY,
         sid INTEGER,
@@ -969,7 +1017,7 @@ class TestBM25ResultLimiting:
         bm25_tokens TEXT,
         doc_length INTEGER DEFAULT 0
       )
-    ''')
+    """)
 
     # Create documents that will match a common query
     # One third contain "machine learning", rest contain other terms
@@ -977,20 +1025,23 @@ class TestBM25ResultLimiting:
     for i in range(num_docs):
       if i < num_docs // 3:
         # Documents that will match "machine learning"
-        doc = f"Document {i}: Machine learning algorithms are essential for AI. This document discusses machine learning techniques."
+        doc = f'Document {i}: Machine learning algorithms are essential for AI. This document discusses machine learning techniques.'
       elif i < 2 * num_docs // 3:
         # Documents with other content
-        doc = f"Document {i}: Natural language processing and computer vision are important fields in artificial intelligence."
+        doc = f'Document {i}: Natural language processing and computer vision are important fields in artificial intelligence.'
       else:
         # Documents with different content
-        doc = f"Document {i}: Database systems and network protocols form the backbone of modern distributed computing infrastructure."
+        doc = f'Document {i}: Database systems and network protocols form the backbone of modern distributed computing infrastructure.'
 
       tokens, length = tokenize_for_bm25(doc, 'en')
-      cursor.execute('''
+      cursor.execute(
+        """
         INSERT INTO docs (id, sid, sourcedoc, originaltext, embedtext, embedded,
                          language, metadata, keyphrase_processed, bm25_tokens, doc_length)
         VALUES (?, 0, ?, ?, ?, 1, 'en', '{}', 1, ?, ?)
-      ''', (i+1, f'doc{i+1}.txt', doc, doc.lower(), tokens, length))
+      """,
+        (i + 1, f'doc{i + 1}.txt', doc, doc.lower(), tokens, length),
+      )
 
     conn.commit()
     conn.close()
@@ -1019,9 +1070,9 @@ bm25_b = 0.75
     kb.sql_cursor = kb.sql_connection.cursor()
 
     # Debug: Check if documents are in the database
-    kb.sql_cursor.execute("SELECT COUNT(*) FROM docs WHERE keyphrase_processed = 1")
+    kb.sql_cursor.execute('SELECT COUNT(*) FROM docs WHERE keyphrase_processed = 1')
     doc_count = kb.sql_cursor.fetchone()[0]
-    assert doc_count > 0, f"Expected documents with keyphrase_processed=1, found {doc_count}"
+    assert doc_count > 0, f'Expected documents with keyphrase_processed=1, found {doc_count}'
 
     # Build BM25 index
     bm25_index = build_bm25_index(kb)
@@ -1030,15 +1081,15 @@ bm25_b = 0.75
     # Load index
     bm25_data = load_bm25_index(kb)
     assert bm25_data is not None
-    assert bm25_data['total_docs'] > 0, f"Expected documents in index, found {bm25_data.get('total_docs', 0)}"
+    assert bm25_data['total_docs'] > 0, f'Expected documents in index, found {bm25_data.get("total_docs", 0)}'
 
     # Debug: Check a few document tokens
-    kb.sql_cursor.execute("SELECT bm25_tokens FROM docs LIMIT 5")
+    kb.sql_cursor.execute('SELECT bm25_tokens FROM docs LIMIT 5')
     sample_tokens = kb.sql_cursor.fetchall()
-    print(f"Sample BM25 tokens: {sample_tokens[:2]}")
+    print(f'Sample BM25 tokens: {sample_tokens[:2]}')
 
     # Perform search that would return many results
-    scores = get_bm25_scores(kb, "machine learning", bm25_data)
+    scores = get_bm25_scores(kb, 'machine learning', bm25_data)
 
     # Should be limited to 100 results
     assert len(scores) <= 100
@@ -1048,7 +1099,7 @@ bm25_b = 0.75
     for i, (_doc_id, score) in enumerate(scores):
       assert score > 0
       if i > 0:
-        assert scores[i-1][1] >= score  # Descending order
+        assert scores[i - 1][1] >= score  # Descending order
 
     kb.sql_connection.close()
 
@@ -1083,8 +1134,9 @@ bm25_max_results = 500
 
     # Perform search that would return ~500 results without limiting
     import time
+
     start_time = time.time()
-    scores = get_bm25_scores(kb, "machine learning", bm25_data)
+    scores = get_bm25_scores(kb, 'machine learning', bm25_data)
     search_time = time.time() - start_time
 
     # Should be limited to at most 500 results
@@ -1094,7 +1146,7 @@ bm25_max_results = 500
 
     # Memory test: perform multiple searches
     for _ in range(10):
-      scores = get_bm25_scores(kb, "machine learning algorithms", bm25_data)
+      scores = get_bm25_scores(kb, 'machine learning algorithms', bm25_data)
       assert len(scores) <= 500
 
     kb.sql_connection.close()
@@ -1124,7 +1176,7 @@ bm25_max_results = 0
     bm25_data = load_bm25_index(kb)
 
     # Perform search
-    scores = get_bm25_scores(kb, "machine learning", bm25_data)
+    scores = get_bm25_scores(kb, 'machine learning', bm25_data)
 
     # Should return all matching results (about 66 out of 200)
     assert len(scores) > 0  # Should have some matching results
@@ -1158,27 +1210,27 @@ bm25_max_results = 50
     bm25_data = load_bm25_index(kb)
 
     # Perform search that triggers limiting
-    get_bm25_scores(kb, "machine learning", bm25_data)
+    get_bm25_scores(kb, 'machine learning', bm25_data)
 
     # Check logging was called (patching the module-level logger directly)
     assert mock_logger.info.called
     log_messages = [call[0][0] for call in mock_logger.info.call_args_list]
 
     # Should have logged about limiting
-    limiting_logged = any("BM25 results limited" in msg for msg in log_messages)
+    limiting_logged = any('BM25 results limited' in msg for msg in log_messages)
     assert limiting_logged
 
     # Should show original and limited counts
     for msg in log_messages:
-      if "BM25 results limited" in msg:
-        assert "from" in msg and "to" in msg
+      if 'BM25 results limited' in msg:
+        assert 'from' in msg and 'to' in msg
         # Should mention the limit (50)
-        assert "50" in msg
+        assert '50' in msg
 
     kb.sql_connection.close()
 
   @pytest.mark.asyncio
-  @patch('faiss.extract_index_ivf', side_effect=RuntimeError("not an IVF index"))
+  @patch('faiss.extract_index_ivf', side_effect=RuntimeError('not an IVF index'))
   @patch('query.processing.get_query_embedding')
   @patch('faiss.read_index')
   async def test_hybrid_search_with_bm25_limiting(self, mock_read_index, mock_get_embedding, _mock_extract_ivf):
@@ -1203,7 +1255,7 @@ bm25_max_results = 100
     mock_index = Mock()
     mock_index.search.return_value = (
       np.array([[0.1] * 50]),  # 50 distances
-      np.array([list(range(50))])  # 50 indices
+      np.array([list(range(50))]),  # 50 indices
     )
     mock_read_index.return_value = mock_index
     mock_get_embedding.return_value = np.array([[0.1] * 1536])
@@ -1219,7 +1271,7 @@ bm25_max_results = 100
 
     # Perform hybrid search
     query_vector = np.array([[0.1] * 1536])
-    results = await perform_hybrid_search(kb, "machine learning", query_vector)
+    results = await perform_hybrid_search(kb, 'machine learning', query_vector)
 
     # Should have results from both vector and BM25
     assert len(results) > 0
@@ -1231,4 +1283,5 @@ bm25_max_results = 100
 
     kb.sql_connection.close()
 
-#fin
+
+# fin

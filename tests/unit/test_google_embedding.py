@@ -34,7 +34,7 @@ class TestGoogleEmbeddingIntegration:
   def mock_kb_google(self):
     """Create a mock KnowledgeBase configured for Google embeddings."""
     kb = Mock()
-    kb.vector_model = "gemini-embedding-001"
+    kb.vector_model = 'gemini-embedding-001'
     kb.api_call_delay_seconds = 0.05
     kb.embedding_batch_size = 100
     kb.api_max_retries = 3
@@ -53,34 +53,22 @@ class TestGoogleEmbeddingIntegration:
     kb.io_thread_pool_size = 4
     return kb
 
-  @pytest.mark.skip(reason="Requires extensive KB mocking - Mock objects return Mocks for undefined attrs causing comparison failures")
-  @pytest.mark.asyncio
-  async def test_process_embedding_batch_async_google(self, mock_kb_google, mock_google_client):
-    """Test async batch embedding with Google AI."""
-    pass
-
-  # Note: Synchronous process_embedding_batch is not implemented
-  # Use process_embedding_batch_async for batch processing
-
-  @pytest.mark.skip(reason="Requires extensive KB mocking - get_query_embedding has many code paths checking KB attrs")
-  @pytest.mark.asyncio
-  async def test_get_query_embedding_google(self, mock_kb_google, mock_google_client):
-    """Test query embedding generation with Google AI."""
-    pass
-
   @pytest.mark.asyncio
   async def test_google_embedding_api_error(self, mock_kb_google):
     """Test behavior when Google embedding API call fails via LiteLLM."""
     from unittest.mock import AsyncMock
-    chunks = ["test chunk"]
+
+    chunks = ['test chunk']
 
     # When LiteLLM can't reach Google API, it raises an error
     # The retry logic in process_embedding_batch_async handles this
-    mock_get_embeddings = AsyncMock(side_effect=ConnectionError("Google API unavailable"))
+    mock_get_embeddings = AsyncMock(side_effect=ConnectionError('Google API unavailable'))
 
-    with patch('embedding.embed_manager.get_cached_embedding', return_value=None), \
-         patch('embedding.embed_manager.litellm_embed.get_embeddings', mock_get_embeddings), \
-         patch('asyncio.sleep', new_callable=AsyncMock):
+    with (
+      patch('embedding.embed_manager.get_cached_embedding', return_value=None),
+      patch('embedding.embed_manager.litellm_embed.get_embeddings', mock_get_embeddings),
+      patch('asyncio.sleep', new_callable=AsyncMock),
+    ):
       result = await process_embedding_batch_async(mock_kb_google, chunks)
 
     # Should return empty list after exhausting retries
@@ -91,12 +79,12 @@ class TestGoogleEmbeddingIntegration:
     from embedding.embed_manager import calculate_optimal_batch_size
 
     kb = Mock()
-    kb.vector_model = "gemini-embedding-001"
+    kb.vector_model = 'gemini-embedding-001'
     kb.token_estimation_sample_size = 10
     kb.token_estimation_multiplier = 1.3
 
-    chunks = ["test"] * 100
-    result = calculate_optimal_batch_size(chunks, "gemini-embedding-001", 1000, kb)
+    chunks = ['test'] * 100
+    result = calculate_optimal_batch_size(chunks, 'gemini-embedding-001', 1000, kb)
 
     # Should not raise KeyError and should return a valid batch size
     assert result > 0
@@ -107,11 +95,11 @@ class TestGoogleEmbeddingIntegration:
 
     # Test OpenAI model detection
     mock_kb_openai = Mock()
-    mock_kb_openai.vector_model = "text-embedding-3-small"
+    mock_kb_openai.vector_model = 'text-embedding-3-small'
     assert not mock_kb_openai.vector_model.startswith('gemini-')
 
 
-if __name__ == "__main__":
-  pytest.main([__file__, "-v"])
+if __name__ == '__main__':
+  pytest.main([__file__, '-v'])
 
-#fin
+# fin

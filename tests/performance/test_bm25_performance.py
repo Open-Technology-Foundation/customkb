@@ -71,20 +71,22 @@ bm25_b = 0.75
       # Performance assertions using adaptive thresholds
       if size <= 500:
         threshold = threshold_values['bm25_build_small']
-        assert build_time < threshold, f"Small dataset build took {build_time:.3f}s (threshold: {threshold:.3f}s)"
+        assert build_time < threshold, f'Small dataset build took {build_time:.3f}s (threshold: {threshold:.3f}s)'
       elif size <= 1000:
         threshold = threshold_values['bm25_build_medium']
-        assert build_time < threshold, f"Medium dataset build took {build_time:.3f}s (threshold: {threshold:.3f}s)"
+        assert build_time < threshold, f'Medium dataset build took {build_time:.3f}s (threshold: {threshold:.3f}s)'
       else:
         threshold = threshold_values['bm25_build_large']
-        assert build_time < threshold, f"Large dataset build took {build_time:.3f}s (threshold: {threshold:.3f}s)"
+        assert build_time < threshold, f'Large dataset build took {build_time:.3f}s (threshold: {threshold:.3f}s)'
 
       # Calculate throughput (adjusted for system performance)
       min_throughput = 50 / thresholds.load_factor
       docs_per_second = size / build_time
-      assert docs_per_second > min_throughput, f"Throughput {docs_per_second:.1f} docs/sec below minimum {min_throughput:.1f}"
+      assert docs_per_second > min_throughput, f'Throughput {docs_per_second:.1f} docs/sec below minimum {min_throughput:.1f}'
 
-      print(f"Built BM25 index for {size} docs in {build_time:.3f}s ({docs_per_second:.1f} docs/sec) [system load_factor: {thresholds.load_factor:.2f}]")
+      print(
+        f'Built BM25 index for {size} docs in {build_time:.3f}s ({docs_per_second:.1f} docs/sec) [system load_factor: {thresholds.load_factor:.2f}]'
+      )
 
   def test_bm25_index_loading_performance(self, temp_data_manager):
     """Test BM25 index loading performance."""
@@ -126,12 +128,14 @@ enable_hybrid_search = true
     thresholds = get_adaptive_thresholds()
     threshold_values = thresholds.get_thresholds()
 
-    assert avg_load_time < threshold_values['avg_load_time'], \
-        f"Average load time {avg_load_time:.3f}s exceeds threshold {threshold_values['avg_load_time']:.3f}s"
-    assert max_load_time < threshold_values['max_load_time'], \
-        f"Max load time {max_load_time:.3f}s exceeds threshold {threshold_values['max_load_time']:.3f}s"
+    assert avg_load_time < threshold_values['avg_load_time'], (
+      f'Average load time {avg_load_time:.3f}s exceeds threshold {threshold_values["avg_load_time"]:.3f}s'
+    )
+    assert max_load_time < threshold_values['max_load_time'], (
+      f'Max load time {max_load_time:.3f}s exceeds threshold {threshold_values["max_load_time"]:.3f}s'
+    )
 
-    print(f"BM25 index loading - Avg: {avg_load_time:.3f}s, Max: {max_load_time:.3f}s")
+    print(f'BM25 index loading - Avg: {avg_load_time:.3f}s, Max: {max_load_time:.3f}s')
 
   def test_bm25_index_file_size_efficiency(self, temp_data_manager):
     """Test BM25 index file size efficiency."""
@@ -169,7 +173,7 @@ enable_hybrid_search = true
       # Should be efficient storage (less than 10KB per document on average)
       assert size_per_doc < 10 * 1024
 
-      print(f"{size} docs: {file_size / 1024:.1f} KB ({size_per_doc:.1f} bytes/doc)")
+      print(f'{size} docs: {file_size / 1024:.1f} KB ({size_per_doc:.1f} bytes/doc)')
 
   def test_bm25_index_memory_usage(self, temp_data_manager):
     """Test BM25 index memory usage during building and loading."""
@@ -213,16 +217,18 @@ enable_hybrid_search = true
 
     # Memory usage should be reasonable
     assert build_memory_increase < 200 * 1024 * 1024  # Less than 200MB for building
-    assert load_memory_increase < 100 * 1024 * 1024   # Less than 100MB for loading
+    assert load_memory_increase < 100 * 1024 * 1024  # Less than 100MB for loading
 
-    print(f"Memory usage - Build: {build_memory_increase / 1024 / 1024:.1f}MB, Load: {load_memory_increase / 1024 / 1024:.1f}MB")
+    print(
+      f'Memory usage - Build: {build_memory_increase / 1024 / 1024:.1f}MB, Load: {load_memory_increase / 1024 / 1024:.1f}MB'
+    )
 
   def _create_test_database(self, kb: KnowledgeBase, num_docs: int):
     """Create test database with specified number of documents."""
     conn = sqlite3.connect(kb.knowledge_base_db)
     cursor = conn.cursor()
 
-    cursor.execute('''
+    cursor.execute("""
       CREATE TABLE docs (
         id INTEGER PRIMARY KEY,
         sid INTEGER,
@@ -236,18 +242,21 @@ enable_hybrid_search = true
         bm25_tokens TEXT,
         doc_length INTEGER DEFAULT 0
       )
-    ''')
+    """)
 
     # Generate simple test documents
     for i in range(num_docs):
-      text = f"Document {i} contains machine learning algorithms and data processing techniques."
+      text = f'Document {i} contains machine learning algorithms and data processing techniques.'
       tokens, length = tokenize_for_bm25(text, 'en')
 
-      cursor.execute('''
+      cursor.execute(
+        """
         INSERT INTO docs (id, sid, sourcedoc, originaltext, embedtext, embedded,
                          language, metadata, keyphrase_processed, bm25_tokens, doc_length)
         VALUES (?, 0, ?, ?, ?, 1, 'en', '{}', 1, ?, ?)
-      ''', (i+1, f'doc{i+1}.txt', text, text.lower(), tokens, length))
+      """,
+        (i + 1, f'doc{i + 1}.txt', text, text.lower(), tokens, length),
+      )
 
     conn.commit()
     conn.close()
@@ -257,7 +266,7 @@ enable_hybrid_search = true
     conn = sqlite3.connect(kb.knowledge_base_db)
     cursor = conn.cursor()
 
-    cursor.execute('''
+    cursor.execute("""
       CREATE TABLE docs (
         id INTEGER PRIMARY KEY,
         sid INTEGER,
@@ -271,18 +280,19 @@ enable_hybrid_search = true
         bm25_tokens TEXT,
         doc_length INTEGER DEFAULT 0
       )
-    ''')
+    """)
 
     # Templates for realistic content
     templates = [
-      "Machine learning algorithms using {method} achieve {accuracy}% accuracy on {dataset}.",
-      "Deep learning models with {architecture} process {datatype} for {application} tasks.",
-      "Natural language processing techniques like {technique} understand {language} text.",
-      "Computer vision systems detect {objects} using {approach} on {hardware} platforms.",
-      "Reinforcement learning agents learn {behavior} through {environment} simulations."
+      'Machine learning algorithms using {method} achieve {accuracy}% accuracy on {dataset}.',
+      'Deep learning models with {architecture} process {datatype} for {application} tasks.',
+      'Natural language processing techniques like {technique} understand {language} text.',
+      'Computer vision systems detect {objects} using {approach} on {hardware} platforms.',
+      'Reinforcement learning agents learn {behavior} through {environment} simulations.',
     ]
 
     import random
+
     methods = ['supervised learning', 'unsupervised learning', 'semi-supervised learning']
     accuracies = ['89.2', '92.7', '95.1', '97.3']
     datasets = ['CIFAR-10', 'ImageNet', 'COCO', 'MNIST']
@@ -305,16 +315,19 @@ enable_hybrid_search = true
         approach=random.choice(['YOLO', 'R-CNN', 'SSD']),
         hardware=random.choice(['GPU', 'TPU', 'CPU']),
         behavior=random.choice(['navigation', 'planning', 'control']),
-        environment=random.choice(['simulation', 'real-world', 'virtual'])
+        environment=random.choice(['simulation', 'real-world', 'virtual']),
       )
 
       tokens, length = tokenize_for_bm25(text, 'en')
 
-      cursor.execute('''
+      cursor.execute(
+        """
         INSERT INTO docs (id, sid, sourcedoc, originaltext, embedtext, embedded,
                          language, metadata, keyphrase_processed, bm25_tokens, doc_length)
         VALUES (?, 0, ?, ?, ?, 1, 'en', '{}', 1, ?, ?)
-      ''', (i+1, f'doc{i+1}.txt', text, text.lower(), tokens, length))
+      """,
+        (i + 1, f'doc{i + 1}.txt', text, text.lower(), tokens, length),
+      )
 
     conn.commit()
     conn.close()
@@ -351,11 +364,11 @@ enable_hybrid_search = true
 
     # Test different query types
     test_queries = [
-      "machine learning",               # Simple query
-      "deep learning neural networks",  # Multi-term query
-      "computer vision algorithms",     # Domain-specific query
-      "artificial intelligence",        # Common terms
-      "reinforcement learning agents"   # Longer query
+      'machine learning',  # Simple query
+      'deep learning neural networks',  # Multi-term query
+      'computer vision algorithms',  # Domain-specific query
+      'artificial intelligence',  # Common terms
+      'reinforcement learning agents',  # Longer query
     ]
 
     for query in test_queries:
@@ -404,11 +417,11 @@ enable_hybrid_search = true
 
     # Test concurrent searches
     test_queries = [
-      "machine learning algorithms",
-      "deep learning models",
-      "natural language processing",
-      "computer vision systems",
-      "reinforcement learning"
+      'machine learning algorithms',
+      'deep learning models',
+      'natural language processing',
+      'computer vision systems',
+      'reinforcement learning',
     ] * 10  # 50 total queries
 
     def search_worker(query: str, results: list):
@@ -443,9 +456,9 @@ enable_hybrid_search = true
     avg_search_time = sum(r[2] for r in results) / len(results)
 
     assert searches_per_second > 10  # Should handle at least 10 searches/sec
-    assert avg_search_time < 0.1     # Average search time under 100ms
+    assert avg_search_time < 0.1  # Average search time under 100ms
 
-    print(f"Concurrent search performance: {searches_per_second:.1f} searches/sec, avg {avg_search_time:.4f}s")
+    print(f'Concurrent search performance: {searches_per_second:.1f} searches/sec, avg {avg_search_time:.4f}s')
 
   def test_bm25_search_scalability(self, temp_data_manager):
     """Test BM25 search scalability with increasing dataset sizes."""
@@ -478,7 +491,7 @@ enable_hybrid_search = true
 
       # Run multiple searches
       for _ in range(20):
-        scores = get_bm25_scores(kb, "machine learning algorithms", bm25_data)
+        scores = get_bm25_scores(kb, 'machine learning algorithms', bm25_data)
         assert len(scores) > 0
 
       total_time = time.time() - start_time
@@ -492,14 +505,14 @@ enable_hybrid_search = true
       else:
         assert avg_time < 0.020  # Under 20ms for large datasets
 
-      print(f"Dataset {size}: {avg_time:.4f}s per search")
+      print(f'Dataset {size}: {avg_time:.4f}s per search')
 
   def _create_search_test_database(self, kb: KnowledgeBase, num_docs: int):
     """Create test database optimized for search testing."""
     conn = sqlite3.connect(kb.knowledge_base_db)
     cursor = conn.cursor()
 
-    cursor.execute('''
+    cursor.execute("""
       CREATE TABLE docs (
         id INTEGER PRIMARY KEY,
         sid INTEGER,
@@ -513,24 +526,39 @@ enable_hybrid_search = true
         bm25_tokens TEXT,
         doc_length INTEGER DEFAULT 0
       )
-    ''')
+    """)
 
     # Create diverse content for better search testing
     content_patterns = [
-      "Machine learning algorithms use {} to process {} data efficiently.",
-      "Deep learning neural networks with {} layers achieve high accuracy.",
-      "Natural language processing models understand {} using {} techniques.",
-      "Computer vision systems detect {} objects in {} environments.",
-      "Reinforcement learning agents learn optimal {} through {}.",
-      "Artificial intelligence research focuses on {} for {} applications.",
-      "Data science workflows process {} using {} and {} tools.",
-      "Statistical models predict {} based on {} features."
+      'Machine learning algorithms use {} to process {} data efficiently.',
+      'Deep learning neural networks with {} layers achieve high accuracy.',
+      'Natural language processing models understand {} using {} techniques.',
+      'Computer vision systems detect {} objects in {} environments.',
+      'Reinforcement learning agents learn optimal {} through {}.',
+      'Artificial intelligence research focuses on {} for {} applications.',
+      'Data science workflows process {} using {} and {} tools.',
+      'Statistical models predict {} based on {} features.',
     ]
 
     import random
-    terms = ['classification', 'regression', 'clustering', 'optimization', 'prediction',
-             'analysis', 'recognition', 'detection', 'generation', 'transformation',
-             'supervised', 'unsupervised', 'reinforcement', 'neural', 'statistical']
+
+    terms = [
+      'classification',
+      'regression',
+      'clustering',
+      'optimization',
+      'prediction',
+      'analysis',
+      'recognition',
+      'detection',
+      'generation',
+      'transformation',
+      'supervised',
+      'unsupervised',
+      'reinforcement',
+      'neural',
+      'statistical',
+    ]
 
     for i in range(num_docs):
       pattern = random.choice(content_patterns)
@@ -541,15 +569,18 @@ enable_hybrid_search = true
         text = pattern.format(*filled_terms)
       except (IndexError, KeyError):
         # Not enough terms for pattern or format error
-        text = f"Document {i} about machine learning and artificial intelligence algorithms."
+        text = f'Document {i} about machine learning and artificial intelligence algorithms.'
 
       tokens, length = tokenize_for_bm25(text, 'en')
 
-      cursor.execute('''
+      cursor.execute(
+        """
         INSERT INTO docs (id, sid, sourcedoc, originaltext, embedtext, embedded,
                          language, metadata, keyphrase_processed, bm25_tokens, doc_length)
         VALUES (?, 0, ?, ?, ?, 1, 'en', '{}', 1, ?, ?)
-      ''', (i+1, f'doc{i+1}.txt', text, text.lower(), tokens, length))
+      """,
+        (i + 1, f'doc{i + 1}.txt', text, text.lower(), tokens, length),
+      )
 
     conn.commit()
     conn.close()
@@ -567,7 +598,7 @@ class TestHybridSearchPerformance:
     mock_index = Mock()
     mock_index.search.return_value = (
       np.array([[0.2, 0.4, 0.6, 0.8, 1.0]] * 100),  # distances
-      np.array([list(range(100))])                    # indices
+      np.array([list(range(100))]),  # indices
     )
     mock_read_index.return_value = mock_index
 
@@ -601,8 +632,7 @@ vector_weight = 0.7
     start_time = time.time()
 
     for _ in range(50):  # Multiple searches for accurate timing
-      results = perform_hybrid_search(kb, "machine learning algorithms",
-                                    query_vector, mock_index)
+      results = perform_hybrid_search(kb, 'machine learning algorithms', query_vector, mock_index)
       assert len(results) > 0
 
     total_time = time.time() - start_time
@@ -614,16 +644,13 @@ vector_weight = 0.7
     # Calculate throughput
     searches_per_second = 50 / total_time
 
-    print(f"Hybrid search performance: {avg_time:.4f}s avg ({searches_per_second:.1f} searches/sec)")
+    print(f'Hybrid search performance: {avg_time:.4f}s avg ({searches_per_second:.1f} searches/sec)')
 
   @patch('query.query_manager.faiss.read_index')
   def test_hybrid_search_different_weights(self, mock_read_index, temp_data_manager):
     """Test hybrid search performance with different vector/BM25 weight combinations."""
     mock_index = Mock()
-    mock_index.search.return_value = (
-      np.array([[0.3, 0.5, 0.7]]),
-      np.array([[0, 1, 2]])
-    )
+    mock_index.search.return_value = (np.array([[0.3, 0.5, 0.7]]), np.array([[0, 1, 2]]))
     mock_read_index.return_value = mock_index
 
     # Test different weight combinations
@@ -661,13 +688,13 @@ vector_weight = {vector_weight}
       query_vector = np.array([[0.1] * 1536])
 
       start_time = time.time()
-      results = perform_hybrid_search(kb, "machine learning", query_vector, mock_index)
+      results = perform_hybrid_search(kb, 'machine learning', query_vector, mock_index)
       search_time = time.time() - start_time
 
       assert len(results) > 0
       assert search_time < 0.1  # Should be fast regardless of weights
 
-      print(f"Weight {vector_weight:.1f}/{bm25_weight:.1f}: {search_time:.4f}s")
+      print(f'Weight {vector_weight:.1f}/{bm25_weight:.1f}: {search_time:.4f}s')
 
   def test_hybrid_search_memory_efficiency(self, temp_data_manager):
     """Test memory efficiency of hybrid search operations."""
@@ -703,7 +730,7 @@ enable_hybrid_search = true
       mock_index = Mock()
       mock_index.search.return_value = (
         np.random.random((1, 100)),  # distances
-        np.array([list(range(100))])  # indices
+        np.array([list(range(100))]),  # indices
       )
       mock_read_index.return_value = mock_index
 
@@ -711,8 +738,7 @@ enable_hybrid_search = true
 
       # Run many searches
       for i in range(100):
-        results = perform_hybrid_search(kb, f"test query {i % 10}",
-                                      query_vector, mock_index)
+        results = perform_hybrid_search(kb, f'test query {i % 10}', query_vector, mock_index)
         assert len(results) > 0
 
         # Check memory periodically
@@ -729,14 +755,14 @@ enable_hybrid_search = true
     # Total memory increase should be reasonable
     assert total_memory_increase < 200 * 1024 * 1024  # Less than 200MB total
 
-    print(f"Memory increase during hybrid search testing: {total_memory_increase / 1024 / 1024:.1f}MB")
+    print(f'Memory increase during hybrid search testing: {total_memory_increase / 1024 / 1024:.1f}MB')
 
   def _create_hybrid_test_database(self, kb: KnowledgeBase, num_docs: int):
     """Create database for hybrid search testing."""
     conn = sqlite3.connect(kb.knowledge_base_db)
     cursor = conn.cursor()
 
-    cursor.execute('''
+    cursor.execute("""
       CREATE TABLE docs (
         id INTEGER PRIMARY KEY,
         sid INTEGER,
@@ -750,27 +776,44 @@ enable_hybrid_search = true
         bm25_tokens TEXT,
         doc_length INTEGER DEFAULT 0
       )
-    ''')
+    """)
 
     # Generate content with good vocabulary overlap for testing
-    base_terms = ['machine', 'learning', 'algorithm', 'data', 'model', 'neural',
-                  'network', 'deep', 'artificial', 'intelligence', 'computer',
-                  'vision', 'language', 'processing', 'classification']
+    base_terms = [
+      'machine',
+      'learning',
+      'algorithm',
+      'data',
+      'model',
+      'neural',
+      'network',
+      'deep',
+      'artificial',
+      'intelligence',
+      'computer',
+      'vision',
+      'language',
+      'processing',
+      'classification',
+    ]
 
     import random
 
     for i in range(num_docs):
       # Create document with random selection of terms
       selected_terms = random.sample(base_terms, random.randint(3, 8))
-      text = f"Document {i} discusses {' '.join(selected_terms)} and related concepts."
+      text = f'Document {i} discusses {" ".join(selected_terms)} and related concepts.'
 
       tokens, length = tokenize_for_bm25(text, 'en')
 
-      cursor.execute('''
+      cursor.execute(
+        """
         INSERT INTO docs (id, sid, sourcedoc, originaltext, embedtext, embedded,
                          language, metadata, keyphrase_processed, bm25_tokens, doc_length)
         VALUES (?, 0, ?, ?, ?, 1, 'en', '{}', 1, ?, ?)
-      ''', (i+1, f'doc{i+1}.txt', text, text.lower(), tokens, length))
+      """,
+        (i + 1, f'doc{i + 1}.txt', text, text.lower(), tokens, length),
+      )
 
     conn.commit()
     conn.close()
@@ -786,19 +829,20 @@ class TestBM25TokenizationPerformance:
     # Test content of different types and sizes
     test_contents = [
       # Short technical content
-      "Machine learning algorithms achieve 95% accuracy.",
-
+      'Machine learning algorithms achieve 95% accuracy.',
       # Medium content with mixed elements
-      "The state-of-the-art deep learning model processes natural language using transformer architectures with 175 billion parameters.",
-
+      'The state-of-the-art deep learning model processes natural language using transformer architectures with 175 billion parameters.',
       # Long content
-      " ".join([f"Sentence {i} contains various technical terms like machine-learning, AI/ML, and data-processing." for i in range(100)]),
-
+      ' '.join(
+        [
+          f'Sentence {i} contains various technical terms like machine-learning, AI/ML, and data-processing.'
+          for i in range(100)
+        ]
+      ),
       # Content with many special characters
-      "API endpoints: https://api.example.com/v2/models, user@company.com, version 3.14.15, accuracy 95.7%",
-
+      'API endpoints: https://api.example.com/v2/models, user@company.com, version 3.14.15, accuracy 95.7%',
       # Mixed language and technical content
-      "Python 3.9 with TensorFlow 2.8 and PyTorch 1.12 supports CUDA 11.6 for GPU acceleration on NVIDIA RTX 3090"
+      'Python 3.9 with TensorFlow 2.8 and PyTorch 1.12 supports CUDA 11.6 for GPU acceleration on NVIDIA RTX 3090',
     ]
 
     for i, content in enumerate(test_contents):
@@ -819,14 +863,14 @@ class TestBM25TokenizationPerformance:
 
       chars_per_second = len(content) * 1000 / total_time
 
-      print(f"Content type {i+1}: {avg_time:.6f}s avg ({chars_per_second:.0f} chars/sec)")
+      print(f'Content type {i + 1}: {avg_time:.6f}s avg ({chars_per_second:.0f} chars/sec)')
 
   def test_bulk_tokenization_performance(self):
     """Test performance of bulk tokenization operations."""
     # Generate bulk content for testing
     bulk_content = []
     for i in range(1000):  # Reduced from 5000 to prevent memory issues
-      content = f"Document {i} about machine learning, deep learning, and artificial intelligence applications."
+      content = f'Document {i} about machine learning, deep learning, and artificial intelligence applications.'
       bulk_content.append(content)
 
     # Measure bulk tokenization time
@@ -842,7 +886,7 @@ class TestBM25TokenizationPerformance:
     # Performance assertions
     docs_per_second = len(bulk_content) / total_time
     assert docs_per_second > 1000  # Should process over 1000 docs/sec
-    assert total_time < 10.0       # Should complete within 10 seconds
+    assert total_time < 10.0  # Should complete within 10 seconds
 
     # Verify all tokenizations succeeded
     assert len(tokenized_results) == len(bulk_content)
@@ -850,7 +894,7 @@ class TestBM25TokenizationPerformance:
       assert tokens is not None
       assert length > 0
 
-    print(f"Bulk tokenization: {docs_per_second:.0f} docs/sec ({total_time:.2f}s total)")
+    print(f'Bulk tokenization: {docs_per_second:.0f} docs/sec ({total_time:.2f}s total)')
 
   def test_tokenization_memory_usage(self):
     """Test memory usage during tokenization operations."""
@@ -863,7 +907,7 @@ class TestBM25TokenizationPerformance:
     for i in range(1000):
       # Vary content size
       multiplier = (i % 10) + 1
-      content = ("Machine learning and artificial intelligence research focuses on deep learning algorithms. " * multiplier)
+      content = 'Machine learning and artificial intelligence research focuses on deep learning algorithms. ' * multiplier
       large_contents.append(content)
 
     # Monitor memory during tokenization
@@ -886,6 +930,7 @@ class TestBM25TokenizationPerformance:
     del large_contents
 
     import gc
+
     gc.collect()
 
     final_memory = process.memory_info().rss
@@ -894,7 +939,9 @@ class TestBM25TokenizationPerformance:
     # Should release most memory after cleanup
     assert memory_after_cleanup < memory_increase / 2
 
-    print(f"Tokenization memory usage: {memory_increase / 1024 / 1024:.1f}MB peak, {memory_after_cleanup / 1024 / 1024:.1f}MB after cleanup")
+    print(
+      f'Tokenization memory usage: {memory_increase / 1024 / 1024:.1f}MB peak, {memory_after_cleanup / 1024 / 1024:.1f}MB after cleanup'
+    )
 
 
 @pytest.mark.performance
@@ -942,7 +989,7 @@ bm25_rebuild_threshold = 100
 
     kb.sql_connection.close()
 
-    print(f"Rebuild threshold check: {avg_time:.6f}s avg")
+    print(f'Rebuild threshold check: {avg_time:.6f}s avg')
 
   def test_incremental_rebuild_performance(self, temp_data_manager):
     """Test performance of rebuilding index with incremental data."""
@@ -975,14 +1022,17 @@ bm25_rebuild_threshold = 50
     # Add more data to trigger rebuild
     cursor = kb.sql_cursor
     for i in range(200, 300):  # Add 100 more docs
-      text = f"Additional document {i} with machine learning content."
+      text = f'Additional document {i} with machine learning content.'
       tokens, length = tokenize_for_bm25(text, 'en')
 
-      cursor.execute('''
+      cursor.execute(
+        """
         INSERT INTO docs (id, sid, sourcedoc, originaltext, embedtext, embedded,
                          language, metadata, keyphrase_processed, bm25_tokens, doc_length)
         VALUES (?, 0, ?, ?, ?, 1, 'en', '{}', 1, ?, ?)
-      ''', (i+1, f'doc{i+1}.txt', text, text.lower(), tokens, length))
+      """,
+        (i + 1, f'doc{i + 1}.txt', text, text.lower(), tokens, length),
+      )
 
     kb.sql_connection.commit()
 
@@ -999,15 +1049,15 @@ bm25_rebuild_threshold = 50
     assert rebuild_time < initial_build_time * 2  # Should not be more than 2x slower
     assert rebuild_time < 5.0  # Should complete within 5 seconds
 
-    print(f"Initial build (200 docs): {initial_build_time:.3f}s")
-    print(f"Rebuild (300 docs): {rebuild_time:.3f}s")
+    print(f'Initial build (200 docs): {initial_build_time:.3f}s')
+    print(f'Rebuild (300 docs): {rebuild_time:.3f}s')
 
   def _create_rebuild_test_database(self, kb: KnowledgeBase, num_docs: int):
     """Create database for rebuild testing."""
     conn = sqlite3.connect(kb.knowledge_base_db)
     cursor = conn.cursor()
 
-    cursor.execute('''
+    cursor.execute("""
       CREATE TABLE docs (
         id INTEGER PRIMARY KEY,
         sid INTEGER,
@@ -1021,19 +1071,23 @@ bm25_rebuild_threshold = 50
         bm25_tokens TEXT,
         doc_length INTEGER DEFAULT 0
       )
-    ''')
+    """)
 
     for i in range(num_docs):
-      text = f"Test document {i} contains machine learning and data science concepts."
+      text = f'Test document {i} contains machine learning and data science concepts.'
       tokens, length = tokenize_for_bm25(text, 'en')
 
-      cursor.execute('''
+      cursor.execute(
+        """
         INSERT INTO docs (id, sid, sourcedoc, originaltext, embedtext, embedded,
                          language, metadata, keyphrase_processed, bm25_tokens, doc_length)
         VALUES (?, 0, ?, ?, ?, 1, 'en', '{}', 1, ?, ?)
-      ''', (i+1, f'doc{i+1}.txt', text, text.lower(), tokens, length))
+      """,
+        (i + 1, f'doc{i + 1}.txt', text, text.lower(), tokens, length),
+      )
 
     conn.commit()
     conn.close()
 
-#fin
+
+# fin

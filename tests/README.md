@@ -6,7 +6,7 @@ Comprehensive testing framework for CustomKB components including unit tests, in
 
 ```bash
 # Install test dependencies
-pip install -r requirements-test.txt
+uv sync --extra test
 
 # Run all tests
 python run_tests.py

@@ -12,6 +12,7 @@ import hashlib
 import json
 import os
 import threading
+from collections import OrderedDict
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
@@ -32,6 +33,7 @@ MODEL_DIMENSIONS = {
   'all-minilm-l6-v2': 384,
 }
 
+
 def get_expected_dimensions(model: str) -> int | None:
   """Get expected dimensions for a model.
 
@@ -51,8 +53,7 @@ class CacheThreadManager:
     self._executor = None
     self._max_workers = max_workers
     self._lock = threading.RLock()
-    self._memory_cache = {}
-    self._memory_cache_keys = []
+    self._memory_cache: OrderedDict[str, list[float]] = OrderedDict()
     self._memory_cache_size = 10000  # Default size
     self._max_memory_mb = 500  # Default 500MB limit for cache
     self._embedding_size_bytes = {}  # Track size of each embedding
@@ -64,7 +65,7 @@ class CacheThreadManager:
       'cache_adds': 0,
       'cache_evictions': 0,
       'thread_pool_tasks': 0,
-      'memory_usage_mb': 0.0
+      'memory_usage_mb': 0.0,
     }
 
   def _ensure_executor(self):
@@ -90,9 +91,8 @@ class CacheThreadManager:
     """Thread-safe retrieval from memory cache."""
     with self._lock:
       if cache_key in self._memory_cache:
-        # Move to end for LRU
-        self._memory_cache_keys.remove(cache_key)
-        self._memory_cache_keys.append(cache_key)
+        # Move to end for LRU (O(1) with OrderedDict)
+        self._memory_cache.move_to_end(cache_key)
         self._metrics['cache_hits'] += 1
         return self._memory_cache[cache_key]
       else:
@@ -113,25 +113,25 @@ class CacheThreadManager:
       current_memory = sum(self._embedding_size_bytes.values()) / (1024 * 1024)
 
       # Evict if over memory limit or cache size limit
-      while ((current_memory + embedding_size / (1024 * 1024)) > memory_limit_mb or
-             len(self._memory_cache) >= cache_size) and self._memory_cache_keys:
-        # Remove oldest (LRU)
-        evict_key = self._memory_cache_keys.pop(0)
+      while (
+        (current_memory + embedding_size / (1024 * 1024)) > memory_limit_mb or len(self._memory_cache) >= cache_size
+      ) and self._memory_cache:
+        # Remove oldest (LRU) — O(1) with OrderedDict
+        evict_key, _ = self._memory_cache.popitem(last=False)
         evicted_size = self._embedding_size_bytes.pop(evict_key, 0)
         current_memory -= evicted_size / (1024 * 1024)
-        del self._memory_cache[evict_key]
         self._metrics['cache_evictions'] += 1
 
       # Add new embedding
       if cache_key not in self._memory_cache:
         self._memory_cache[cache_key] = embedding
-        self._memory_cache_keys.append(cache_key)
         self._embedding_size_bytes[cache_key] = embedding_size
         self._metrics['cache_adds'] += 1
-        self._metrics['memory_usage_mb'] = (current_memory + embedding_size / (1024 * 1024))
+        self._metrics['memory_usage_mb'] = current_memory + embedding_size / (1024 * 1024)
 
-  def configure(self, max_workers: int = None, memory_cache_size: int = None,
-                max_memory_mb: float = None):
+  def configure(
+    self, max_workers: int | None = None, memory_cache_size: int | None = None, max_memory_mb: float | None = None
+  ):
     """Configure cache settings."""
     with self._lock:
       if max_workers is not None:
@@ -160,7 +160,7 @@ class CacheThreadManager:
         'cache_adds': self._metrics['cache_adds'],
         'memory_usage_mb': self._metrics['memory_usage_mb'],
         'memory_limit_mb': self._max_memory_mb,
-        'thread_pool_tasks': self._metrics['thread_pool_tasks']
+        'thread_pool_tasks': self._metrics['thread_pool_tasks'],
       }
 
   def reset_metrics(self):
@@ -172,14 +172,13 @@ class CacheThreadManager:
         'cache_adds': 0,
         'cache_evictions': 0,
         'thread_pool_tasks': 0,
-        'memory_usage_mb': 0.0
+        'memory_usage_mb': 0.0,
       }
 
   def clear_cache(self):
     """Clear all cached embeddings from memory."""
     with self._lock:
       self._memory_cache.clear()
-      self._memory_cache_keys.clear()
       self._embedding_size_bytes.clear()
       self._metrics['memory_usage_mb'] = 0.0
 
@@ -195,13 +194,13 @@ def configure_cache_manager(kb: Any) -> None:
   cache_memory_limit_mb = getattr(kb, 'cache_memory_limit_mb', 500)
 
   cache_manager.configure(
-    max_workers=cache_thread_pool_size,
-    memory_cache_size=memory_cache_size,
-    max_memory_mb=cache_memory_limit_mb
+    max_workers=cache_thread_pool_size, memory_cache_size=memory_cache_size, max_memory_mb=cache_memory_limit_mb
   )
 
-  logger.debug(f"Cache manager configured: threads={cache_thread_pool_size}, "
-              f"cache_size={memory_cache_size}, memory_limit={cache_memory_limit_mb}MB")
+  logger.debug(
+    f'Cache manager configured: threads={cache_thread_pool_size}, '
+    f'cache_size={memory_cache_size}, memory_limit={cache_memory_limit_mb}MB'
+  )
 
 
 def get_cache_key(text: str, model: str) -> str:
@@ -218,7 +217,7 @@ def get_cache_key(text: str, model: str) -> str:
   # Create a unique hash based on text
   text_hash = hashlib.sha256(text.encode()).hexdigest()
   # Return format that includes model name for cache organization
-  return f"{model}_{text_hash}"
+  return f'{model}_{text_hash}'
 
 
 def get_cache_file_path(cache_key: str) -> str:
@@ -230,11 +229,18 @@ def get_cache_file_path(cache_key: str) -> str:
 
   Returns:
       Full path to cache file
+
+  Raises:
+      ValueError: If constructed path escapes the cache directory
   """
   # Use first 2 chars for directory to avoid too many files in one dir
   subdir = os.path.join(CACHE_DIR, cache_key[:2])
   os.makedirs(subdir, exist_ok=True)
-  return os.path.join(subdir, f"{cache_key}.json")
+  full_path = os.path.join(subdir, f'{cache_key}.json')
+  # Validate path stays within cache directory
+  if not os.path.realpath(full_path).startswith(os.path.realpath(CACHE_DIR) + os.sep):
+    raise ValueError(f'Cache path escapes cache directory: {cache_key[:20]}...')
+  return full_path
 
 
 def get_cached_embedding(text: str, model: str) -> list[float] | None:
@@ -269,7 +275,9 @@ def get_cached_embedding(text: str, model: str) -> list[float] | None:
         # Validate embedding dimensions based on model
         expected_dims = get_expected_dimensions(model)
         if expected_dims and len(embedding) != expected_dims:
-          logger.warning(f"Cached embedding has wrong dimensions: got {len(embedding)}, expected {expected_dims}. Removing cache file: {cache_file}")
+          logger.warning(
+            f'Cached embedding has wrong dimensions: got {len(embedding)}, expected {expected_dims}. Removing cache file: {cache_file}'
+          )
           with contextlib.suppress(OSError):
             os.remove(cache_file)
           return None
@@ -278,7 +286,7 @@ def get_cached_embedding(text: str, model: str) -> list[float] | None:
         cache_manager.add_to_memory_cache(cache_key, embedding)
         return embedding
     except (OSError, json.JSONDecodeError, KeyError) as e:
-      logger.warning(f"Cache file corrupted or invalid: {cache_file}: {e}")
+      logger.warning(f'Cache file corrupted or invalid: {cache_file}: {e}')
       # Remove corrupted cache file
       with contextlib.suppress(OSError):
         os.remove(cache_file)
@@ -320,14 +328,14 @@ def save_embedding_to_cache(text: str, model: str, embedding: list[float], kb=No
       'model': model,
       'text_hash': cache_key,
       'embedding': embedding,
-      'text_preview': text[:100] if len(text) > 100 else text  # Store preview for debugging
+      'text_preview': text[:100] if len(text) > 100 else text,  # Store preview for debugging
     }
 
     try:
       with open(cache_file, 'w') as f:
         json.dump(cache_data, f)
     except OSError as e:
-      logger.warning(f"Failed to save embedding to disk cache: {e}")
+      logger.warning(f'Failed to save embedding to disk cache: {e}')
 
   # Submit disk save task to thread pool
   cache_manager.submit_cache_task(_save_to_disk)
@@ -349,7 +357,6 @@ def clear_cache(memory_only: bool = False) -> dict[str, int]:
   with cache_manager._lock:
     stats['memory_cleared'] = len(cache_manager._memory_cache)
     cache_manager._memory_cache.clear()
-    cache_manager._memory_cache_keys.clear()
     cache_manager._embedding_size_bytes.clear()
     cache_manager._metrics['memory_usage_mb'] = 0.0
 
@@ -365,10 +372,9 @@ def clear_cache(memory_only: bool = False) -> dict[str, int]:
             except OSError:
               pass
     except OSError as e:
-      logger.warning(f"Error clearing disk cache: {e}")
+      logger.warning(f'Error clearing disk cache: {e}')
 
-  logger.info(f"Cache cleared: {stats['memory_cleared']} from memory, "
-             f"{stats['disk_cleared']} from disk")
+  logger.info(f'Cache cleared: {stats["memory_cleared"]} from memory, {stats["disk_cleared"]} from disk')
 
   return stats
 
@@ -395,12 +401,7 @@ def get_cache_stats() -> dict[str, Any]:
   except OSError:
     pass
 
-  return {
-    **metrics,
-    'disk_files': disk_files,
-    'disk_size_mb': disk_size_mb,
-    'cache_dir': CACHE_DIR
-  }
+  return {**metrics, 'disk_files': disk_files, 'disk_size_mb': disk_size_mb, 'cache_dir': CACHE_DIR}
 
 
-#fin
+# fin

@@ -31,7 +31,16 @@ from post_slug import post_slug
 
 from config.config_manager import KnowledgeBase, get_fq_cfg_filename
 from utils.logging_config import get_logger, time_to_finish
-from utils.text_utils import enhanced_clean_text, get_files, nlp, read_text_file, split_filepath
+from utils.text_utils import (
+  enhanced_clean_text,
+  get_files,
+  get_full_language_name,
+  get_iso_code,
+  language_codes,
+  nlp,
+  read_text_file,
+  split_filepath,
+)
 
 from .chunking import detect_file_type, init_text_splitter
 from .connection import close_database, connect_to_database
@@ -39,7 +48,7 @@ from .connection import close_database, connect_to_database
 # Set up NLTK data path
 NLTK_DATA = os.getenv('NLTK_DATA')
 if not NLTK_DATA:
-  raise OSError("NLTK_DATA environment variable not set.")
+  raise OSError('NLTK_DATA environment variable not set.')
 
 nltk.data.path = [NLTK_DATA]
 try:
@@ -54,7 +63,9 @@ except LookupError:
   nltk.download('stopwords', download_dir=NLTK_DATA, quiet=True)
   nltk.download('wordnet', download_dir=NLTK_DATA, quiet=True)
 
-# Ensure required languages are available for stopwords
+# Ensure required NLTK stopword languages are loadable.
+# These cover the primary languages of CustomKB knowledgebases;
+# additional languages can be configured per-KB via additional_stopword_languages.
 required_languages = ['english', 'indonesian', 'french', 'german', 'swedish']
 for lang in required_languages:
   try:
@@ -66,31 +77,22 @@ for lang in required_languages:
 
 # Load spaCy model for entity recognition
 try:
-  nlp = spacy.load("en_core_web_sm")
+  nlp = spacy.load('en_core_web_sm')
 except (OSError, ImportError) as e:
   # Fall back if spacy model isn't installed
   logger = get_logger(__name__)
   logger.debug(f"spaCy model 'en_core_web_sm' not available: {e}")
   nlp = None
 
-# Language codes mapping - Limited to languages with NLTK support that we use
-language_codes = {
-  'zh': 'chinese',
-  'da': 'danish',
-  'nl': 'dutch',
-  'en': 'english',
-  'fi': 'finnish',
-  'fr': 'french',
-  'de': 'german',
-  'id': 'indonesian',
-  'it': 'italian',
-  'pt': 'portuguese',
-  'es': 'spanish',
-  'sv': 'swedish'
-}
+# Pre-compiled regex patterns for extract_metadata()
+_RE_HEADING = re.compile(r'^(#+|=+|[-]+)\s*(.+?)(?:\s*[=|-]+)?$', re.MULTILINE)
+_RE_CODE_BLOCK = re.compile(r'```\w*\n[\s\S]*?```')
+_RE_TABLE = re.compile(r'<table[\s>].*?</table>', re.DOTALL | re.IGNORECASE)
+_RE_HTML_LIST = re.compile(r'<(ul|ol)[\s>].*?</(ul|ol)>', re.DOTALL | re.IGNORECASE)
+_RE_BULLET_LIST = re.compile(r'^\s*[-*•]\s', re.MULTILINE)
+_RE_NUMBERED_LIST = re.compile(r'^\s*\d+[.)]\s', re.MULTILINE)
+_RE_SECTION_TYPE = re.compile(r'\b(summary|overview|introduction|conclusion|abstract)\b', re.IGNORECASE)
 
-# Reverse mapping: full name to ISO code
-language_names_to_codes = {v: k for k, v in language_codes.items()}
 
 def sanitize_filename(file_path: str, logger=None) -> tuple[bool, str, bool, str]:
   """
@@ -122,7 +124,7 @@ def sanitize_filename(file_path: str, logger=None) -> tuple[bool, str, bool, str
   parts = full_basename.split('.')
   if len(parts) > 1:
     basename = '.'.join(parts[:-1])  # Everything except last extension
-    extension = '.' + parts[-1]        # Last extension including dot
+    extension = '.' + parts[-1]  # Last extension including dot
   else:
     basename = full_basename
     extension = ''
@@ -159,46 +161,9 @@ def sanitize_filename(file_path: str, logger=None) -> tuple[bool, str, bool, str
   message = f'Will rename: {full_basename} → {sanitized_filename}'
   return True, new_path, True, message
 
-def get_iso_code(language: str) -> str:
-  """
-  Convert language to ISO code.
-
-  Args:
-      language: Either ISO code (e.g., 'en') or full name (e.g., 'english').
-
-  Returns:
-      ISO code.
-
-  Raises:
-      ValueError: If language is not recognized.
-  """
-  # If already an ISO code, return it
-  if language in language_codes:
-    return language
-  # If it's a full name, convert to ISO code
-  if language in language_names_to_codes:
-    return language_names_to_codes[language]
-  # Not recognized
-  raise ValueError(f"Unrecognized language: '{language}'. Use ISO 639-1 code (e.g., 'en') or full name (e.g., 'english').")
-
-def get_full_language_name(iso_code: str) -> str:
-  """
-  Convert ISO code to full language name for NLTK.
-
-  Args:
-      iso_code: ISO 639-1 language code (e.g., 'en').
-
-  Returns:
-      Full language name (e.g., 'english').
-
-  Raises:
-      ValueError: If ISO code is not recognized.
-  """
-  if iso_code in language_codes:
-    return language_codes[iso_code]
-  raise ValueError(f"Unrecognized ISO code: '{iso_code}'")
 
 logger = get_logger(__name__)
+
 
 def extract_metadata(text: str, file_path: str, kb) -> dict[str, Any]:
   """
@@ -213,41 +178,41 @@ def extract_metadata(text: str, file_path: str, kb) -> dict[str, Any]:
       Dictionary containing metadata.
   """
   metadata = {
-    "source": file_path,
-    "char_length": len(text),
-    "word_count": len(text.split()),
+    'source': file_path,
+    'char_length': len(text),
+    'word_count': len(text.split()),
   }
 
   # Extract file extension
   _, _, ext, _ = split_filepath(file_path)
   if ext:
-    metadata["file_type"] = ext.lstrip('.')
+    metadata['file_type'] = ext.lstrip('.')
 
   # Extract headings if possible (expanded pattern for different heading formats)
   # Get configurable heading search limit
   heading_search_limit = getattr(kb, 'heading_search_limit', 200)
-  heading_match = re.search(r'^(#+|=+|[-]+)\s*(.+?)(?:\s*[=|-]+)?$', text[:heading_search_limit], re.MULTILINE)
+  heading_match = _RE_HEADING.search(text[:heading_search_limit])
   if heading_match:
-    metadata["heading"] = heading_match.group(2).strip()
+    metadata['heading'] = heading_match.group(2).strip()
 
   # Try to identify document section type
   if text.startswith('#'):
-    metadata["section_type"] = "heading"
-  elif re.search(r'```\w*\n[\s\S]*?```', text):
-    metadata["section_type"] = "code_block"
-  elif re.search(r'<table[\s>].*?</table>', text, re.DOTALL | re.IGNORECASE):
-    metadata["section_type"] = "table"
-  elif re.search(r'<(ul|ol)[\s>].*?</(ul|ol)>', text, re.DOTALL | re.IGNORECASE):
-    metadata["section_type"] = "list"
-  elif re.search(r'^\s*[-*•]\s', text, re.MULTILINE):
-    metadata["section_type"] = "bullet_list"
-  elif re.search(r'^\s*\d+[.)]\s', text, re.MULTILINE):
-    metadata["section_type"] = "numbered_list"
+    metadata['section_type'] = 'heading'
+  elif _RE_CODE_BLOCK.search(text):
+    metadata['section_type'] = 'code_block'
+  elif _RE_TABLE.search(text):
+    metadata['section_type'] = 'table'
+  elif _RE_HTML_LIST.search(text):
+    metadata['section_type'] = 'list'
+  elif _RE_BULLET_LIST.search(text):
+    metadata['section_type'] = 'bullet_list'
+  elif _RE_NUMBERED_LIST.search(text):
+    metadata['section_type'] = 'numbered_list'
 
   # Try to identify common document sections
-  if re.search(r'\b(summary|overview|introduction|conclusion|abstract)\b', text[:200], re.IGNORECASE):
-    section_match = re.search(r'\b(summary|overview|introduction|conclusion|abstract)\b', text[:200], re.IGNORECASE)
-    metadata["document_section"] = section_match.group(1).lower()
+  section_match = _RE_SECTION_TYPE.search(text[:200])
+  if section_match:
+    metadata['document_section'] = section_match.group(1).lower()
 
   # Extract named entities if spaCy is available
   if nlp:
@@ -264,12 +229,13 @@ def extract_metadata(text: str, file_path: str, kb) -> dict[str, Any]:
 
       # Add only if entities were found
       if entities:
-        metadata["entities"] = entities
+        metadata['entities'] = entities
     except (AttributeError, RuntimeError, TypeError) as e:
       if logger:
-        logger.warning(f"Error extracting entities: {e}")
+        logger.warning(f'Error extracting entities: {e}')
 
   return metadata
+
 
 def process_database(args: argparse.Namespace, logger) -> str:
   """
@@ -296,33 +262,33 @@ def process_database(args: argparse.Namespace, logger) -> str:
   try:
     iso_language = get_iso_code(args.language)
   except ValueError as e:
-    return f"Error: {e}"
+    return f'Error: {e}'
 
-  logger.info(f"Input language: {args.language}, ISO code: {iso_language}")
+  logger.info(f'Input language: {args.language}, ISO code: {iso_language}')
 
   # Check if language detection is enabled
   detect_language = getattr(args, 'detect_language', False)
   if detect_language:
-    logger.info("Language detection enabled for individual files")
+    logger.info('Language detection enabled for individual files')
 
   # Get configuration file
   config_file = get_fq_cfg_filename(args.config_file)
   if not config_file:
     return f"Error: Knowledgebase '{args.config_file}' not found."
 
-  logger.info(f"{config_file=}")
+  logger.info(f'{config_file=}')
 
   # Initialize knowledgebase
   kb = KnowledgeBase(config_file)
   if args.verbose:
     kb.save_config()
 
-  logger.info(f"Config file: {args.config_file}")
+  logger.info(f'Config file: {args.config_file}')
   if args.files:
-    logger.info(f"Processing {len(args.files)} files")
+    logger.info(f'Processing {len(args.files)} files')
   else:
-    logger.info("No input files provided")
-    return "No input files provided. Nothing to do."
+    logger.info('No input files provided')
+    return 'No input files provided. Nothing to do.'
 
   # Connect to database
   connect_to_database(kb)
@@ -334,12 +300,14 @@ def process_database(args: argparse.Namespace, logger) -> str:
     full_language_name = get_full_language_name(iso_language)
     stop_words.update(stopwords.words(full_language_name))
   except LookupError:
-    error_msg = (f"NLTK stopwords not available for language '{full_language_name}' (ISO: {iso_language}). "
-                 f"Please install NLTK stopwords data:\n"
-                 f"  python -m nltk.downloader stopwords\n"
-                 f"Then verify '{full_language_name}' is included in the stopwords corpus.")
+    error_msg = (
+      f"NLTK stopwords not available for language '{full_language_name}' (ISO: {iso_language}). "
+      f'Please install NLTK stopwords data:\n'
+      f'  python -m nltk.downloader stopwords\n'
+      f"Then verify '{full_language_name}' is included in the stopwords corpus."
+    )
     logger.error(error_msg)
-    return f"Error: {error_msg}"
+    return f'Error: {error_msg}'
 
   # Add additional language stopwords (configurable)
   additional_languages = getattr(kb, 'additional_stopword_languages', ['indonesian', 'french', 'german', 'swedish'])
@@ -353,10 +321,10 @@ def process_database(args: argparse.Namespace, logger) -> str:
           stop_words.update(stopwords.words(full_lang))
         except LookupError:
           if logger:
-            logger.warning(f"Failed to load stopwords for {full_lang}")
+            logger.warning(f'Failed to load stopwords for {full_lang}')
     except (KeyError, LookupError, ValueError) as e:
       if logger:
-        logger.warning(f"Error processing language {lang}: {e}")
+        logger.warning(f'Error processing language {lang}: {e}')
 
   # Pre-scan to get actual total file count
   all_files = []
@@ -364,7 +332,7 @@ def process_database(args: argparse.Namespace, logger) -> str:
     all_files.extend(get_files(arg))
 
   numfiles = len(all_files)
-  logger.info(f"Found {numfiles} total files to process")
+  logger.info(f'Found {numfiles} total files to process')
 
   # Process files in optimized batches
   filecount = 0
@@ -374,8 +342,8 @@ def process_database(args: argparse.Namespace, logger) -> str:
 
   # Pre-compute batch splitting and file types to reduce overhead
   for i in range(0, len(all_files), batch_size):
-    batch = all_files[i:i+batch_size]
-    logger.info(f"Processing batch of {len(batch)} files ({i+1}-{min(i+batch_size, numfiles)} of {numfiles})")
+    batch = all_files[i : i + batch_size]
+    logger.info(f'Processing batch of {len(batch)} files ({i + 1}-{min(i + batch_size, numfiles)} of {numfiles})')
 
     # If not forcing reprocessing, check which files already exist in the database
     existing_paths = set()
@@ -389,21 +357,21 @@ def process_database(args: argparse.Namespace, logger) -> str:
         if canonical_paths:
           # Convert to list of strings (safe for IN query)
           safe_paths = [str(path) for path in canonical_paths]
-          query_template = "SELECT DISTINCT sourcedoc FROM docs WHERE sourcedoc IN ({placeholders})"
+          query_template = 'SELECT DISTINCT sourcedoc FROM docs WHERE sourcedoc IN ({placeholders})'
           kb.sql_cursor.execute(query_template.format(placeholders=','.join(['?'] * len(safe_paths))), safe_paths)
           existing_paths = {row[0] for row in kb.sql_cursor.fetchall()}
           if logger:
-            logger.debug(f"Found {len(existing_paths)} existing files in database")
+            logger.debug(f'Found {len(existing_paths)} existing files in database')
       except sqlite3.Error as e:
         if logger:
-          logger.warning(f"Error checking existing files: {e}, will process all files in batch")
+          logger.warning(f'Error checking existing files: {e}, will process all files in batch')
 
     # Process each file in the batch
     for pfile in batch:
       canonical_path = os.path.abspath(pfile)
       # Skip if file exists and not forcing
       if canonical_path in existing_paths and not args.force:
-        logger.info(f"Skipping {pfile} (already in database)")
+        logger.info(f'Skipping {pfile} (already in database)')
         filecount += 1
         continue
 
@@ -416,20 +384,21 @@ def process_database(args: argparse.Namespace, logger) -> str:
 
       filecount += 1
       if (filecount % 5) == 0:
-        logger.info(f"{filecount}/{numfiles} ~{time_to_finish(kb.start_time, filecount, numfiles)}")
+        logger.info(f'{filecount}/{numfiles} ~{time_to_finish(kb.start_time, filecount, numfiles)}')
 
   # Build BM25 index if hybrid search is enabled and we processed files
   if processed_count > 0 and getattr(kb, 'enable_hybrid_search', False):
     try:
       from embedding.bm25_manager import build_bm25_index
-      logger.info("Building BM25 index for hybrid search...")
+
+      logger.info('Building BM25 index for hybrid search...')
       bm25 = build_bm25_index(kb)
       if bm25:
-        logger.info("BM25 index built successfully")
+        logger.info('BM25 index built successfully')
       else:
-        logger.warning("BM25 index build failed")
+        logger.warning('BM25 index build failed')
     except (ImportError, RuntimeError, OSError) as e:
-      logger.warning(f"Failed to build BM25 index: {e}")
+      logger.warning(f'Failed to build BM25 index: {e}')
 
   # Close database connection
   close_database(kb)
@@ -440,9 +409,17 @@ def process_database(args: argparse.Namespace, logger) -> str:
   else:
     return f'{processed_count} files processed ({filecount - processed_count} skipped) in database {kb.knowledge_base_db}'
 
-def process_text_file(kb: KnowledgeBase, sourcefile: str, splitter: Any,
-                     stop_words: set, language: str, file_type: str = 'text',
-                     force: bool = False, detect_language: bool = False) -> bool:
+
+def process_text_file(
+  kb: KnowledgeBase,
+  sourcefile: str,
+  splitter: Any,
+  stop_words: set,
+  language: str,
+  file_type: str = 'text',
+  force: bool = False,
+  detect_language: bool = False,
+) -> bool:
   """
   Process a text file, split it into chunks, and store in the database.
 
@@ -469,18 +446,20 @@ def process_text_file(kb: KnowledgeBase, sourcefile: str, splitter: Any,
 
   if not success:
     # Collision or sanitization error
-    logger.warning(f"Skipping file due to sanitization issue: {message}")
+    logger.warning(f'Skipping file due to sanitization issue: {message}')
     return False
 
   if was_renamed:
     # Rename file on disk
     try:
       os.rename(sourcefile, new_path)
-      logger.warning(f"Renamed file due to dangerous characters: {os.path.basename(sourcefile)} → {os.path.basename(new_path)}")
+      logger.warning(
+        f'Renamed file due to dangerous characters: {os.path.basename(sourcefile)} → {os.path.basename(new_path)}'
+      )
       # Update sourcefile to use new path
       sourcefile = new_path
     except OSError as e:
-      logger.error(f"Failed to rename file {sourcefile}: {e}")
+      logger.error(f'Failed to rename file {sourcefile}: {e}')
       return False
 
   # Store full canonical absolute path instead of basename
@@ -488,16 +467,15 @@ def process_text_file(kb: KnowledgeBase, sourcefile: str, splitter: Any,
   sourcedoc_value = os.path.abspath(sourcefile)
 
   # Check if file already exists in the database using full path
-  kb.sql_cursor.execute("SELECT COUNT(*) FROM docs WHERE sourcedoc = ?", [sourcedoc_value])
+  kb.sql_cursor.execute('SELECT COUNT(*) FROM docs WHERE sourcedoc = ?', [sourcedoc_value])
   count = kb.sql_cursor.fetchone()[0]
 
   if count > 0 and not force:
-    logger.info(f"Skipping {sourcefile} (already in database, use --force to reprocess)")
+    logger.info(f'Skipping {sourcefile} (already in database, use --force to reprocess)')
     return False
 
   # Log file processing start with enhanced context
-  log_file_operation(logger, "processing_start", sourcefile,
-                    file_type=file_type, language=language, force=force)
+  log_file_operation(logger, 'processing_start', sourcefile, file_type=file_type, language=language, force=force)
 
   # Read file content with validation
   try:
@@ -507,8 +485,7 @@ def process_text_file(kb: KnowledgeBase, sourcefile: str, splitter: Any,
     try:
       validated_sourcefile = validate_file_path(sourcefile)
     except ValueError as e:
-      log_operation_error(logger, "file_validation", e,
-                         file_path=sourcefile, file_type=file_type)
+      log_operation_error(logger, 'file_validation', e, file_path=sourcefile, file_type=file_type)
       return False
 
     # Check file size (prevent extremely large files)
@@ -518,27 +495,28 @@ def process_text_file(kb: KnowledgeBase, sourcefile: str, splitter: Any,
       max_file_size_mb = getattr(kb, 'max_file_size_mb', 100)
       max_file_size = max_file_size_mb * 1024 * 1024  # Convert MB to bytes
       if file_size > max_file_size:
-        log_operation_error(logger, "file_size_check",
-                           ValueError(f"File too large: {file_size} bytes"),
-                           file_path=validated_sourcefile,
-                           file_size=file_size,
-                           max_size=max_file_size)
+        log_operation_error(
+          logger,
+          'file_size_check',
+          ValueError(f'File too large: {file_size} bytes'),
+          file_path=validated_sourcefile,
+          file_size=file_size,
+          max_size=max_file_size,
+        )
         return False
     except OSError as e:
-      log_operation_error(logger, "file_access", e,
-                         file_path=validated_sourcefile)
+      log_operation_error(logger, 'file_access', e, file_path=validated_sourcefile)
       return False
 
     # Prepare encoding config from knowledgebase settings
     encoding_config = {
       'auto_detect_encoding': getattr(kb, 'auto_detect_encoding', True),
       'default_encoding': getattr(kb, 'default_encoding', 'utf-8'),
-      'encoding_fallbacks': getattr(kb, 'encoding_fallbacks', ['utf-8', 'windows-1252', 'latin-1', 'cp1252'])
+      'encoding_fallbacks': getattr(kb, 'encoding_fallbacks', ['utf-8', 'windows-1252', 'latin-1', 'cp1252']),
     }
     content = read_text_file(validated_sourcefile, encoding_config)
   except OSError as e:
-    log_operation_error(logger, "file_read", e,
-                       file_path=validated_sourcefile, file_size=file_size)
+    log_operation_error(logger, 'file_read', e, file_path=validated_sourcefile, file_size=file_size)
     return False
 
   # Split content into chunks
@@ -555,12 +533,12 @@ def process_text_file(kb: KnowledgeBase, sourcefile: str, splitter: Any,
       chunks = splitter.chunks(content)
     else:
       # Fallback to basic chunking
-      chunks = [content[i:i+kb.db_max_tokens] for i in range(0, len(content), kb.db_max_tokens)]
+      chunks = [content[i : i + kb.db_max_tokens] for i in range(0, len(content), kb.db_max_tokens)]
 
     if logger:
-      logger.debug(f"Split {sourcefile} into {len(chunks)} chunks")
+      logger.debug(f'Split {sourcefile} into {len(chunks)} chunks')
   except (AttributeError, ValueError, RuntimeError, TypeError) as e:
-    logger.error(f"Failed to split chunks for {sourcefile}: {e}")
+    logger.error(f'Failed to split chunks for {sourcefile}: {e}')
     return False
 
   # Detect language if enabled
@@ -579,10 +557,7 @@ def process_text_file(kb: KnowledgeBase, sourcefile: str, splitter: Any,
 
       # Detect language
       detected_lang, confidence = detect_file_language(
-        sourcefile,
-        sample_size=sample_size,
-        min_confidence=min_confidence,
-        fallback_language=language
+        sourcefile, sample_size=sample_size, min_confidence=min_confidence, fallback_language=language
       )
 
       if detected_lang != language:
@@ -600,11 +575,12 @@ def process_text_file(kb: KnowledgeBase, sourcefile: str, splitter: Any,
     if directory_override_enabled or not detect_language:
       # Override if: (1) directory override is enabled, or (2) not using content detection
       language = langkey  # Update to new ISO code
-      logger.info(f"Using language from directory: {language=}")
+      logger.info(f'Using language from directory: {language=}')
     else:
       # Directory override disabled and content detection active - keep detected language
-      logger.debug(f"Directory suggests language '{langkey}' but using detected '{language}' (directory_language_override=False)")
-
+      logger.debug(
+        f"Directory suggests language '{langkey}' but using detected '{language}' (directory_language_override=False)"
+      )
 
   # If language changed, re-initialize stopwords
   if language != original_language:
@@ -629,16 +605,13 @@ def process_text_file(kb: KnowledgeBase, sourcefile: str, splitter: Any,
             stop_words.update(stopwords.words(full_lang))
           except LookupError:
             if logger:
-              logger.warning(f"Failed to load stopwords for {full_lang}")
+              logger.warning(f'Failed to load stopwords for {full_lang}')
       except (KeyError, LookupError, ValueError) as e:
         if logger:
-          logger.warning(f"Error processing language {lang}: {e}")
+          logger.warning(f'Error processing language {lang}: {e}')
 
   # Delete any existing entries with this file path
-  kb.sql_cursor.execute(
-    "DELETE FROM docs WHERE sourcedoc = ?",
-    [sourcedoc_value]
-  )
+  kb.sql_cursor.execute('DELETE FROM docs WHERE sourcedoc = ?', [sourcedoc_value])
   kb.sql_connection.commit()
 
   # Set up lemmatizer for better cleaning
@@ -646,6 +619,10 @@ def process_text_file(kb: KnowledgeBase, sourcefile: str, splitter: Any,
 
   # Insert chunks into database
   sid = 0
+  commit_frequency = getattr(kb, 'commit_frequency', 1000)
+  batch = []
+  insert_sql = 'INSERT INTO docs (sid, sourcedoc, originaltext, embedtext, embedded, language, metadata, bm25_tokens, doc_length, keyphrase_processed) VALUES (?,?,?,?,?,?,?,?,?,?)'
+
   for _i, chunk in enumerate(chunks):
     # Extract metadata about the chunk
     metadata = extract_metadata(chunk, sourcefile, kb)
@@ -656,19 +633,20 @@ def process_text_file(kb: KnowledgeBase, sourcefile: str, splitter: Any,
       continue
 
     # BM25 tokenization (if hybrid search is enabled)
-    bm25_tokens = ""
+    bm25_tokens = ''
     doc_length = 0
     keyphrase_processed = 0
 
     if getattr(kb, 'enable_hybrid_search', False):
       from utils.text_utils import tokenize_for_bm25
+
       try:
         bm25_tokens, doc_length = tokenize_for_bm25(chunk, language)
         keyphrase_processed = 1 if bm25_tokens else 0
       except (ValueError, TypeError, AttributeError) as e:
         if logger:
-          logger.warning(f"BM25 tokenization failed for chunk: {e}")
-        bm25_tokens = ""
+          logger.warning(f'BM25 tokenization failed for chunk: {e}')
+        bm25_tokens = ''
         doc_length = 0
         keyphrase_processed = 0
 
@@ -677,22 +655,25 @@ def process_text_file(kb: KnowledgeBase, sourcefile: str, splitter: Any,
       metadata_str = json.dumps(metadata)
     except (TypeError, ValueError) as e:
       if logger:
-        logger.warning(f"Could not serialize metadata to JSON: {e}")
-      metadata_str = "{}"
+        logger.warning(f'Could not serialize metadata to JSON: {e}')
+      metadata_str = '{}'
 
-    # Add chunk with metadata and BM25 data
-    kb.sql_cursor.execute(
-      "INSERT INTO docs (sid, sourcedoc, originaltext, embedtext, embedded, language, metadata, bm25_tokens, doc_length, keyphrase_processed) VALUES (?,?,?,?,?,?,?,?,?,?)",
-      (sid, sourcedoc_value, chunk, clean_chunk, 0, language, metadata_str, bm25_tokens, doc_length, keyphrase_processed))
-
-    # Commit periodically (configurable frequency)
-    commit_frequency = getattr(kb, 'commit_frequency', 1000)
-    if sid % commit_frequency == 0:
-      kb.sql_connection.commit()
-
+    batch.append(
+      (sid, sourcedoc_value, chunk, clean_chunk, 0, language, metadata_str, bm25_tokens, doc_length, keyphrase_processed)
+    )
     sid += 1
 
-  kb.sql_connection.commit()
+    # Flush batch at commit_frequency
+    if len(batch) >= commit_frequency:
+      kb.sql_cursor.executemany(insert_sql, batch)
+      kb.sql_connection.commit()
+      batch.clear()
+
+  # Flush remaining
+  if batch:
+    kb.sql_cursor.executemany(insert_sql, batch)
+    kb.sql_connection.commit()
   return True
 
-#fin
+
+# fin

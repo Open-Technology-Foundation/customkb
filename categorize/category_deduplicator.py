@@ -1,9 +1,18 @@
 #!/usr/bin/env python3
-"""
-Category Deduplication Module
-Merges similar categories using fuzzy string matching
-"""
+"""Category deduplication for CustomKB categorization.
 
+Merges similar category names (e.g. "Machine Learning" and
+"machine-learning") using multiple *rapidfuzz* similarity metrics
+(ratio, partial ratio, token sort, token set).  Groups are identified
+automatically above a configurable threshold, and a primary (shortest)
+name is kept for each group.
+
+Typical usage::
+
+    dedup = CategoryDeduplicator(similarity_threshold=85.0)
+    groups = dedup.find_duplicates(category_list)
+    cleaned = dedup.apply_to_results(category_list)
+"""
 
 import logging
 from dataclasses import dataclass
@@ -12,19 +21,20 @@ from rapidfuzz import fuzz
 
 logger = logging.getLogger(__name__)
 
+
 @dataclass
 class CategoryMergeGroup:
   """Represents a group of similar categories that should be merged"""
+
   primary: str  # The category name to keep
   aliases: set[str]  # Similar category names to merge
   similarity_scores: dict[str, float]  # Similarity scores for each alias
 
+
 class CategoryDeduplicator:
   """Handles deduplication of similar category names"""
 
-  def __init__(self, similarity_threshold: float = 85.0,
-               case_sensitive: bool = False,
-               ignore_words: set[str] | None = None):
+  def __init__(self, similarity_threshold: float = 85.0, case_sensitive: bool = False, ignore_words: set[str] | None = None):
     """
     Initialize the deduplicator.
 
@@ -39,7 +49,18 @@ class CategoryDeduplicator:
     self.merge_groups: list[CategoryMergeGroup] = []
 
   def _normalize_category(self, category: str) -> str:
-    """Normalize category name for comparison"""
+    """Normalize a category name for fuzzy comparison.
+
+    Applies case folding (unless ``case_sensitive`` is set) and removes
+    common stop words configured in ``self.ignore_words``.
+
+    Args:
+        category: Raw category name to normalize.
+
+    Returns:
+        Lowercased, stop-word-filtered string. If filtering would
+        produce an empty string, the lowercased original is returned.
+    """
     normalized = category
 
     if not self.case_sensitive:
@@ -77,14 +98,10 @@ class CategoryDeduplicator:
 
       # Normalize for comparison
       norm_cat1 = self._normalize_category(cat1)
-      merge_group = CategoryMergeGroup(
-        primary=cat1,
-        aliases=set(),
-        similarity_scores={}
-      )
+      merge_group = CategoryMergeGroup(primary=cat1, aliases=set(), similarity_scores={})
 
       # Find similar categories
-      for cat2 in sorted_categories[i+1:]:
+      for cat2 in sorted_categories[i + 1 :]:
         if cat2 in processed:
           continue
 
@@ -182,10 +199,10 @@ class CategoryDeduplicator:
   def get_merge_report(self) -> str:
     """Generate a human-readable report of the merge groups"""
     if not self.merge_groups:
-      return "No duplicate categories found."
+      return 'No duplicate categories found.'
 
-    report = f"Found {len(self.merge_groups)} groups of similar categories:\n"
-    report += "-" * 50 + "\n"
+    report = f'Found {len(self.merge_groups)} groups of similar categories:\n'
+    report += '-' * 50 + '\n'
 
     for i, group in enumerate(self.merge_groups, 1):
       report += f"\nGroup {i}: '{group.primary}' (primary)\n"
@@ -195,8 +212,9 @@ class CategoryDeduplicator:
 
     return report
 
-  def suggest_manual_review(self, categories: list[str],
-                          threshold_range: tuple[float, float] = (70.0, 85.0)) -> list[tuple[str, str, float]]:
+  def suggest_manual_review(
+    self, categories: list[str], threshold_range: tuple[float, float] = (70.0, 85.0)
+  ) -> list[tuple[str, str, float]]:
     """
     Find category pairs that might be duplicates but fall below auto-merge threshold.
 
@@ -213,7 +231,7 @@ class CategoryDeduplicator:
     for i, cat1 in enumerate(categories):
       norm_cat1 = self._normalize_category(cat1)
 
-      for cat2 in categories[i+1:]:
+      for cat2 in categories[i + 1 :]:
         norm_cat2 = self._normalize_category(cat2)
 
         # Calculate similarity
@@ -233,9 +251,10 @@ class CategoryDeduplicator:
 
     return suggestions
 
-def deduplicate_categories(categories: list[str],
-                          similarity_threshold: float = 85.0,
-                          verbose: bool = False) -> tuple[list[str], str | None]:
+
+def deduplicate_categories(
+  categories: list[str], similarity_threshold: float = 85.0, verbose: bool = False
+) -> tuple[list[str], str | None]:
   """
   Convenience function to deduplicate a list of categories.
 
@@ -255,4 +274,5 @@ def deduplicate_categories(categories: list[str],
 
   return deduplicated, report
 
-#fin
+
+# fin

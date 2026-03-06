@@ -15,10 +15,12 @@ import pytest
 class TestEndToEndWorkflow:
   """Test complete end-to-end CustomKB workflows."""
 
-  def test_complete_workflow_database_to_query(self, temp_data_manager, sample_texts, mock_openai_client, mock_anthropic_client, mock_faiss_index, monkeypatch):
+  def test_complete_workflow_database_to_query(
+    self, temp_data_manager, sample_texts, mock_openai_client, mock_anthropic_client, mock_faiss_index, monkeypatch
+  ):
     """Test complete workflow: database → embed → query."""
     # Create test environment with proper KB directory structure
-    kb_name = "test_kb"
+    kb_name = 'test_kb'
 
     # Create configuration content
     config_content = """[DEFAULT]
@@ -44,7 +46,7 @@ query_role = You are a helpful assistant.
     # Create test documents
     test_files = []
     for i, text in enumerate(sample_texts[:3]):
-      file_path = os.path.join(kb_dir, f"doc_{i}.txt")
+      file_path = os.path.join(kb_dir, f'doc_{i}.txt')
       with open(file_path, 'w') as f:
         f.write(text)
       test_files.append(file_path)
@@ -69,10 +71,10 @@ query_role = You are a helpful assistant.
     with patch('builtins.input', return_value='y'):  # Auto-confirm DB creation
       db_result = process_database(db_args, mock_logger)
 
-    assert "files added to database" in db_result
+    assert 'files added to database' in db_result
 
     # Verify database was created
-    db_path = os.path.join(kb_dir, f"{kb_name}.db")
+    db_path = os.path.join(kb_dir, f'{kb_name}.db')
     assert os.path.exists(db_path)
 
     # Step 2: Generate embeddings
@@ -82,19 +84,21 @@ query_role = You are a helpful assistant.
     embed_args.verbose = True
     embed_args.debug = False
 
-    with patch('embedding.embed_manager.get_optimal_faiss_index', return_value=mock_faiss_index), \
-         patch('embedding.embed_manager.get_cached_embedding', return_value=[0.1] * 1536), \
-         patch('asyncio.run', return_value={1, 2, 3}):
+    with (
+      patch('embedding.embed_manager.get_optimal_faiss_index', return_value=mock_faiss_index),
+      patch('embedding.embed_manager.get_cached_embedding', return_value=[0.1] * 1536),
+      patch('asyncio.run', return_value={1, 2, 3}),
+    ):
       embed_result = process_embeddings(embed_args, mock_logger)
 
-    assert "embeddings" in embed_result
-    assert "saved to" in embed_result
+    assert 'embeddings' in embed_result
+    assert 'saved to' in embed_result
 
     # Step 3: Query the knowledgebase
     query_args = Mock()
     query_args.config_file = kb_name  # Use KB name
-    query_args.query_text = "What is machine learning?"
-    query_args.query_file = ""
+    query_args.query_text = 'What is machine learning?'
+    query_args.query_file = ''
     query_args.context_only = False
     query_args.verbose = True
     query_args.debug = False
@@ -106,19 +110,24 @@ query_role = You are a helpful assistant.
     query_args.prompt_template = None
 
     import numpy as np
-    with patch('faiss.read_index', return_value=mock_faiss_index), \
-         patch('faiss.extract_index_ivf', side_effect=RuntimeError("not an IVF index")), \
-         patch('query.processing.get_query_embedding', return_value=np.array([[0.1] * 1536])), \
-         patch('query.llm.generate_ai_response', return_value="Mock AI response about machine learning"):
+
+    with (
+      patch('faiss.read_index', return_value=mock_faiss_index),
+      patch('faiss.extract_index_ivf', side_effect=RuntimeError('not an IVF index')),
+      patch('query.processing.get_query_embedding', return_value=np.array([[0.1] * 1536])),
+      patch('query.llm.generate_ai_response', return_value='Mock AI response about machine learning'),
+    ):
       query_result = process_query(query_args, mock_logger)
 
     assert isinstance(query_result, str)
     assert len(query_result) > 0
 
-  def test_workflow_with_context_only_query(self, temp_data_manager, sample_texts, mock_openai_client, mock_faiss_index, monkeypatch):
+  def test_workflow_with_context_only_query(
+    self, temp_data_manager, sample_texts, mock_openai_client, mock_faiss_index, monkeypatch
+  ):
     """Test workflow ending with context-only query."""
     # Set up test environment with proper KB structure
-    kb_name = "context_test_kb"
+    kb_name = 'context_test_kb'
 
     config_content = """[DEFAULT]
 vector_model = text-embedding-3-small
@@ -131,7 +140,7 @@ query_model = gpt-4o
     monkeypatch.setattr('config.config_manager.VECTORDBS', temp_vectordbs)
 
     # Create single test file
-    test_file = os.path.join(kb_dir, "test.txt")
+    test_file = os.path.join(kb_dir, 'test.txt')
     with open(test_file, 'w') as f:
       f.write(sample_texts[0])
 
@@ -161,16 +170,18 @@ query_model = gpt-4o
     embed_args.verbose = True
     embed_args.debug = False
 
-    with patch('embedding.embed_manager.get_optimal_faiss_index', return_value=mock_faiss_index), \
-         patch('embedding.embed_manager.get_cached_embedding', return_value=[0.1] * 1536), \
-         patch('asyncio.run', return_value={1}):
+    with (
+      patch('embedding.embed_manager.get_optimal_faiss_index', return_value=mock_faiss_index),
+      patch('embedding.embed_manager.get_cached_embedding', return_value=[0.1] * 1536),
+      patch('asyncio.run', return_value={1}),
+    ):
       process_embeddings(embed_args, mock_logger)
 
     # Context-only query step
     query_args = Mock()
     query_args.config_file = kb_name  # Use KB name
-    query_args.query_text = "Test query"
-    query_args.query_file = ""
+    query_args.query_text = 'Test query'
+    query_args.query_file = ''
     query_args.context_only = True  # Context only
     query_args.verbose = True
     query_args.debug = False
@@ -182,18 +193,23 @@ query_model = gpt-4o
     query_args.prompt_template = None
 
     import numpy as np
-    with patch('faiss.read_index', return_value=mock_faiss_index), \
-         patch('faiss.extract_index_ivf', side_effect=RuntimeError("not an IVF index")), \
-         patch('query.processing.get_query_embedding', return_value=np.array([[0.1] * 1536])):
+
+    with (
+      patch('faiss.read_index', return_value=mock_faiss_index),
+      patch('faiss.extract_index_ivf', side_effect=RuntimeError('not an IVF index')),
+      patch('query.processing.get_query_embedding', return_value=np.array([[0.1] * 1536])),
+    ):
       result = process_query(query_args, mock_logger)
 
     assert isinstance(result, str)
     # Should contain context or results (may return "No relevant results" with mock data)
     assert len(result) > 0
 
-  def test_workflow_with_force_reprocessing(self, temp_data_manager, sample_texts, mock_openai_client, mock_faiss_index, monkeypatch):
+  def test_workflow_with_force_reprocessing(
+    self, temp_data_manager, sample_texts, mock_openai_client, mock_faiss_index, monkeypatch
+  ):
     """Test workflow with force reprocessing of existing data."""
-    kb_name = "force_test_kb"
+    kb_name = 'force_test_kb'
 
     config_content = """[DEFAULT]
 vector_model = text-embedding-3-small
@@ -204,7 +220,7 @@ vector_dimensions = 1536
     temp_vectordbs, kb_dir, config_file = temp_data_manager.create_kb_directory(kb_name, config_content)
     monkeypatch.setattr('config.config_manager.VECTORDBS', temp_vectordbs)
 
-    test_file = os.path.join(kb_dir, "test.txt")
+    test_file = os.path.join(kb_dir, 'test.txt')
     with open(test_file, 'w') as f:
       f.write(sample_texts[0])
 
@@ -224,20 +240,20 @@ vector_dimensions = 1536
     with patch('builtins.input', return_value='y'):
       first_result = process_database(db_args, mock_logger)
 
-    assert "files added" in first_result
+    assert 'files added' in first_result
 
     # Second processing without force (should skip)
     second_result = process_database(db_args, mock_logger)
-    assert "skipped" in second_result
+    assert 'skipped' in second_result
 
     # Third processing with force (should reprocess)
     db_args.force = True
     third_result = process_database(db_args, mock_logger)
-    assert "files added" in third_result
+    assert 'files added' in third_result
 
   def test_workflow_with_multiple_file_types(self, temp_data_manager, mock_openai_client, mock_faiss_index, monkeypatch):
     """Test workflow with multiple file types (markdown, text, etc.)."""
-    kb_name = "multifile_kb"
+    kb_name = 'multifile_kb'
 
     config_content = """[DEFAULT]
 vector_model = text-embedding-3-small
@@ -252,21 +268,21 @@ vector_dimensions = 1536
     test_files = []
 
     # Markdown file
-    md_file = os.path.join(kb_dir, "readme.md")
+    md_file = os.path.join(kb_dir, 'readme.md')
     with open(md_file, 'w') as f:
-      f.write("# Test Document\n\nThis is a markdown document with **bold** text.")
+      f.write('# Test Document\n\nThis is a markdown document with **bold** text.')
     test_files.append(md_file)
 
     # Python file
-    py_file = os.path.join(kb_dir, "script.py")
+    py_file = os.path.join(kb_dir, 'script.py')
     with open(py_file, 'w') as f:
       f.write("def hello_world():\n    print('Hello, World!')\n    return True")
     test_files.append(py_file)
 
     # Text file
-    txt_file = os.path.join(kb_dir, "notes.txt")
+    txt_file = os.path.join(kb_dir, 'notes.txt')
     with open(txt_file, 'w') as f:
-      f.write("These are some plain text notes about the project.")
+      f.write('These are some plain text notes about the project.')
     test_files.append(txt_file)
 
     from database.db_manager import process_database
@@ -285,26 +301,27 @@ vector_dimensions = 1536
     with patch('builtins.input', return_value='y'):
       result = process_database(db_args, mock_logger)
 
-    assert "3 files added" in result
+    assert '3 files added' in result
 
     # Verify different file types were processed
     import sqlite3
-    db_path = os.path.join(kb_dir, f"{kb_name}.db")
+
+    db_path = os.path.join(kb_dir, f'{kb_name}.db')
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
-    cursor.execute("SELECT DISTINCT sourcedoc FROM docs")
+    cursor.execute('SELECT DISTINCT sourcedoc FROM docs')
     sources = [row[0] for row in cursor.fetchall()]
     conn.close()
 
     # sourcedoc stores full absolute paths
     source_basenames = [os.path.basename(s) for s in sources]
-    assert "readme.md" in source_basenames
-    assert "script.py" in source_basenames
-    assert "notes.txt" in source_basenames
+    assert 'readme.md' in source_basenames
+    assert 'script.py' in source_basenames
+    assert 'notes.txt' in source_basenames
 
   def test_workflow_error_recovery(self, temp_data_manager, sample_texts, monkeypatch):
     """Test workflow error recovery scenarios."""
-    kb_name = "error_test_kb"
+    kb_name = 'error_test_kb'
 
     config_content = """[DEFAULT]
 vector_model = text-embedding-3-small
@@ -317,7 +334,7 @@ vector_dimensions = 1536
     # Monkeypatch VECTORDBS to use temp directory
     monkeypatch.setattr('config.config_manager.VECTORDBS', temp_vectordbs)
 
-    test_file = os.path.join(kb_dir, "test.txt")
+    test_file = os.path.join(kb_dir, 'test.txt')
     with open(test_file, 'w') as f:
       f.write(sample_texts[0])
 
@@ -329,7 +346,7 @@ vector_dimensions = 1536
     # Test database processing with missing file
     db_args = Mock()
     db_args.config_file = kb_name  # Use KB name instead of full path
-    db_args.files = [test_file, "/nonexistent/file.txt"]
+    db_args.files = [test_file, '/nonexistent/file.txt']
     db_args.language = 'en'
     db_args.force = False
     db_args.verbose = True
@@ -349,9 +366,11 @@ vector_dimensions = 1536
     embed_args.verbose = True
     embed_args.debug = False
 
-    with patch('embedding.embed_manager.get_optimal_faiss_index') as mock_index, \
-         patch('embedding.embed_manager.get_cached_embedding', return_value=[0.1] * 1536), \
-         patch('asyncio.run', return_value={1}):
+    with (
+      patch('embedding.embed_manager.get_optimal_faiss_index') as mock_index,
+      patch('embedding.embed_manager.get_cached_embedding', return_value=[0.1] * 1536),
+      patch('asyncio.run', return_value={1}),
+    ):
       mock_index.return_value = Mock()
       result = process_embeddings(embed_args, mock_logger)
 
@@ -368,7 +387,7 @@ class TestCLIIntegration:
     from customkb import customkb_usage
 
     help_text = customkb_usage()
-    assert "CustomKB" in help_text
+    assert 'CustomKB' in help_text
     # Note: __main__.__doc__ may differ in test context vs CLI invocation
 
   def test_cli_version_command(self):
@@ -400,9 +419,9 @@ class TestCLIIntegration:
 
   def test_cli_config_file_resolution(self, temp_data_manager, monkeypatch):
     """Test CLI configuration file resolution."""
-    kb_name = "test"
+    kb_name = 'test'
 
-    config_content = "[DEFAULT]\nvector_model = test\n"
+    config_content = '[DEFAULT]\nvector_model = test\n'
 
     # Create properly structured KB directory
     temp_vectordbs, kb_dir, config_file = temp_data_manager.create_kb_directory(kb_name, config_content)
@@ -437,7 +456,7 @@ class TestRealDataIntegration:
     wayang_db = os.path.join(wayang_dir, 'wayang.net.db')
 
     if not os.path.exists(wayang_config) or not os.path.exists(wayang_db):
-      pytest.skip("wayang.net dataset not available")
+      pytest.skip('wayang.net dataset not available')
 
     from query.query_manager import process_query
 
@@ -446,14 +465,16 @@ class TestRealDataIntegration:
     # Test query against real data
     query_args = Mock()
     query_args.config_file = wayang_config
-    query_args.query_text = "What is Wayang?"
-    query_args.query_file = ""
+    query_args.query_text = 'What is Wayang?'
+    query_args.query_file = ''
     query_args.context_only = True  # Context only to avoid API calls
     query_args.verbose = True
     query_args.debug = False
 
-    with patch('faiss.read_index', return_value=mock_faiss_index), \
-         patch('query.processing.get_query_embedding') as mock_embedding:
+    with (
+      patch('faiss.read_index', return_value=mock_faiss_index),
+      patch('query.processing.get_query_embedding') as mock_embedding,
+    ):
       mock_embedding.return_value = np.array([[0.1] * 1536])
 
       result = process_query(query_args, mock_logger)
@@ -471,7 +492,7 @@ class TestRealDataIntegration:
     wayang_db = os.path.join(vectordbs, 'wayang.net', 'wayang.net.db')
 
     if not os.path.exists(wayang_db):
-      pytest.skip("wayang.net database not available")
+      pytest.skip('wayang.net database not available')
 
     conn = sqlite3.connect(wayang_db)
     cursor = conn.cursor()
@@ -481,7 +502,7 @@ class TestRealDataIntegration:
     assert cursor.fetchone() is not None
 
     # Check table structure
-    cursor.execute("PRAGMA table_info(docs)")
+    cursor.execute('PRAGMA table_info(docs)')
     columns = cursor.fetchall()
     column_names = [col[1] for col in columns]
 
@@ -490,7 +511,7 @@ class TestRealDataIntegration:
       assert col in column_names
 
     # Check data exists
-    cursor.execute("SELECT COUNT(*) FROM docs")
+    cursor.execute('SELECT COUNT(*) FROM docs')
     count = cursor.fetchone()[0]
     assert count > 0
 
@@ -501,9 +522,11 @@ class TestRealDataIntegration:
 class TestFullPathIntegration:
   """Test full path storage integration across components."""
 
-  def test_duplicate_filenames_workflow(self, temp_data_manager, sample_texts, mock_openai_client, mock_faiss_index, monkeypatch):
+  def test_duplicate_filenames_workflow(
+    self, temp_data_manager, sample_texts, mock_openai_client, mock_faiss_index, monkeypatch
+  ):
     """Test complete workflow with duplicate filenames in different directories."""
-    kb_name = "fullpath_test"
+    kb_name = 'fullpath_test'
 
     config_content = """[DEFAULT]
 vector_model = text-embedding-3-small
@@ -523,14 +546,14 @@ query_top_k = 10
     monkeypatch.setattr('config.config_manager.VECTORDBS', temp_vectordbs)
 
     # Create duplicate filenames in different directories
-    dir1 = os.path.join(kb_dir, "module1")
-    dir2 = os.path.join(kb_dir, "module2")
+    dir1 = os.path.join(kb_dir, 'module1')
+    dir2 = os.path.join(kb_dir, 'module2')
     os.makedirs(dir1)
     os.makedirs(dir2)
 
     # Same filename, different content
-    config1 = os.path.join(dir1, "config.py")
-    config2 = os.path.join(dir2, "config.py")
+    config1 = os.path.join(dir1, 'config.py')
+    config2 = os.path.join(dir2, 'config.py')
 
     with open(config1, 'w') as f:
       f.write("# Module 1 Configuration\nDATABASE_URL = 'postgresql://localhost/module1'\nDEBUG = True")
@@ -557,7 +580,7 @@ query_top_k = 10
     with patch('builtins.input', return_value='y'):
       result = process_database(db_args, mock_logger)
 
-    assert "2 files added" in result
+    assert '2 files added' in result
 
     # Create embeddings
     embed_args = Mock()
@@ -566,19 +589,17 @@ query_top_k = 10
     embed_args.verbose = True
     embed_args.debug = False
 
-    mock_openai_client.embeddings.create.return_value = Mock(
-      data=[Mock(embedding=[0.1 + i*0.01] * 1536) for i in range(2)]
-    )
+    mock_openai_client.embeddings.create.return_value = Mock(data=[Mock(embedding=[0.1 + i * 0.01] * 1536) for i in range(2)])
 
     with patch('asyncio.run', return_value={1, 2}):
       embed_result = process_embeddings(embed_args, mock_logger)
 
-    assert "2 chunks embedded" in embed_result
+    assert '2 chunks embedded' in embed_result
 
     # Query for module1
     query_args = Mock()
     query_args.config_file = kb_name  # Use KB name instead of full path
-    query_args.query_text = "postgresql module1"
+    query_args.query_text = 'postgresql module1'
     query_args.context_only = True
     query_args.query_file = ''
     query_args.role = ''
@@ -594,22 +615,22 @@ query_top_k = 10
       result = process_query(query_args, mock_logger)
 
     # Should find module1 config
-    assert "module1" in result
-    assert "postgresql" in result.lower()
+    assert 'module1' in result
+    assert 'postgresql' in result.lower()
 
     # Query for module2
-    query_args.query_text = "mysql module2"
+    query_args.query_text = 'mysql module2'
 
     with patch('query.processing.get_query_embedding', return_value=np.array([[0.19] * 1536])):
       result = process_query(query_args, mock_logger)
 
     # Should find module2 config
-    assert "module2" in result
-    assert "mysql" in result.lower()
+    assert 'module2' in result
+    assert 'mysql' in result.lower()
 
   def test_path_display_in_query_results(self, temp_data_manager, mock_openai_client, mock_faiss_index, monkeypatch):
     """Test that paths are displayed correctly in query results."""
-    kb_name = "path_display_test"
+    kb_name = 'path_display_test'
 
     config_content = """[DEFAULT]
 vector_model = text-embedding-3-small
@@ -624,12 +645,12 @@ query_model = gpt-4o
     monkeypatch.setattr('config.config_manager.VECTORDBS', temp_vectordbs)
 
     # Create deeply nested file
-    deep_dir = os.path.join(kb_dir, "src", "components", "ui", "widgets", "forms")
+    deep_dir = os.path.join(kb_dir, 'src', 'components', 'ui', 'widgets', 'forms')
     os.makedirs(deep_dir)
 
-    deep_file = os.path.join(deep_dir, "validation.js")
+    deep_file = os.path.join(deep_dir, 'validation.js')
     with open(deep_file, 'w') as f:
-      f.write("// Form validation utilities\nfunction validateEmail(email) { return /^[^@]+@[^@]+\\.[^@]+$/.test(email); }")
+      f.write('// Form validation utilities\nfunction validateEmail(email) { return /^[^@]+@[^@]+\\.[^@]+$/.test(email); }')
 
     # Process and query
     from database.db_manager import process_database
@@ -657,9 +678,7 @@ query_model = gpt-4o
     embed_args.verbose = True
     embed_args.debug = False
 
-    mock_openai_client.embeddings.create.return_value = Mock(
-      data=[Mock(embedding=[0.15] * 1536)]
-    )
+    mock_openai_client.embeddings.create.return_value = Mock(data=[Mock(embedding=[0.15] * 1536)])
 
     with patch('asyncio.run', return_value={1}):
       process_embeddings(embed_args, mock_logger)
@@ -667,7 +686,7 @@ query_model = gpt-4o
     # Query
     query_args = Mock()
     query_args.config_file = kb_name  # Use KB name instead of full path
-    query_args.query_text = "email validation"
+    query_args.query_text = 'email validation'
     query_args.context_only = True
     query_args.query_file = ''
     query_args.role = ''
@@ -683,7 +702,7 @@ query_model = gpt-4o
       result = process_query(query_args, mock_logger)
 
     # Check for truncated path display
-    assert ".../widgets/forms/validation.js" in result or "validation.js" in result
+    assert '.../widgets/forms/validation.js' in result or 'validation.js' in result
     # Should not show the full absolute path in display
     assert kb_dir not in result  # Full path should be truncated
 
@@ -694,7 +713,7 @@ class TestConfigurationIntegration:
 
   def test_environment_variable_override_integration(self, temp_data_manager, sample_texts, monkeypatch):
     """Test that environment variables properly override config values across components."""
-    kb_name = "env_test"
+    kb_name = 'env_test'
 
     # Create config with default values
     config_content = """[DEFAULT]
@@ -713,7 +732,7 @@ query_temperature = 0.1
       'VECTOR_MODEL': 'text-embedding-ada-002',
       'VECTOR_DIMENSIONS': '1024',
       'QUERY_MODEL': 'gpt-3.5-turbo',
-      'QUERY_TEMPERATURE': '0.5'
+      'QUERY_TEMPERATURE': '0.5',
     }
 
     from config.config_manager import KnowledgeBase
@@ -729,7 +748,7 @@ query_temperature = 0.1
 
   def test_domain_style_configuration(self, temp_data_manager, monkeypatch):
     """Test domain-style configuration naming."""
-    kb_name = "example.com"
+    kb_name = 'example.com'
 
     config_content = """[DEFAULT]
 vector_model = text-embedding-3-large
@@ -743,28 +762,23 @@ vector_dimensions = 3072
     from config.config_manager import KnowledgeBase, get_fq_cfg_filename
 
     # Test domain-style resolution (VECTORDBS already monkeypatched)
-    resolved_path = get_fq_cfg_filename("example.com")
+    resolved_path = get_fq_cfg_filename('example.com')
     assert resolved_path == domain_config
 
     # Test KnowledgeBase with domain-style name
-    kb = KnowledgeBase("example.com")  # Use KB name
-    assert kb.knowledge_base_name == "example.com"
-    assert kb.knowledge_base_db.endswith("example.com.db")
-    assert kb.knowledge_base_vector.endswith("example.com.faiss")
+    kb = KnowledgeBase('example.com')  # Use KB name
+    assert kb.knowledge_base_name == 'example.com'
+    assert kb.knowledge_base_db.endswith('example.com.db')
+    assert kb.knowledge_base_vector.endswith('example.com.faiss')
 
   def test_models_json_integration(self, temp_data_manager):
     """Test Models.json integration with configuration."""
     # Create temporary Models.json
     models_data = {
-      "custom-embedding": {
-        "model": "text-embedding-custom",
-        "alias": "custom",
-        "provider": "openai",
-        "dimensions": 2048
-      }
+      'custom-embedding': {'model': 'text-embedding-custom', 'alias': 'custom', 'provider': 'openai', 'dimensions': 2048}
     }
 
-    models_file = os.path.join(temp_data_manager.create_temp_dir(), "Models.json")
+    models_file = os.path.join(temp_data_manager.create_temp_dir(), 'Models.json')
     with open(models_file, 'w') as f:
       json.dump(models_data, f)
 
@@ -772,13 +786,13 @@ vector_dimensions = 3072
 
     with patch('models.model_manager.models_file', models_file):
       # Test alias resolution
-      result = get_canonical_model("custom")
-      assert result["model"] == "text-embedding-custom"
-      assert result["dimensions"] == 2048
+      result = get_canonical_model('custom')
+      assert result['model'] == 'text-embedding-custom'
+      assert result['dimensions'] == 2048
 
       # Test partial match (substring of key "custom-embedding")
-      result = get_canonical_model("custom-embed")
-      assert result["model"] == "text-embedding-custom"
+      result = get_canonical_model('custom-embed')
+      assert result['model'] == 'text-embedding-custom'
 
 
 @pytest.mark.integration
@@ -813,7 +827,7 @@ query_model = claude-3-5-sonnet-20241022
 
   def test_case_2_kb_name_searches_vectordbs(self, temp_data_manager, monkeypatch):
     """Test Case 2: customkb query kbname 'query'"""
-    kb_name = "searchproject"
+    kb_name = 'searchproject'
 
     config_content = """[DEFAULT]
 vector_model = text-embedding-3-small
@@ -961,4 +975,5 @@ query_model = claude-3-5-sonnet-20241022
     finally:
       os.chdir(old_cwd)
 
-#fin
+
+# fin

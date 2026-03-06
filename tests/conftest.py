@@ -16,6 +16,16 @@ from unittest.mock import AsyncMock, Mock, patch
 import psutil
 import pytest
 
+# FAISS availability check for conditional test skipping
+try:
+  import faiss  # noqa: F401
+
+  HAS_FAISS = True
+except ImportError:
+  HAS_FAISS = False
+
+requires_faiss = pytest.mark.skipif(not HAS_FAISS, reason='FAISS not installed')
+
 # Add project root to Python path for imports
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
@@ -24,8 +34,8 @@ from tests.fixtures.mock_data import MockDataGenerator, TestDataManager
 from utils.resource_manager import ResourceGuard, cleanup_caches
 
 # Test KB constants
-TEST_VECTORDBS = Path(__file__).parent / "vectordbs"
-TEST_KB_NAME = "appliedanthropology"
+TEST_VECTORDBS = Path(__file__).parent / 'vectordbs'
+TEST_KB_NAME = 'appliedanthropology'
 
 
 @pytest.fixture
@@ -50,7 +60,7 @@ def mock_db_connection():
   return conn, cursor
 
 
-@pytest.fixture(scope="session", autouse=True)
+@pytest.fixture(scope='session', autouse=True)
 def session_resource_guard():
   """
   Session-level resource guard to monitor memory usage across all tests.
@@ -59,12 +69,12 @@ def session_resource_guard():
   guard = ResourceGuard(memory_limit_gb=2.0)
 
   # Register cleanup handlers
-  guard.register_cleanup("caches", cleanup_caches)
-  guard.register_cleanup("gc", lambda: gc.collect())
+  guard.register_cleanup('caches', cleanup_caches)
+  guard.register_cleanup('gc', lambda: gc.collect())
 
   # Log initial state
   initial_memory = psutil.Process().memory_info().rss / 1024 / 1024
-  print(f"\nTest session starting. Initial memory: {initial_memory:.1f}MB")
+  print(f'\nTest session starting. Initial memory: {initial_memory:.1f}MB')
 
   yield guard
 
@@ -73,8 +83,7 @@ def session_resource_guard():
   gc.collect()
 
   final_memory = psutil.Process().memory_info().rss / 1024 / 1024
-  print(f"\nTest session ending. Final memory: {final_memory:.1f}MB "
-        f"(delta: {final_memory - initial_memory:+.1f}MB)")
+  print(f'\nTest session ending. Final memory: {final_memory:.1f}MB (delta: {final_memory - initial_memory:+.1f}MB)')
 
 
 @pytest.fixture(autouse=True)
@@ -90,6 +99,7 @@ def test_cleanup():
   # Clear any matplotlib figures
   try:
     import matplotlib.pyplot as plt
+
     plt.close('all')
   except ImportError:
     # matplotlib not installed, skip
@@ -105,6 +115,7 @@ def clear_module_caches():
   # Clear model_manager cache
   try:
     import models.model_manager as mm
+
     mm._models_cache = None
   except (ImportError, AttributeError):
     pass
@@ -112,6 +123,7 @@ def clear_module_caches():
   # Clear query_manager caches
   try:
     import query.query_manager as qm
+
     if hasattr(qm, '_query_cache'):
       qm._query_cache = {}
     if hasattr(qm, '_enhancement_cache'):
@@ -124,6 +136,7 @@ def clear_module_caches():
   # Clear embed_manager caches
   try:
     import embedding.embed_manager as em
+
     if hasattr(em, '_model_cache'):
       em._model_cache = {}
   except (ImportError, AttributeError):
@@ -132,6 +145,7 @@ def clear_module_caches():
   # Reset cache_manager to clean state
   try:
     from embedding.cache import cache_manager
+
     cache_manager.clear_cache()
     cache_manager.reset_metrics()
     # Reset configuration to defaults
@@ -146,20 +160,24 @@ def clear_module_caches():
   # Clear again after test
   try:
     import models.model_manager as mm
+
     mm._models_cache = None
   except (ImportError, AttributeError):
     pass
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope='session')
 def mock_env_vars():
   """Set up mock environment variables for testing."""
-  with patch.dict(os.environ, {
-    'OPENAI_API_KEY': 'sk-test' + 'x' * 40,  # Valid format but fake key
-    'ANTHROPIC_API_KEY': 'sk-ant-test' + 'x' * 90,  # Valid format but fake key
-    'VECTORDBS': tempfile.mkdtemp(prefix='test_vectordbs_'),
-    'NLTK_DATA': '/usr/share/nltk_data'  # Use actual NLTK data path
-  }):
+  with patch.dict(
+    os.environ,
+    {
+      'OPENAI_API_KEY': 'sk-test' + 'x' * 40,  # Valid format but fake key
+      'ANTHROPIC_API_KEY': 'sk-ant-test' + 'x' * 90,  # Valid format but fake key
+      'VECTORDBS': tempfile.mkdtemp(prefix='test_vectordbs_'),
+      'NLTK_DATA': '/usr/share/nltk_data',  # Use actual NLTK data path
+    },
+  ):
     yield
 
 
@@ -270,18 +288,13 @@ def temp_kb_setup(temp_data_manager, sample_config_content):
   os.makedirs(logs_dir)
 
   # Return KB info
-  return {
-    'kb_name': kb_name,
-    'kb_dir': kb_dir,
-    'config_path': config_path,
-    'vectordbs': temp_vectordbs
-  }
+  return {'kb_name': kb_name, 'kb_dir': kb_dir, 'config_path': config_path, 'vectordbs': temp_vectordbs}
 
 
 @pytest.fixture
 def temp_database(temp_kb_directory, sample_texts):
   """Create a temporary SQLite database with sample data (includes BM25 columns)."""
-  db_path = os.path.join(temp_kb_directory, "test_kb.db")
+  db_path = os.path.join(temp_kb_directory, 'test_kb.db')
 
   conn = None
   try:
@@ -289,7 +302,7 @@ def temp_database(temp_kb_directory, sample_texts):
     cursor = conn.cursor()
 
     # Create table with BM25 columns for backward compatibility
-    cursor.execute('''
+    cursor.execute("""
     CREATE TABLE docs (
       id INTEGER PRIMARY KEY,
       sid INTEGER,
@@ -303,7 +316,7 @@ def temp_database(temp_kb_directory, sample_texts):
       bm25_tokens TEXT,
       doc_length INTEGER DEFAULT 0
     )
-    ''')
+    """)
 
     # Insert sample data
     mock_gen = MockDataGenerator()
@@ -313,10 +326,10 @@ def temp_database(temp_kb_directory, sample_texts):
       # Extend row to include BM25 columns (empty by default)
       # Row format: (id, sid, sourcedoc, originaltext, embedtext, embedded, language, metadata)
       # Need to add: keyphrase_processed, bm25_tokens, doc_length
-      extended_row = row + (0, "", 0)  # keyphrase_processed, bm25_tokens, doc_length
+      extended_row = row + (0, '', 0)  # keyphrase_processed, bm25_tokens, doc_length
       cursor.execute(
-        "INSERT INTO docs (id, sid, sourcedoc, originaltext, embedtext, embedded, language, metadata, keyphrase_processed, bm25_tokens, doc_length) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
-        extended_row
+        'INSERT INTO docs (id, sid, sourcedoc, originaltext, embedtext, embedded, language, metadata, keyphrase_processed, bm25_tokens, doc_length) VALUES (?,?,?,?,?,?,?,?,?,?,?)',
+        extended_row,
       )
 
     conn.commit()
@@ -330,7 +343,7 @@ def temp_database(temp_kb_directory, sample_texts):
 @pytest.fixture
 def temp_legacy_database(temp_kb_directory, sample_texts):
   """Create a temporary SQLite database with legacy schema (no BM25 columns)."""
-  db_path = os.path.join(temp_kb_directory, "legacy_test_kb.db")
+  db_path = os.path.join(temp_kb_directory, 'legacy_test_kb.db')
 
   conn = None
   try:
@@ -338,7 +351,7 @@ def temp_legacy_database(temp_kb_directory, sample_texts):
     cursor = conn.cursor()
 
     # Create table with legacy schema
-    cursor.execute('''
+    cursor.execute("""
       CREATE TABLE docs (
         id INTEGER PRIMARY KEY,
         sid INTEGER,
@@ -350,7 +363,7 @@ def temp_legacy_database(temp_kb_directory, sample_texts):
         metadata TEXT,
         keyphrase_processed INTEGER default 0
       )
-    ''')
+    """)
 
     # Insert sample data
     mock_gen = MockDataGenerator()
@@ -358,8 +371,8 @@ def temp_legacy_database(temp_kb_directory, sample_texts):
 
     for row in rows:
       cursor.execute(
-        "INSERT INTO docs (id, sid, sourcedoc, originaltext, embedtext, embedded, language, metadata) VALUES (?,?,?,?,?,?,?,?)",
-        row
+        'INSERT INTO docs (id, sid, sourcedoc, originaltext, embedtext, embedded, language, metadata) VALUES (?,?,?,?,?,?,?,?)',
+        row,
       )
 
     conn.commit()
@@ -373,15 +386,13 @@ def temp_legacy_database(temp_kb_directory, sample_texts):
 @pytest.fixture
 def mock_openai_client():
   """Mock OpenAI client for testing."""
-  with patch('openai.OpenAI') as mock_client, \
-       patch('openai.AsyncOpenAI') as mock_async_client:
-
+  with patch('openai.OpenAI') as mock_client, patch('openai.AsyncOpenAI') as mock_async_client:
     # Set up mock responses
     mock_embedding_response = Mock()
     mock_embedding_response.data = [Mock(embedding=[0.1] * 1536)]
 
     mock_chat_response = Mock()
-    mock_chat_response.choices = [Mock(message=Mock(content="Test response"))]
+    mock_chat_response.choices = [Mock(message=Mock(content='Test response'))]
 
     # Configure sync client
     mock_client_instance = Mock()
@@ -395,21 +406,16 @@ def mock_openai_client():
     mock_async_client_instance.chat.completions.create = AsyncMock(return_value=mock_chat_response)
     mock_async_client.return_value = mock_async_client_instance
 
-    yield {
-      'sync': mock_client_instance,
-      'async': mock_async_client_instance
-    }
+    yield {'sync': mock_client_instance, 'async': mock_async_client_instance}
 
 
 @pytest.fixture
 def mock_anthropic_client():
   """Mock Anthropic client for testing."""
-  with patch('anthropic.Anthropic') as mock_client, \
-       patch('anthropic.AsyncAnthropic') as mock_async_client:
-
+  with patch('anthropic.Anthropic') as mock_client, patch('anthropic.AsyncAnthropic') as mock_async_client:
     # Set up mock response
     mock_message = Mock()
-    mock_message.content = [Mock(text="Test Anthropic response")]
+    mock_message.content = [Mock(text='Test Anthropic response')]
 
     # Configure sync client
     mock_client_instance = Mock()
@@ -421,26 +427,26 @@ def mock_anthropic_client():
     mock_async_client_instance.messages.create = AsyncMock(return_value=mock_message)
     mock_async_client.return_value = mock_async_client_instance
 
-    yield {
-      'sync': mock_client_instance,
-      'async': mock_async_client_instance
-    }
+    yield {'sync': mock_client_instance, 'async': mock_async_client_instance}
 
 
 @pytest.fixture
 def mock_faiss_index():
   """Mock FAISS index for testing."""
-  with patch('faiss.IndexFlatIP') as mock_index_class, \
-       patch('faiss.IndexIDMap') as mock_id_map, \
-       patch('faiss.read_index') as mock_read, \
-       patch('faiss.write_index'):
-
+  if not HAS_FAISS:
+    pytest.skip('FAISS not installed')
+  with (
+    patch('faiss.IndexFlatIP') as mock_index_class,
+    patch('faiss.IndexIDMap') as mock_id_map,
+    patch('faiss.read_index') as mock_read,
+    patch('faiss.write_index'),
+  ):
     # Create mock index
     mock_index = Mock()
     mock_index.ntotal = 5
     mock_index.search.return_value = (
       [[0.9, 0.8, 0.7, 0.6, 0.5]],  # distances
-      [[0, 1, 2, 3, 4]]               # indices
+      [[0, 1, 2, 3, 4]],  # indices
     )
     mock_index.add_with_ids = Mock()
 
@@ -454,9 +460,7 @@ def mock_faiss_index():
 @pytest.fixture
 def mock_nltk_data():
   """Mock NLTK data loading."""
-  with patch('nltk.data.find'), \
-       patch('nltk.download'), \
-       patch.dict('sys.modules', {'nltk.corpus.stopwords': Mock()}):
+  with patch('nltk.data.find'), patch('nltk.download'), patch.dict('sys.modules', {'nltk.corpus.stopwords': Mock()}):
     mock_stopwords_module = Mock()
     mock_stopwords_module.words.return_value = ['the', 'a', 'an', 'and', 'or', 'but']
 
@@ -584,10 +588,12 @@ def mock_kb(temp_data_manager):
   # Mock FAISS index
   kb.faiss_index = Mock()
   kb.faiss_index.ntotal = 0
-  kb.faiss_index.search = Mock(return_value=(
-    [[0.9, 0.8, 0.7]],  # distances
-    [[0, 1, 2]]          # indices
-  ))
+  kb.faiss_index.search = Mock(
+    return_value=(
+      [[0.9, 0.8, 0.7]],  # distances
+      [[0, 1, 2]],  # indices
+    )
+  )
   kb.faiss_index.add_with_ids = Mock()
   kb.faiss_index.reset = Mock()
 
@@ -607,8 +613,7 @@ def isolated_imports():
 
   # Remove any newly imported modules related to our project
   modules_to_remove = [
-    name for name in sys.modules
-    if name.startswith(('config.', 'database.', 'embedding.', 'query.', 'models.', 'utils.'))
+    name for name in sys.modules if name.startswith(('config.', 'database.', 'embedding.', 'query.', 'models.', 'utils.'))
   ]
 
   for module_name in modules_to_remove:
@@ -625,46 +630,31 @@ def setup_test_environment(mock_env_vars):
 # Test markers and configuration
 def pytest_configure(config):
   """Configure pytest with custom markers."""
-  config.addinivalue_line(
-    "markers", "unit: mark test as a unit test"
-  )
-  config.addinivalue_line(
-    "markers", "integration: mark test as an integration test"
-  )
-  config.addinivalue_line(
-    "markers", "slow: mark test as slow (takes >5 seconds)"
-  )
-  config.addinivalue_line(
-    "markers", "requires_api: mark test as requiring real API keys"
-  )
-  config.addinivalue_line(
-    "markers", "requires_data: mark test as requiring external test data"
-  )
-  config.addinivalue_line(
-    "markers", "performance: mark test as a performance test"
-  )
-  config.addinivalue_line(
-    "markers", "requires_test_kb: mark test as requiring the built test KB"
-  )
-  config.addinivalue_line(
-    "markers", "resource_intensive: mark test as needing high memory/CPU"
-  )
+  config.addinivalue_line('markers', 'unit: mark test as a unit test')
+  config.addinivalue_line('markers', 'integration: mark test as an integration test')
+  config.addinivalue_line('markers', 'slow: mark test as slow (takes >5 seconds)')
+  config.addinivalue_line('markers', 'requires_api: mark test as requiring real API keys')
+  config.addinivalue_line('markers', 'requires_data: mark test as requiring external test data')
+  config.addinivalue_line('markers', 'performance: mark test as a performance test')
+  config.addinivalue_line('markers', 'requires_test_kb: mark test as requiring the built test KB')
+  config.addinivalue_line('markers', 'resource_intensive: mark test as needing high memory/CPU')
+  config.addinivalue_line('markers', 'requires_faiss: mark test as requiring FAISS library')
 
 
 def pytest_collection_modifyitems(config, items):
   """Modify test collection to add markers based on path."""
   for item in items:
     # Add markers based on test path
-    if "unit" in item.nodeid:
+    if 'unit' in item.nodeid:
       item.add_marker(pytest.mark.unit)
-    elif "integration" in item.nodeid:
+    elif 'integration' in item.nodeid:
       item.add_marker(pytest.mark.integration)
-    elif "performance" in item.nodeid:
+    elif 'performance' in item.nodeid:
       item.add_marker(pytest.mark.slow)
       item.add_marker(pytest.mark.performance)
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope='session')
 def built_test_kb():
   """
   Session-scoped fixture that builds a complete test KB from source files.
@@ -679,7 +669,7 @@ def built_test_kb():
 
   kb_source = TEST_VECTORDBS / TEST_KB_NAME
   if not kb_source.exists():
-    pytest.skip(f"Test KB source not found: {kb_source}")
+    pytest.skip(f'Test KB source not found: {kb_source}')
 
   temp_dir = tempfile.mkdtemp(prefix='test_built_kb_')
   temp_vectordbs = Path(temp_dir)
@@ -699,9 +689,9 @@ def built_test_kb():
     build_logger.setLevel(logging.INFO)
 
     # Collect source files from staging.text
-    staging_dir = kb_dir / "staging.text"
-    source_files = sorted(str(p) for p in staging_dir.rglob("*") if p.is_file())
-    assert len(source_files) > 0, "No source files found in staging.text"
+    staging_dir = kb_dir / 'staging.text'
+    source_files = sorted(str(p) for p in staging_dir.rglob('*') if p.is_file())
+    assert len(source_files) > 0, 'No source files found in staging.text'
 
     # Step 1: Database import
     from database.db_manager import process_database
@@ -716,7 +706,7 @@ def built_test_kb():
 
     with patch('builtins.input', return_value='y'):
       db_result = process_database(db_args, build_logger)
-    assert "files added to database" in db_result, f"Database build failed: {db_result}"
+    assert 'files added to database' in db_result, f'Database build failed: {db_result}'
 
     # Step 2: Generate embeddings (all-minilm-l6-v2, local model)
     from embedding.embed_manager import process_embeddings
@@ -728,11 +718,12 @@ def built_test_kb():
     embed_args.debug = False
 
     embed_result = process_embeddings(embed_args, build_logger)
-    assert "saved to" in embed_result, f"Embedding build failed: {embed_result}"
+    assert 'saved to' in embed_result, f'Embedding build failed: {embed_result}'
 
     # Free GPU memory before citation step (Ollama needs the VRAM)
     try:
       from embedding.providers import EmbeddingProviderFactory, SentenceTransformerProvider
+
       # Clear cached providers (releases SentenceTransformer model references)
       for provider in EmbeddingProviderFactory._providers.values():
         if isinstance(provider, SentenceTransformerProvider) and provider._model is not None:
@@ -744,10 +735,11 @@ def built_test_kb():
     gc.collect()
     try:
       import torch
+
       if torch.cuda.is_available():
         torch.cuda.empty_cache()
         torch.cuda.synchronize()
-        build_logger.info("GPU memory cleared after embedding step")
+        build_logger.info('GPU memory cleared after embedding step')
     except ImportError:
       pass
 
@@ -756,12 +748,12 @@ def built_test_kb():
     from embedding.bm25_manager import build_bm25_index
 
     kb = KnowledgeBase(TEST_KB_NAME)
-    bm25_result = build_bm25_index(kb)
+    build_bm25_index(kb)
 
     # Step 4: Citation extraction via gen-citations.sh (Ollama gemma3:12b)
-    citations_db = kb_dir / "citations.db"
-    gen_citations_script = project_root / "utils" / "citations" / "gen-citations.sh"
-    append_citations_script = project_root / "utils" / "citations" / "append-citations.sh"
+    citations_db = kb_dir / 'citations.db'
+    gen_citations_script = project_root / 'utils' / 'citations' / 'gen-citations.sh'
+    append_citations_script = project_root / 'utils' / 'citations' / 'append-citations.sh'
 
     if gen_citations_script.exists():
       # Initialize the citations database first
@@ -785,34 +777,41 @@ def built_test_kb():
       gen_result = subprocess.run(
         [
           str(gen_citations_script),
-          "-m", "gemma3:12b",
-          "--sequential",
-          "-d", str(citations_db),
+          '-m',
+          'gemma3:12b',
+          '--sequential',
+          '-d',
+          str(citations_db),
           str(staging_dir),
         ],
-        capture_output=True, text=True, timeout=600,
+        capture_output=True,
+        text=True,
+        timeout=600,
         cwd=str(project_root),
       )
       if gen_result.returncode != 0:
-        build_logger.warning(f"gen-citations.sh failed (rc={gen_result.returncode}): {gen_result.stderr}")
+        build_logger.warning(f'gen-citations.sh failed (rc={gen_result.returncode}): {gen_result.stderr}')
 
       # Step 5: Apply citations via append-citations.sh
       if append_citations_script.exists() and citations_db.exists():
         append_result = subprocess.run(
           [
             str(append_citations_script),
-            "-d", str(citations_db),
-            "--no-backup",
+            '-d',
+            str(citations_db),
+            '--no-backup',
             str(staging_dir),
           ],
-          capture_output=True, text=True, timeout=120,
+          capture_output=True,
+          text=True,
+          timeout=120,
           cwd=str(project_root),
         )
         if append_result.returncode != 0:
-          build_logger.warning(f"append-citations.sh failed: {append_result.stderr}")
+          build_logger.warning(f'append-citations.sh failed: {append_result.stderr}')
 
-    db_path = kb_dir / f"{TEST_KB_NAME}.db"
-    faiss_path = kb_dir / f"{TEST_KB_NAME}.faiss"
+    db_path = kb_dir / f'{TEST_KB_NAME}.db'
+    faiss_path = kb_dir / f'{TEST_KB_NAME}.faiss'
 
     yield {
       'vectordbs': str(temp_vectordbs),
@@ -841,4 +840,5 @@ def test_kb(built_test_kb, monkeypatch):
   monkeypatch.setattr('config.config_manager.VECTORDBS', built_test_kb['vectordbs'])
   return built_test_kb
 
-#fin
+
+# fin

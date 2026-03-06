@@ -22,17 +22,17 @@ CustomKB uses FAISS (Facebook AI Similarity Search) for vector operations. The i
 
 **CPU-only systems:**
 ```bash
-pip install -r requirements-faiss-cpu.txt
+uv sync --extra faiss-cpu
 ```
 
 **GPU systems with CUDA 12.x (NVIDIA Driver >= R530):**
 ```bash
-pip install -r requirements-faiss-gpu-cu12.txt
+uv sync --extra faiss-gpu-cu12
 ```
 
 **GPU systems with CUDA 11.8 (NVIDIA Driver >= R520):**
 ```bash
-pip install -r requirements-faiss-gpu-cu11.txt
+uv sync --extra faiss-gpu-cu11
 ```
 
 ### Force Specific Variant

@@ -18,15 +18,15 @@ logger = get_logger(__name__)
 # Expected indexes for CustomKB databases
 # Note: Current implementation uses 'docs' table
 EXPECTED_INDEXES = [
-  'idx_embedded',
-  'idx_embedded_embedtext',
-  'idx_keyphrase_processed',
-  'idx_sourcedoc',
-  'idx_sourcedoc_sid',
-  'idx_id',  # Primary key index for fast ID lookups
-  'idx_language_embedded',  # Composite index for language-filtered queries
-  'idx_metadata',  # Index on JSON metadata field
-  'idx_sourcedoc_sid_covering'  # Covering index for context retrieval
+  'idx_embedded',  # Filter embedded vs non-embedded chunks
+  'idx_embedded_embedtext',  # Efficient lookup of embedded text for batch embedding
+  'idx_keyphrase_processed',  # Keyphrase-based search filtering
+  'idx_sourcedoc',  # Filter/group by source document path
+  'idx_sourcedoc_sid',  # Compound: source document + section ID ordering
+  'idx_id',  # Unique ID lookups (mirrors PK but explicit)
+  'idx_language_embedded',  # Composite: language-filtered embedding queries
+  'idx_metadata',  # JSON metadata field lookups
+  'idx_sourcedoc_sid_covering',  # Covering index: avoids table scan for context retrieval
 ]
 
 
@@ -60,30 +60,27 @@ def verify_indexes(db_path: str) -> dict[str, bool]:
   Returns:
       Dictionary mapping index names to their presence status
   """
-  logger.info(f"Verifying indexes in: {db_path}")
+  logger.info(f'Verifying indexes in: {db_path}')
 
   try:
     indexes = get_database_indexes(db_path)
 
     # Extract index names, excluding SQLite internal indexes
-    found_indexes = [
-      idx_name for idx_name, _ in indexes
-      if not idx_name.startswith('sqlite_')
-    ]
+    found_indexes = [idx_name for idx_name, _ in indexes if not idx_name.startswith('sqlite_')]
 
     # Check each expected index
     results = {}
     for expected in EXPECTED_INDEXES:
       results[expected] = expected in found_indexes
       if results[expected]:
-        logger.debug(f"Index {expected} is present")
+        logger.debug(f'Index {expected} is present')
       else:
-        logger.warning(f"Index {expected} is MISSING")
+        logger.warning(f'Index {expected} is MISSING')
 
     return results
 
   except (sqlite3.Error, AttributeError) as e:
-    logger.error(f"Error verifying indexes: {e}")
+    logger.error(f'Error verifying indexes: {e}')
     raise
 
 
@@ -118,38 +115,39 @@ def create_missing_indexes(db_path: str, dry_run: bool = False) -> list[str]:
   missing = [idx for idx, present in verification.items() if not present]
 
   if not missing:
-    logger.info("All indexes are present")
+    logger.info('All indexes are present')
     return []
 
-  logger.info(f"Found {len(missing)} missing indexes")
+  logger.info(f'Found {len(missing)} missing indexes')
 
   if dry_run:
-    logger.info("DRY RUN - Would create the following indexes:")
+    logger.info('DRY RUN - Would create the following indexes:')
     for idx in missing:
-      logger.info(f"  - {idx}")
+      logger.info(f'  - {idx}')
     return missing
 
   # Get the table name used in this database
   table_name = get_table_name(db_path)
-  logger.debug(f"Database uses table: {table_name}")
+  logger.debug(f'Database uses table: {table_name}')
 
   # Validate table name to prevent SQL injection
   if table_name not in ['docs', 'chunks']:
-    logger.error(f"Invalid table name for index creation: {table_name}")
+    logger.error(f'Invalid table name for index creation: {table_name}')
     return []
 
   # Check if we have keyphrase column (newer schema) or just keyphrase_processed (older schema)
   with sqlite_connection(db_path) as (conn, cursor):
     # PRAGMA is safe but we validate table_name anyway for consistency
     if table_name == 'docs':
-      cursor.execute("PRAGMA table_info(docs)")
+      cursor.execute('PRAGMA table_info(docs)')
     else:
-      cursor.execute("PRAGMA table_info(chunks)")
+      cursor.execute('PRAGMA table_info(chunks)')
     columns = [row[1] for row in cursor.fetchall()]
     has_keyphrase = 'keyphrase' in columns
     has_processed = 'processed' in columns
 
-  # Index creation SQL statements - using validated table name
+  # Build index creation SQL for the detected table name.
+  # Duplicated per table_name to avoid dynamic SQL with string interpolation.
   index_sql = {}
   if table_name == 'docs':
     index_sql = {
@@ -160,7 +158,7 @@ def create_missing_indexes(db_path: str, dry_run: bool = False) -> list[str]:
       'idx_id': 'CREATE UNIQUE INDEX idx_id ON docs(id)',
       'idx_language_embedded': 'CREATE INDEX idx_language_embedded ON docs(language, embedded)',
       'idx_metadata': 'CREATE INDEX idx_metadata ON docs(metadata)',
-      'idx_sourcedoc_sid_covering': 'CREATE INDEX idx_sourcedoc_sid_covering ON docs(sourcedoc, sid, id, originaltext, metadata)'
+      'idx_sourcedoc_sid_covering': 'CREATE INDEX idx_sourcedoc_sid_covering ON docs(sourcedoc, sid, id, originaltext, metadata)',
     }
   else:  # table_name == 'chunks'
     index_sql = {
@@ -171,10 +169,12 @@ def create_missing_indexes(db_path: str, dry_run: bool = False) -> list[str]:
       'idx_id': 'CREATE UNIQUE INDEX idx_id ON chunks(id)',
       'idx_language_embedded': 'CREATE INDEX idx_language_embedded ON chunks(language, embedded)',
       'idx_metadata': 'CREATE INDEX idx_metadata ON chunks(metadata)',
-      'idx_sourcedoc_sid_covering': 'CREATE INDEX idx_sourcedoc_sid_covering ON chunks(sourcedoc, sid, id, originaltext, metadata)'
+      'idx_sourcedoc_sid_covering': 'CREATE INDEX idx_sourcedoc_sid_covering ON chunks(sourcedoc, sid, id, originaltext, metadata)',
     }
 
-  # Add keyphrase index based on schema
+  # Add keyphrase index based on detected schema variant:
+  # newer schemas have separate keyphrase+processed columns;
+  # older schemas use a single keyphrase_processed column.
   if has_keyphrase and has_processed:
     # Newer schema with both columns
     if table_name == 'docs':
@@ -193,15 +193,15 @@ def create_missing_indexes(db_path: str, dry_run: bool = False) -> list[str]:
   with sqlite_connection(db_path) as (conn, cursor):
     for idx in missing:
       if idx in index_sql:
-        logger.info(f"Creating index: {idx}")
+        logger.info(f'Creating index: {idx}')
         try:
           cursor.execute(index_sql[idx])
           created.append(idx)
         except sqlite3.Error as e:
-          logger.error(f"Failed to create index {idx}: {e}")
+          logger.error(f'Failed to create index {idx}: {e}')
 
     conn.commit()
-    logger.info(f"Successfully created {len(created)} indexes")
+    logger.info(f'Successfully created {len(created)} indexes')
 
   return created
 
@@ -235,53 +235,50 @@ def process_verify_indexes(args, logger) -> str:
     db_path = kb.knowledge_base_db
 
     if not Path(db_path).exists():
-      return f"Error: Database not found at {db_path}"
+      return f'Error: Database not found at {db_path}'
 
     # Verify indexes
     verification = verify_indexes(db_path)
 
     # Build output
-    output = [f"Database: {db_path}", "", "Index verification:", "-" * 60]
+    output = [f'Database: {db_path}', '', 'Index verification:', '-' * 60]
 
     missing = []
     for idx, present in sorted(verification.items()):
       if present:
-        output.append(f"✓ {idx} - Present")
+        output.append(f'✓ {idx} - Present')
       else:
-        output.append(f"✗ {idx} - MISSING")
+        output.append(f'✗ {idx} - MISSING')
         missing.append(idx)
 
     if missing:
-      output.extend([
-        "",
-        f"⚠️  Missing {len(missing)} indexes: {', '.join(missing)}",
-        "",
-        "To create missing indexes, run:",
-        f"  customkb optimize {args.config_file}"
-      ])
+      output.extend(
+        [
+          '',
+          f'⚠️  Missing {len(missing)} indexes: {", ".join(missing)}',
+          '',
+          'To create missing indexes, run:',
+          f'  customkb optimize {args.config_file}',
+        ]
+      )
     else:
-      output.extend(["", "✅ All expected indexes are present!"])
+      output.extend(['', '✅ All expected indexes are present!'])
 
     # Check for any unexpected indexes
     all_indexes = get_database_indexes(db_path)
     unexpected = []
     for idx_name, _ in all_indexes:
-      if (not idx_name.startswith('sqlite_') and
-          idx_name not in EXPECTED_INDEXES):
+      if not idx_name.startswith('sqlite_') and idx_name not in EXPECTED_INDEXES:
         unexpected.append(idx_name)
 
     if unexpected:
-      output.extend([
-        "",
-        "Additional indexes found:",
-        *[f"  - {idx}" for idx in unexpected]
-      ])
+      output.extend(['', 'Additional indexes found:', *[f'  - {idx}' for idx in unexpected]])
 
     return '\n'.join(output)
 
   except (FileNotFoundError, ValueError, sqlite3.Error, OSError) as e:
-    logger.error(f"Error verifying indexes: {e}")
-    return f"Error: {e}"
+    logger.error(f'Error verifying indexes: {e}')
+    return f'Error: {e}'
 
 
-#fin
+# fin

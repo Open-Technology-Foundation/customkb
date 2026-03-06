@@ -36,6 +36,7 @@ def _ensure_env_loaded():
   env_path = Path(__file__).resolve().parent.parent / '.env'
   if env_path.exists():
     from dotenv import load_dotenv
+
     load_dotenv(env_path)
 
 
@@ -89,41 +90,42 @@ def initialize_clients():
     if 'openai' in keys:
       _openai_client = OpenAI(api_key=keys['openai'], timeout=300.0)
       _async_openai_client = AsyncOpenAI(api_key=keys['openai'], timeout=300.0)
-      logger.debug("OpenAI clients initialized")
+      logger.debug('OpenAI clients initialized')
 
     # Initialize Anthropic clients
     if 'anthropic' in keys:
       _anthropic_client = Anthropic(api_key=keys['anthropic'])
       _async_anthropic_client = AsyncAnthropic(api_key=keys['anthropic'])
-      logger.debug("Anthropic clients initialized")
+      logger.debug('Anthropic clients initialized')
 
     # Initialize xAI clients
     if 'xai' in keys:
-      _xai_client = OpenAI(api_key=keys['xai'], base_url="https://api.x.ai/v1")
-      _async_xai_client = AsyncOpenAI(api_key=keys['xai'], base_url="https://api.x.ai/v1")
-      logger.debug("xAI clients initialized")
+      _xai_client = OpenAI(api_key=keys['xai'], base_url='https://api.x.ai/v1')
+      _async_xai_client = AsyncOpenAI(api_key=keys['xai'], base_url='https://api.x.ai/v1')
+      logger.debug('xAI clients initialized')
 
     # Initialize Google AI client
     try:
       from google import genai
+
       if 'google' in keys:
         _google_client = genai.Client(api_key=keys['google'])
-        logger.debug("Google AI client initialized")
+        logger.debug('Google AI client initialized')
     except ImportError:
-      logger.debug("Google genai not available")
+      logger.debug('Google genai not available')
 
     # Initialize Llama client (local)
     try:
       _llama_client = OpenAI(api_key='ollama', base_url='http://localhost:11434/v1')
-      logger.debug("Llama client initialized")
+      logger.debug('Llama client initialized')
     except (ConnectionError, OSError, ValueError) as e:
-      logger.debug(f"Llama client initialization failed: {e}")
+      logger.debug(f'Llama client initialization failed: {e}')
 
     _clients_initialized = True
 
   except (ImportError, ValueError, KeyError, TypeError) as e:
-    logger.error(f"Client initialization failed: {e}")
-    raise AuthenticationError(f"Failed to initialize AI clients: {e}") from e
+    logger.error(f'Client initialization failed: {e}')
+    raise AuthenticationError(f'Failed to initialize AI clients: {e}') from e
 
 
 # Lazy getter functions for singleton client access
@@ -183,7 +185,6 @@ def get_llama_client():
   return _llama_client
 
 
-
 def get_provider_from_model_info(model_info: dict[str, Any]) -> str:
   """Derive API provider from model info fields.
 
@@ -215,17 +216,19 @@ def get_provider_from_model_info(model_info: dict[str, Any]) -> str:
     return 'google'
   elif 'xai' in parent or 'grok' in family:
     return 'xai'
-    return 'local'
   else:
     return 'openai'
 
 
 def _is_reasoning_model(model: str) -> bool:
   """
-  Check if a model supports reasoning parameter.
+  Check if a model supports the reasoning parameter.
+
+  Currently matches OpenAI o1 series models (o1-preview, o1-mini) which
+  use a separate reasoning API path without temperature support.
 
   Args:
-      model: Model name (may include date suffix)
+      model: Model name (may include date suffix, e.g. 'o1-preview-2024-09-12')
 
   Returns:
       True if model supports reasoning
@@ -270,15 +273,9 @@ def format_messages_for_responses_api(messages: list[dict[str, Any]]) -> list[di
 
     if role == 'system':
       # System messages go to developer role
-      formatted_messages.append({
-        'role': 'developer',
-        'content': content
-      })
+      formatted_messages.append({'role': 'developer', 'content': content})
     elif role in ['user', 'assistant']:
-      formatted_messages.append({
-        'role': role,
-        'content': content
-      })
+      formatted_messages.append({'role': role, 'content': content})
 
   return formatted_messages
 
@@ -296,7 +293,13 @@ def _extract_content_from_response(data: dict[str, Any]) -> str:
   try:
     # Handle None or empty dict
     if data is None or data == {}:
-      return ""
+      return ''
+
+    # Try each known response format in order:
+    # 1. OpenAI Responses API (output[].content[].text)
+    # 2. OpenAI Chat Completions (choices[].message.content)
+    # 3. Anthropic (content[].text or content string)
+    # 4. Raw string fallback
 
     # OpenAI Responses API format (newer)
     if 'output' in data:
@@ -328,11 +331,11 @@ def _extract_content_from_response(data: dict[str, Any]) -> str:
     return str(data)
 
   except (KeyError, IndexError, AttributeError, TypeError) as e:
-    logger.error(f"Failed to extract content from response: {e}")
-    return ""
+    logger.error(f'Failed to extract content from response: {e}')
+    return ''
 
 
-def get_prompt_template(template_name: str = None) -> dict[str, str]:
+def get_prompt_template(template_name: str | None = None) -> dict[str, str]:
   """
   Get prompt template by name.
 
@@ -344,11 +347,11 @@ def get_prompt_template(template_name: str = None) -> dict[str, str]:
   """
   templates = {
     'default': {
-      'system': "You are a helpful AI assistant. Answer questions based on the provided context.",
-      'user': "Context:\n{context}\n\nQuestion: {query}\n\nPlease provide a helpful answer based on the context above."
+      'system': 'You are a helpful AI assistant. Answer questions based on the provided context.',
+      'user': 'Context:\n{context}\n\nQuestion: {query}\n\nPlease provide a helpful answer based on the context above.',
     },
     'instructive': {
-      'system': "You are an AI assistant that answers questions based strictly on provided reference materials.",
+      'system': 'You are an AI assistant that answers questions based strictly on provided reference materials.',
       'user': """Based on the following reference materials:
 {context}
 
@@ -358,10 +361,10 @@ Instructions:
 - Base your answer solely on the provided references
 - If the references don't contain relevant information, state this clearly
 - Be concise but thorough in your response
-- Cite specific sources when possible"""
+- Cite specific sources when possible""",
     },
     'scholarly': {
-      'system': "You are a scholarly AI assistant that provides comprehensive, well-researched answers with proper citations.",
+      'system': 'You are a scholarly AI assistant that provides comprehensive, well-researched answers with proper citations.',
       'user': """Reference Materials:
 {context}
 
@@ -371,14 +374,14 @@ Please provide a scholarly analysis that:
 1. Synthesizes information from the references
 2. Cites specific sources
 3. Acknowledges limitations in the available information
-4. Provides a comprehensive yet focused response"""
+4. Provides a comprehensive yet focused response""",
     },
     'concise': {
-      'system': "You are an AI assistant that provides brief, direct answers.",
-      'user': "Context: {context}\n\nQuestion: {query}\n\nProvide a concise, direct answer:"
+      'system': 'You are an AI assistant that provides brief, direct answers.',
+      'user': 'Context: {context}\n\nQuestion: {query}\n\nProvide a concise, direct answer:',
     },
     'analytical': {
-      'system': "You are an analytical AI assistant that breaks down complex information systematically.",
+      'system': 'You are an analytical AI assistant that breaks down complex information systematically.',
       'user': """Available Information:
 {context}
 
@@ -388,20 +391,20 @@ Please provide a structured analysis:
 1. Key Information: Identify relevant facts from the references
 2. Analysis: Examine the information in relation to the query
 3. Synthesis: Provide a clear, evidence-based response
-4. Limitations: Note any gaps in the available information"""
+4. Limitations: Note any gaps in the available information""",
     },
     'conversational': {
-      'system': "You are a friendly, conversational AI assistant that maintains accuracy while being approachable.",
+      'system': 'You are a friendly, conversational AI assistant that maintains accuracy while being approachable.',
       'user': """Hi! I have some information that might help answer your question:
 
 {context}
 
 Your question: {query}
 
-Let me help you with that based on what I found!"""
+Let me help you with that based on what I found!""",
     },
     'technical': {
-      'system': "You are a technical AI assistant with expertise in providing detailed, precise answers for expert users.",
+      'system': 'You are a technical AI assistant with expertise in providing detailed, precise answers for expert users.',
       'user': """Technical Documentation:
 {context}
 
@@ -411,15 +414,16 @@ Please provide a detailed technical response that:
 - Uses precise terminology
 - Includes relevant technical details
 - Maintains accuracy and depth
-- Addresses implementation considerations where applicable"""
-    }
+- Addresses implementation considerations where applicable""",
+    },
   }
 
   return templates.get(template_name, templates['default'])
 
 
-async def generate_openai_response(messages: list[dict[str, Any]], model: str,
-                                  temperature: float = 0.7, max_tokens: int = 2000) -> str:
+async def generate_openai_response(
+  messages: list[dict[str, Any]], model: str, temperature: float = 0.7, max_tokens: int = 2000
+) -> str | None:
   """
   Generate response using OpenAI models.
 
@@ -430,32 +434,31 @@ async def generate_openai_response(messages: list[dict[str, Any]], model: str,
       max_tokens: Maximum response length
 
   Returns:
-      Generated response text
+      Generated response text, or None if response is empty/invalid
   """
   client = get_async_openai_client()
   if not client:
-    raise APIError("OpenAI client not initialized")
+    raise APIError('OpenAI client not initialized')
 
   try:
     # Check if this is a reasoning model
     if _is_reasoning_model(model):
       # Use reasoning parameter for o1 models
       response = await client.chat.completions.create(
-        model=model,
-        messages=messages,
-        reasoning=True,
-        max_completion_tokens=max_tokens
+        model=model, messages=messages, reasoning=True, max_completion_tokens=max_tokens
       )
     elif _is_gpt5_model(model):
       # GPT-5 models require reasoning_effort or verbosity parameter
       # They don't support temperature parameter
       # Log message size for debugging
       total_chars = sum(len(msg.get('content', '')) for msg in messages)
-      logger.info(f"Sending {total_chars} characters to GPT-5 model {model}")
+      logger.info(f'Sending {total_chars} characters to GPT-5 model {model}')
 
       # Warn if context is very large
       if total_chars > 100000:  # ~100KB
-        logger.warning(f"Context size ({total_chars} chars) may exceed model limits. Consider reducing --top-k or --context-scope")
+        logger.warning(
+          f'Context size ({total_chars} chars) may exceed model limits. Consider reducing --top-k or --context-scope'
+        )
 
       try:
         # GPT-5 requires reasoning_effort parameter
@@ -467,49 +470,49 @@ async def generate_openai_response(messages: list[dict[str, Any]], model: str,
           reasoning_effort='low',  # Required for GPT-5 - low is faster
         )
         # Debug logging
-        logger.info(f"GPT-5 response received: finish_reason={response.choices[0].finish_reason if response.choices else 'no choices'}")
+        logger.info(
+          f'GPT-5 response received: finish_reason={response.choices[0].finish_reason if response.choices else "no choices"}'
+        )
         if response.choices and response.choices[0].message:
-          logger.info(f"GPT-5 content length: {len(response.choices[0].message.content or '')}")
+          logger.info(f'GPT-5 content length: {len(response.choices[0].message.content or "")}')
       except (ValueError, AttributeError, RuntimeError, OSError) as api_error:
-        logger.error(f"GPT-5 API call failed: {api_error}")
+        logger.error(f'GPT-5 API call failed: {api_error}')
         # Try to extract more details
         if hasattr(api_error, 'status_code'):
-          logger.error(f"Status code: {api_error.status_code}")
+          logger.error(f'Status code: {api_error.status_code}')
         if hasattr(api_error, 'body'):
-          logger.error(f"Response body: {api_error.body}")
+          logger.error(f'Response body: {api_error.body}')
         raise
     else:
       # Other models (GPT-4, GPT-3.5, etc) - ALL use max_completion_tokens now
       response = await client.chat.completions.create(
-        model=model,
-        messages=messages,
-        temperature=temperature,
-        max_completion_tokens=max_tokens
+        model=model, messages=messages, temperature=temperature, max_completion_tokens=max_tokens
       )
 
     # Check if we got a valid response
     if not response or not response.choices:
-      logger.error(f"Empty or invalid response from OpenAI for model {model}")
+      logger.error(f'Empty or invalid response from OpenAI for model {model}')
       return None
 
     return response.choices[0].message.content
 
   except (ValueError, AttributeError, RuntimeError, OSError) as e:
-    logger.error(f"OpenAI API error: {e}")
+    logger.error(f'OpenAI API error: {e}')
     # Provide more detail about the error
     error_msg = str(e)
     if hasattr(e, 'response'):
       try:
         error_detail = e.response.json()
-        error_msg = f"{error_msg} - Details: {error_detail}"
+        error_msg = f'{error_msg} - Details: {error_detail}'
       except (ValueError, AttributeError, TypeError) as json_err:
-        logger.debug(f"Could not parse error response as JSON: {json_err}")
+        logger.debug(f'Could not parse error response as JSON: {json_err}')
         pass
-    raise APIError(f"OpenAI request failed for model {model}: {error_msg}") from e
+    raise APIError(f'OpenAI request failed for model {model}: {error_msg}') from e
 
 
-async def generate_anthropic_response(messages: list[dict[str, Any]], model: str,
-                                     temperature: float = 0.7, max_tokens: int = 2000) -> str:
+async def generate_anthropic_response(
+  messages: list[dict[str, Any]], model: str, temperature: float = 0.7, max_tokens: int = 2000
+) -> str:
   """
   Generate response using Anthropic Claude models.
 
@@ -524,11 +527,11 @@ async def generate_anthropic_response(messages: list[dict[str, Any]], model: str
   """
   client = get_async_anthropic_client()
   if not client:
-    raise APIError("Anthropic client not initialized")
+    raise APIError('Anthropic client not initialized')
 
   try:
     # Extract system message
-    system_message = ""
+    system_message = ''
     user_messages = []
 
     for msg in messages:
@@ -538,12 +541,7 @@ async def generate_anthropic_response(messages: list[dict[str, Any]], model: str
         user_messages.append(msg)
 
     # Create Anthropic request
-    request_params = {
-      'model': model,
-      'messages': user_messages,
-      'temperature': temperature,
-      'max_tokens': max_tokens
-    }
+    request_params = {'model': model, 'messages': user_messages, 'temperature': temperature, 'max_tokens': max_tokens}
 
     if system_message:
       request_params['system'] = system_message
@@ -553,12 +551,13 @@ async def generate_anthropic_response(messages: list[dict[str, Any]], model: str
     return response.content[0].text
 
   except (ValueError, AttributeError, RuntimeError, OSError) as e:
-    logger.error(f"Anthropic API error: {e}")
-    raise APIError(f"Anthropic request failed: {e}") from e
+    logger.error(f'Anthropic API error: {e}')
+    raise APIError(f'Anthropic request failed: {e}') from e
 
 
-async def generate_google_response(messages: list[dict[str, Any]], model: str,
-                                  temperature: float = 0.7, max_tokens: int = 2000) -> str:
+async def generate_google_response(
+  messages: list[dict[str, Any]], model: str, temperature: float = 0.7, max_tokens: int = 2000
+) -> str:
   """
   Generate response using Google AI models.
 
@@ -573,7 +572,7 @@ async def generate_google_response(messages: list[dict[str, Any]], model: str,
   """
   client = get_google_client()
   if not client:
-    raise APIError("Google AI client not initialized")
+    raise APIError('Google AI client not initialized')
 
   try:
     # Convert messages to Google format
@@ -583,33 +582,29 @@ async def generate_google_response(messages: list[dict[str, Any]], model: str,
       content = msg['content']
 
       if role == 'system':
-        prompt_parts.append(f"System: {content}")
+        prompt_parts.append(f'System: {content}')
       elif role == 'user':
-        prompt_parts.append(f"User: {content}")
+        prompt_parts.append(f'User: {content}')
       elif role == 'assistant':
-        prompt_parts.append(f"Assistant: {content}")
+        prompt_parts.append(f'Assistant: {content}')
 
-    prompt = "\n\n".join(prompt_parts)
+    prompt = '\n\n'.join(prompt_parts)
 
     # Generate response
     response = client.models.generate_content(
-      model=f"models/{model}",
-      contents=prompt,
-      generation_config={
-        'temperature': temperature,
-        'max_output_tokens': max_tokens
-      }
+      model=f'models/{model}', contents=prompt, generation_config={'temperature': temperature, 'max_output_tokens': max_tokens}
     )
 
     return response.text
 
   except (ValueError, AttributeError, RuntimeError, OSError) as e:
-    logger.error(f"Google AI API error: {e}")
-    raise APIError(f"Google AI request failed: {e}") from e
+    logger.error(f'Google AI API error: {e}')
+    raise APIError(f'Google AI request failed: {e}') from e
 
 
-async def generate_xai_response(messages: list[dict[str, Any]], model: str,
-                               temperature: float = 0.7, max_tokens: int = 2000) -> str:
+async def generate_xai_response(
+  messages: list[dict[str, Any]], model: str, temperature: float = 0.7, max_tokens: int = 2000
+) -> str:
   """
   Generate response using xAI models.
 
@@ -624,25 +619,23 @@ async def generate_xai_response(messages: list[dict[str, Any]], model: str,
   """
   client = get_async_xai_client()
   if not client:
-    raise APIError("xAI client not initialized")
+    raise APIError('xAI client not initialized')
 
   try:
     response = await client.chat.completions.create(
-      model=model,
-      messages=messages,
-      temperature=temperature,
-      max_tokens=max_tokens
+      model=model, messages=messages, temperature=temperature, max_tokens=max_tokens
     )
 
     return response.choices[0].message.content
 
   except (ValueError, AttributeError, RuntimeError, OSError) as e:
-    logger.error(f"xAI API error: {e}")
-    raise APIError(f"xAI request failed: {e}") from e
+    logger.error(f'xAI API error: {e}')
+    raise APIError(f'xAI request failed: {e}') from e
 
 
-async def generate_llama_response(messages: list[dict[str, Any]], model: str,
-                                 temperature: float = 0.7, max_tokens: int = 2000) -> str:
+async def generate_llama_response(
+  messages: list[dict[str, Any]], model: str, temperature: float = 0.7, max_tokens: int = 2000
+) -> str:
   """
   Generate response using local Llama models via Ollama.
 
@@ -657,32 +650,26 @@ async def generate_llama_response(messages: list[dict[str, Any]], model: str,
   """
   client = get_llama_client()
   if not client:
-    raise APIError("Llama client not initialized")
+    raise APIError('Llama client not initialized')
 
   try:
     # Create async client for Llama
     from openai import AsyncOpenAI
-    async_llama_client = AsyncOpenAI(
-      api_key='ollama',
-      base_url='http://localhost:11434/v1'
-    )
+
+    async_llama_client = AsyncOpenAI(api_key='ollama', base_url='http://localhost:11434/v1')
 
     response = await async_llama_client.chat.completions.create(
-      model=model,
-      messages=messages,
-      temperature=temperature,
-      max_tokens=max_tokens
+      model=model, messages=messages, temperature=temperature, max_tokens=max_tokens
     )
 
     return response.choices[0].message.content
 
   except (ValueError, AttributeError, RuntimeError, ConnectionError, OSError) as e:
-    logger.error(f"Llama API error: {e}")
-    raise APIError(f"Llama request failed: {e}") from e
+    logger.error(f'Llama API error: {e}')
+    raise APIError(f'Llama request failed: {e}') from e
 
 
-async def generate_ai_response(kb: Any, reference_string: str, query_text: str,
-                              prompt_template: str = None) -> str:
+async def generate_ai_response(kb: Any, reference_string: str, query_text: str, prompt_template: str | None = None) -> str:
   """
   Generate AI response using the configured model.
 
@@ -713,21 +700,15 @@ async def generate_ai_response(kb: Any, reference_string: str, query_text: str,
     if hasattr(kb, 'query_role') and kb.query_role:
       system_prompt = kb.query_role
 
-    user_prompt = template['user'].format(
-      context=reference_string,
-      query=query_text
-    )
+    user_prompt = template['user'].format(context=reference_string, query=query_text)
 
-    messages = [
-      {'role': 'system', 'content': system_prompt},
-      {'role': 'user', 'content': user_prompt}
-    ]
+    messages = [{'role': 'system', 'content': system_prompt}, {'role': 'user', 'content': user_prompt}]
 
     # Get generation parameters
     temperature = getattr(kb, 'query_temperature', 0.7)
     max_tokens = getattr(kb, 'query_max_tokens', 2000)
 
-    logger.info(f"Generating response with {provider} model: {model_name}")
+    logger.info(f'Generating response with {provider} model: {model_name}')
 
     # Route to appropriate provider using pattern matching (Python 3.10+)
     match provider:
@@ -747,17 +728,17 @@ async def generate_ai_response(kb: Any, reference_string: str, query_text: str,
         response = await generate_openai_response(messages, model_name, temperature, max_tokens)
 
     if not response:
-      raise ModelError(model_name, "Empty response from AI model")
+      raise ModelError(model_name, 'Empty response from AI model')
 
-    logger.info(f"Generated response: {len(response)} characters")
+    logger.info(f'Generated response: {len(response)} characters')
     return response
 
   except ModelError:
     # Re-raise ModelError as-is
     raise
   except (APIError, ValueError, RuntimeError, OSError) as e:
-    logger.error(f"AI response generation failed: {e}")
-    raise ModelError(model_name, f"Failed to generate AI response: {e}") from e
+    logger.error(f'AI response generation failed: {e}')
+    raise ModelError(model_name, f'Failed to generate AI response: {e}') from e
 
 
-#fin
+# fin

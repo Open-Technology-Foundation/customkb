@@ -65,8 +65,7 @@ class TestPromptTemplates(unittest.TestCase):
     templates = list_templates()
     self.assertIsInstance(templates, dict)
     # Check all expected templates are present
-    expected_templates = ['default', 'instructive', 'scholarly', 'concise',
-                         'analytical', 'conversational', 'technical']
+    expected_templates = ['default', 'instructive', 'scholarly', 'concise', 'analytical', 'conversational', 'technical']
     for template in expected_templates:
       self.assertIn(template, templates)
       # Each should have a description
@@ -90,13 +89,10 @@ class TestPromptTemplates(unittest.TestCase):
     template = get_prompt_template('instructive')
 
     # Test formatting with sample data
-    reference = "Sample reference content"
-    query = "What is the meaning of life?"
+    reference = 'Sample reference content'
+    query = 'What is the meaning of life?'
 
-    formatted_user = template['user'].format(
-      reference_string=reference,
-      query_text=query
-    )
+    formatted_user = template['user'].format(reference_string=reference, query_text=query)
 
     self.assertIn(reference, formatted_user)
     self.assertIn(query, formatted_user)
@@ -113,10 +109,10 @@ class TestPromptTemplates(unittest.TestCase):
       self.assertIn('description', template_data, f"Template {template_name} missing 'description'")
 
       # Check placeholders are present in user template
-      self.assertIn('{reference_string}', template_data['user'],
-                   f"Template {template_name} missing reference_string placeholder")
-      self.assertIn('{query_text}', template_data['user'],
-                   f"Template {template_name} missing query_text placeholder")
+      self.assertIn(
+        '{reference_string}', template_data['user'], f'Template {template_name} missing reference_string placeholder'
+      )
+      self.assertIn('{query_text}', template_data['user'], f'Template {template_name} missing query_text placeholder')
 
   def test_template_copy_isolation(self):
     """Test that getting a template returns a copy, not the original."""
@@ -137,4 +133,4 @@ class TestPromptTemplates(unittest.TestCase):
 if __name__ == '__main__':
   unittest.main()
 
-#fin
+# fin

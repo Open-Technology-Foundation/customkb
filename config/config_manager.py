@@ -42,7 +42,7 @@ if not os.path.exists(VECTORDBS):
   try:
     os.makedirs(VECTORDBS, mode=0o770, exist_ok=True)
   except OSError as e:
-    raise OSError(f"Failed to create directory {VECTORDBS}: {e}") from e
+    raise OSError(f'Failed to create directory {VECTORDBS}: {e}') from e
 
 logger = get_logger(__name__)
 
@@ -61,7 +61,7 @@ def get_kb_name(kb_input: str) -> str | None:
       Clean knowledgebase name if valid, None otherwise
   """
   if not kb_input:
-    logger.error("Knowledgebase name cannot be empty")
+    logger.error('Knowledgebase name cannot be empty')
     return None
 
   # Remove any path components (like basename command)
@@ -73,7 +73,7 @@ def get_kb_name(kb_input: str) -> str | None:
 
   # Validate KB name is not empty after cleaning
   if not kb_name:
-    logger.error("Knowledgebase name cannot be empty after removing path/extension")
+    logger.error('Knowledgebase name cannot be empty after removing path/extension')
     return None
 
   # Check if knowledgebase directory exists
@@ -83,11 +83,9 @@ def get_kb_name(kb_input: str) -> str | None:
 
     # List available KBs for helpful error message
     try:
-      available_kbs = [d for d in os.listdir(VECTORDBS)
-                      if os.path.isdir(os.path.join(VECTORDBS, d))
-                      and not d.startswith('.')]
+      available_kbs = [d for d in os.listdir(VECTORDBS) if os.path.isdir(os.path.join(VECTORDBS, d)) and not d.startswith('.')]
       if available_kbs:
-        logger.info(f"Available knowledgebases: {', '.join(sorted(available_kbs))}")
+        logger.info(f'Available knowledgebases: {", ".join(sorted(available_kbs))}')
     except OSError:
       pass  # Ignore errors listing directory
 
@@ -116,11 +114,18 @@ def get_fq_cfg_filename(cfgfile: str) -> str | None:
       >>> get_fq_cfg_filename('/path/to/okusimail.cfg')
       '/var/lib/vectordbs/okusimail/okusimail.cfg'
   """
-  # If the input already ends in .cfg and exists on disk, return it directly.
-  # This supports absolute paths, relative paths, and sibling-directory references.
+  if not cfgfile:
+    return None
+
+  # If the input already ends in .cfg and exists on disk, validate it's within VECTORDBS.
   if cfgfile.endswith('.cfg') and os.path.isfile(cfgfile):
-    logger.debug(f"Using existing config file path: '{cfgfile}'")
-    return cfgfile
+    abs_path = os.path.abspath(cfgfile)
+    if not abs_path.startswith(os.path.abspath(VECTORDBS) + os.sep):
+      logger.warning(f'Config file outside VECTORDBS directory: {cfgfile}')
+      # Fall through to normal resolution below
+    else:
+      logger.debug(f"Using existing config file path: '{abs_path}'")
+      return abs_path
 
   # Get clean KB name
   kb_name = get_kb_name(cfgfile)
@@ -128,12 +133,12 @@ def get_fq_cfg_filename(cfgfile: str) -> str | None:
     return None
 
   # Construct config file path
-  config_path = os.path.join(VECTORDBS, kb_name, f"{kb_name}.cfg")
+  config_path = os.path.join(VECTORDBS, kb_name, f'{kb_name}.cfg')
 
   # Verify config file exists
   if not os.path.isfile(config_path):
-    logger.error(f"Configuration file not found: {config_path}")
-    logger.info(f"Expected to find {kb_name}.cfg in {os.path.join(VECTORDBS, kb_name)}/")
+    logger.error(f'Configuration file not found: {config_path}')
+    logger.info(f'Expected to find {kb_name}.cfg in {os.path.join(VECTORDBS, kb_name)}/')
     return None
 
   logger.debug(f"Resolved '{cfgfile}' to '{config_path}'")
@@ -142,6 +147,11 @@ def get_fq_cfg_filename(cfgfile: str) -> str | None:
 
 def _build_defaults_map() -> dict[str, tuple[type, object]]:
   """Build the DEF_* defaults map from Pydantic model defaults.
+
+  Iterates all five config model classes and creates a DEF_FIELD_NAME
+  entry for each field. Fields using default_factory (e.g., list fields)
+  are detected via PydanticUndefined and the factory is invoked to get
+  a concrete default value.
 
   Returns:
     Dict mapping DEF_NAME to (type, default_value) tuples.
@@ -153,6 +163,7 @@ def _build_defaults_map() -> dict[str, tuple[type, object]]:
     for field_name, field_info in model_cls.model_fields.items():
       def_key = f'DEF_{field_name.upper()}'
       default = field_info.default
+      # PydanticUndefined means no literal default; use default_factory instead
       if (default is PydanticUndefined or default is None) and field_info.default_factory is not None:
         default = field_info.default_factory()
       field_type = type(default) if default is not None else str
@@ -259,7 +270,14 @@ class KnowledgeBase:
     self.sql_cursor = None
 
   def _flatten_config(self) -> None:
-    """Flatten KBConfig sub-models onto self for backward-compatible access."""
+    """Flatten KBConfig sub-models onto self for backward-compatible access.
+
+    Copies every field from each Pydantic sub-model (default, api, limits,
+    performance, algorithms) directly onto the KnowledgeBase instance so
+    callers can use kb.vector_model instead of kb._config.default.vector_model.
+    Also creates legacy aliases (hybrid_vector_weight, hybrid_bm25_weight)
+    for backward compatibility with older code that used those names.
+    """
     sections = [
       self._config.default,
       self._config.api,
@@ -271,7 +289,7 @@ class KnowledgeBase:
       for field_name in type(section).model_fields:
         setattr(self, field_name, getattr(section, field_name))
 
-    # Legacy aliases from the algorithms section
+    # Legacy aliases: older code references hybrid_vector_weight / hybrid_bm25_weight
     if hasattr(self, 'vector_weight'):
       self.hybrid_vector_weight = self.vector_weight
     if hasattr(self, 'bm25_weight'):
@@ -286,16 +304,18 @@ class KnowledgeBase:
     """
     if output_to:
       with open(output_to, 'w') as filehandle:
-        print(f"# {self.knowledge_base_name}", file=filehandle)
-        print("[DEFAULT]", file=filehandle)
+        print(f'# {self.knowledge_base_name}', file=filehandle)
+        print('[DEFAULT]', file=filehandle)
         attrs = vars(self)
         for key, value in attrs.items():
-          print(f"{key} = {value}", file=filehandle)
+          print(f'{key} = {value}', file=filehandle)
     else:
       import sys
-      print(f"# {self.knowledge_base_name}", file=sys.stderr)
+
+      print(f'# {self.knowledge_base_name}', file=sys.stderr)
       attrs = vars(self)
       for key, value in attrs.items():
-        print(f"{key} = {value}", file=sys.stderr)
+        print(f'{key} = {value}', file=sys.stderr)
 
-#fin
+
+# fin

@@ -34,7 +34,7 @@ def normalize_query(query: str) -> str:
       Normalized query string
   """
   if not query:
-    return ""
+    return ''
 
   # Basic text cleaning
   normalized = clean_text(query)
@@ -56,8 +56,7 @@ def normalize_query(query: str) -> str:
   return normalized
 
 
-def get_synonyms_for_word(word: str, max_synonyms: int = 2,
-                         relevance_threshold: float = 0.6) -> list[str]:
+def get_synonyms_for_word(word: str, max_synonyms: int = 2, relevance_threshold: float = 0.6) -> list[str]:
   """
   Get synonyms for a word using various methods.
 
@@ -83,7 +82,7 @@ def get_synonyms_for_word(word: str, max_synonyms: int = 2,
     try:
       nltk.data.find('corpora/wordnet')
     except LookupError:
-      logger.debug("WordNet not found, downloading...")
+      logger.debug('WordNet not found, downloading...')
       nltk.download('wordnet', quiet=True)
 
     # Get synsets for the word
@@ -92,9 +91,7 @@ def get_synonyms_for_word(word: str, max_synonyms: int = 2,
     for synset in synsets[:3]:  # Limit to first 3 synsets
       for lemma in synset.lemmas():
         synonym = lemma.name().replace('_', ' ')
-        if (synonym.lower() != word.lower() and
-            synonym not in synonyms and
-            len(synonym) > 1):
+        if synonym.lower() != word.lower() and synonym not in synonyms and len(synonym) > 1:
           synonyms.append(synonym)
           if len(synonyms) >= max_synonyms:
             break
@@ -102,7 +99,7 @@ def get_synonyms_for_word(word: str, max_synonyms: int = 2,
         break
 
   except (ImportError, Exception) as e:
-    logger.debug(f"WordNet synonym lookup failed: {e}")
+    logger.debug(f'WordNet synonym lookup failed: {e}')
 
   # Fallback: Use simple morphological variants
   if not synonyms and len(word) > 3:
@@ -160,7 +157,7 @@ def correct_spelling(word: str, vocabulary: set[str] | None = None) -> str:
       return corrected
 
   except (ImportError, Exception) as e:
-    logger.debug(f"Spelling correction failed: {e}")
+    logger.debug(f'Spelling correction failed: {e}')
 
   # Fallback: Simple corrections for common typos
   word_lower = word.lower()
@@ -170,7 +167,7 @@ def correct_spelling(word: str, vocabulary: set[str] | None = None) -> str:
     # Remove double letters that are likely typos
     for i in range(len(word_lower) - 1):
       if word_lower[i] == word_lower[i + 1] and word_lower[i] in 'acefghiklmnoprstuwy':
-        candidate = word_lower[:i] + word_lower[i+1:]
+        candidate = word_lower[:i] + word_lower[i + 1 :]
         if vocabulary and candidate in vocabulary:
           logger.debug(f"Simple correction: '{word}' -> '{candidate}'")
           return candidate
@@ -211,7 +208,40 @@ def expand_synonyms(query: str, kb: Any | None = None) -> str:
   min_word_length = getattr(kb, 'synonym_min_word_length', 4) if kb else 4
 
   # Expand only key words (longer words, not common stop words)
-  stop_words = {'the', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', 'is', 'are', 'was', 'were', 'be', 'been', 'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could', 'should', 'may', 'might', 'can', 'must'}
+  stop_words = {
+    'the',
+    'and',
+    'or',
+    'but',
+    'in',
+    'on',
+    'at',
+    'to',
+    'for',
+    'of',
+    'with',
+    'by',
+    'is',
+    'are',
+    'was',
+    'were',
+    'be',
+    'been',
+    'have',
+    'has',
+    'had',
+    'do',
+    'does',
+    'did',
+    'will',
+    'would',
+    'could',
+    'should',
+    'may',
+    'might',
+    'can',
+    'must',
+  }
 
   expanded_terms = []
 
@@ -220,7 +250,7 @@ def expand_synonyms(query: str, kb: Any | None = None) -> str:
       synonyms = get_synonyms_for_word(word, max_synonyms_per_word)
       if synonyms:
         # Add original word and synonyms
-        expanded_terms.append(f"({word} OR {' OR '.join(synonyms)})")
+        expanded_terms.append(f'({word} OR {" OR ".join(synonyms)})')
       else:
         expanded_terms.append(word)
     else:
@@ -283,7 +313,7 @@ def apply_spelling_correction(query: str, kb: Any | None = None) -> str:
         pattern = r'\b' + re.escape(original) + r'\b'
         corrected_query = re.sub(pattern, corrected, corrected_query, flags=re.IGNORECASE)
 
-    logger.debug(f"Spelling correction applied: {corrections_made} words corrected")
+    logger.debug(f'Spelling correction applied: {corrections_made} words corrected')
     return corrected_query
 
   return query
@@ -315,7 +345,7 @@ def get_cached_enhanced_query(query_text: str, kb=None) -> str | None:
   """
   try:
     cache_key = get_enhancement_cache_key(query_text)
-    cache_file = os.path.join(ENHANCEMENT_CACHE_DIR, f"{cache_key}.json")
+    cache_file = os.path.join(ENHANCEMENT_CACHE_DIR, f'{cache_key}.json')
 
     if os.path.exists(cache_file):
       # Check cache TTL
@@ -327,15 +357,15 @@ def get_cached_enhanced_query(query_text: str, kb=None) -> str | None:
           cache_data = json.load(f)
 
         if cache_data.get('original') == query_text:
-          logger.debug("Using cached enhanced query")
+          logger.debug('Using cached enhanced query')
           return cache_data.get('enhanced')
       else:
         # Remove expired cache
         os.remove(cache_file)
-        logger.debug("Removed expired enhancement cache")
+        logger.debug('Removed expired enhancement cache')
 
   except (OSError, json.JSONDecodeError, KeyError, ValueError) as e:
-    logger.debug(f"Enhancement cache retrieval failed: {e}")
+    logger.debug(f'Enhancement cache retrieval failed: {e}')
 
   return None
 
@@ -353,22 +383,18 @@ def save_enhanced_query_to_cache(original_query: str, enhanced_query: str) -> No
 
   try:
     cache_key = get_enhancement_cache_key(original_query)
-    cache_file = os.path.join(ENHANCEMENT_CACHE_DIR, f"{cache_key}.json")
+    cache_file = os.path.join(ENHANCEMENT_CACHE_DIR, f'{cache_key}.json')
     os.makedirs(ENHANCEMENT_CACHE_DIR, exist_ok=True)
 
-    cache_data = {
-      'original': original_query,
-      'enhanced': enhanced_query,
-      'timestamp': time.time()
-    }
+    cache_data = {'original': original_query, 'enhanced': enhanced_query, 'timestamp': time.time()}
 
     with open(cache_file, 'w') as f:
       json.dump(cache_data, f)
 
-    logger.debug("Enhanced query saved to cache")
+    logger.debug('Enhanced query saved to cache')
 
   except OSError as e:
-    logger.debug(f"Enhancement cache save failed: {e}")
+    logger.debug(f'Enhancement cache save failed: {e}')
 
 
 def enhance_query(query: str, kb: Any | None = None) -> str:
@@ -410,7 +436,7 @@ def enhance_query(query: str, kb: Any | None = None) -> str:
     return enhanced
 
   except (ValueError, AttributeError, TypeError) as e:
-    logger.error(f"Query enhancement failed: {e}")
+    logger.error(f'Query enhancement failed: {e}')
     return query  # Return original query on error
 
 
@@ -424,17 +450,17 @@ def clear_enhancement_cache() -> int:
   removed_count = 0
 
   try:
-    for file_path in Path(ENHANCEMENT_CACHE_DIR).glob("*.json"):
+    for file_path in Path(ENHANCEMENT_CACHE_DIR).glob('*.json'):
       try:
         file_path.unlink()
         removed_count += 1
       except OSError:
         pass
 
-    logger.info(f"Cleared {removed_count} enhancement cache files")
+    logger.info(f'Cleared {removed_count} enhancement cache files')
 
   except (OSError, FileNotFoundError) as e:
-    logger.error(f"Failed to clear enhancement cache: {e}")
+    logger.error(f'Failed to clear enhancement cache: {e}')
 
   return removed_count
 
@@ -451,11 +477,11 @@ def get_enhancement_stats() -> dict:
     'cache_files': 0,
     'total_size_bytes': 0,
     'oldest_file': None,
-    'newest_file': None
+    'newest_file': None,
   }
 
   try:
-    cache_files = list(Path(ENHANCEMENT_CACHE_DIR).glob("*.json"))
+    cache_files = list(Path(ENHANCEMENT_CACHE_DIR).glob('*.json'))
     stats['cache_files'] = len(cache_files)
 
     if cache_files:
@@ -470,9 +496,9 @@ def get_enhancement_stats() -> dict:
       stats['newest_file'] = file_times[-1][1] if file_times else None
 
   except (OSError, FileNotFoundError) as e:
-    logger.error(f"Failed to get enhancement stats: {e}")
+    logger.error(f'Failed to get enhancement stats: {e}')
 
   return stats
 
 
-#fin
+# fin

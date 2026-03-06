@@ -14,6 +14,7 @@ class ReferenceFormat(Enum):
 
   These formats determine how search results are presented to LLMs.
   """
+
   XML = 'xml'
   JSON = 'json'
   MARKDOWN = 'markdown'
@@ -62,9 +63,10 @@ class OptimizationTier(Enum):
   These tiers determine batch sizes, cache limits, and concurrency settings
   based on available system memory.
   """
-  LOW = 'low'           # < 16GB RAM
-  MEDIUM = 'medium'     # 16-64GB RAM
-  HIGH = 'high'         # 64-128GB RAM
+
+  LOW = 'low'  # < 16GB RAM
+  MEDIUM = 'medium'  # 16-64GB RAM
+  HIGH = 'high'  # 64-128GB RAM
   VERY_HIGH = 'very_high'  # > 128GB RAM
 
   @property
@@ -112,4 +114,5 @@ class OptimizationTier(Enum):
       valid = ', '.join([t.value for t in cls])
       raise ValueError(f"Invalid optimization tier: '{value}'. Must be one of: {valid}") from None
 
-#fin
+
+# fin

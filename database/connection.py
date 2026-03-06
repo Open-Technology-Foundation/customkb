@@ -36,41 +36,47 @@ def connect_to_database(kb: Any) -> None:
   try:
     # Get database path
     db_path = kb.knowledge_base_db
-    logger.info(f"Connecting to database: {db_path}")
+    logger.info(f'Connecting to database: {db_path}')
 
     # Create connection
-    kb.sql_connection = sqlite3.connect(
-      db_path,
-      timeout=30.0,
-      check_same_thread=False
-    )
+    kb.sql_connection = sqlite3.connect(db_path, timeout=30.0, check_same_thread=False)
     kb.sql_cursor = kb.sql_connection.cursor()
 
     # Set optimized pragmas
-    kb.sql_cursor.execute("PRAGMA foreign_keys = ON")
-    kb.sql_cursor.execute("PRAGMA journal_mode = WAL")
-    kb.sql_cursor.execute("PRAGMA synchronous = NORMAL")
-    kb.sql_cursor.execute("PRAGMA cache_size = -64000")  # 64MB cache
-    kb.sql_cursor.execute("PRAGMA temp_store = MEMORY")
-    kb.sql_cursor.execute("PRAGMA mmap_size = 268435456")  # 256MB mmap
+    kb.sql_cursor.execute('PRAGMA foreign_keys = ON')
+    # WAL mode allows concurrent reads during writes, critical for query-while-importing
+    kb.sql_cursor.execute('PRAGMA journal_mode = WAL')
+    # NORMAL sync: safe with WAL (data survives process crash, not power loss)
+    kb.sql_cursor.execute('PRAGMA synchronous = NORMAL')
+    # 64MB page cache — large enough to hold typical KB indexes in memory
+    kb.sql_cursor.execute('PRAGMA cache_size = -64000')
+    kb.sql_cursor.execute('PRAGMA temp_store = MEMORY')
+    # 256MB memory-mapped I/O — reduces syscall overhead for sequential scans
+    kb.sql_cursor.execute('PRAGMA mmap_size = 268435456')
 
     # Create tables if needed
     create_tables(kb)
 
+    # Create performance indexes if missing
+    from .index_manager import create_missing_indexes
+
+    create_missing_indexes(kb.knowledge_base_db)
+
     # Check for migrations
     if hasattr(kb, 'enable_hybrid_search') and kb.enable_hybrid_search:
       from .migrations import migrate_for_bm25
+
       migrate_for_bm25(kb)
 
     kb.sql_connection.commit()
-    logger.info("Database connection established successfully")
+    logger.info('Database connection established successfully')
 
   except sqlite3.Error as e:
-    logger.error(f"Database connection failed: {e}")
-    raise CustomConnectionError(f"Failed to connect to database: {e}") from e
+    logger.error(f'Database connection failed: {e}')
+    raise CustomConnectionError(f'Failed to connect to database: {e}') from e
   except (FileNotFoundError, PermissionError, OSError, AttributeError) as e:
-    logger.error(f"Unexpected error during database connection: {e}")
-    raise DatabaseError(f"Database initialization failed: {e}") from e
+    logger.error(f'Unexpected error during database connection: {e}')
+    raise DatabaseError(f'Database initialization failed: {e}') from e
 
 
 def create_tables(kb: Any) -> None:
@@ -89,10 +95,10 @@ def create_tables(kb: Any) -> None:
 
     # Validate table name to prevent SQL injection
     if not validate_table_name(table_name):
-      raise ValueError(f"Invalid table name: {table_name}")
+      raise ValueError(f'Invalid table name: {table_name}')
 
     # Main documents table
-    kb.sql_cursor.execute(f'''
+    kb.sql_cursor.execute(f"""
       CREATE TABLE IF NOT EXISTS {table_name} (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         sid INTEGER,
@@ -114,10 +120,10 @@ def create_tables(kb: Any) -> None:
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
-    ''')
+    """)
 
     # Metadata table
-    kb.sql_cursor.execute('''
+    kb.sql_cursor.execute("""
       CREATE TABLE IF NOT EXISTS file_metadata (
         file_hash TEXT PRIMARY KEY,
         file_path TEXT NOT NULL,
@@ -127,11 +133,11 @@ def create_tables(kb: Any) -> None:
         chunk_count INTEGER DEFAULT 0,
         status TEXT DEFAULT 'processed'
       )
-    ''')
+    """)
 
     # Categories table (if categorization is enabled)
     if hasattr(kb, 'enable_categorization') and kb.enable_categorization:
-      kb.sql_cursor.execute('''
+      kb.sql_cursor.execute("""
         CREATE TABLE IF NOT EXISTS categories (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           name TEXT UNIQUE NOT NULL,
@@ -140,13 +146,13 @@ def create_tables(kb: Any) -> None:
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
           FOREIGN KEY (parent_id) REFERENCES categories(id)
         )
-      ''')
+      """)
 
-    logger.debug(f"Tables created/verified for {table_name}")
+    logger.debug(f'Tables created/verified for {table_name}')
 
   except sqlite3.Error as e:
-    logger.error(f"Table creation failed: {e}")
-    raise DatabaseError(f"Failed to create tables: {e}") from e
+    logger.error(f'Table creation failed: {e}')
+    raise DatabaseError(f'Failed to create tables: {e}') from e
 
 
 def close_database(kb: Any) -> None:
@@ -164,7 +170,7 @@ def close_database(kb: Any) -> None:
       try:
         kb.sql_connection.commit()
       except sqlite3.Error as e:
-        logger.warning(f"Error committing final transaction: {e}")
+        logger.warning(f'Error committing final transaction: {e}')
 
       # Close cursor
       if hasattr(kb, 'sql_cursor') and kb.sql_cursor:
@@ -175,9 +181,9 @@ def close_database(kb: Any) -> None:
       kb.sql_connection.close()
       kb.sql_connection = None
 
-      logger.info("Database connection closed")
+      logger.info('Database connection closed')
   except (AttributeError, sqlite3.Error) as e:
-    logger.error(f"Error closing database connection: {e}")
+    logger.error(f'Error closing database connection: {e}')
 
 
 @contextmanager
@@ -249,15 +255,15 @@ def sqlite_connection(db_path: str):
   try:
     # Validate path
     if not Path(db_path).exists():
-      raise CustomConnectionError(f"Database not found: {db_path}")
+      raise CustomConnectionError(f'Database not found: {db_path}')
 
     # Create connection
     conn = sqlite3.connect(db_path, timeout=30.0)
     cursor = conn.cursor()
 
     # Set basic pragmas
-    cursor.execute("PRAGMA journal_mode=WAL")
-    cursor.execute("PRAGMA synchronous=NORMAL")
+    cursor.execute('PRAGMA journal_mode=WAL')
+    cursor.execute('PRAGMA synchronous=NORMAL')
 
     yield conn, cursor
 
@@ -267,7 +273,7 @@ def sqlite_connection(db_path: str):
   except sqlite3.Error as e:
     if conn:
       conn.rollback()
-    raise DatabaseError(f"SQLite operation failed: {e}") from e
+    raise DatabaseError(f'SQLite operation failed: {e}') from e
   finally:
     # Clean up
     if cursor:
@@ -286,12 +292,7 @@ def get_connection_info(kb: Any) -> dict:
   Returns:
       Dictionary with connection information
   """
-  info = {
-    'connected': False,
-    'database_path': None,
-    'table_count': 0,
-    'row_count': 0
-  }
+  info = {'connected': False, 'database_path': None, 'table_count': 0, 'row_count': 0}
 
   if hasattr(kb, 'sql_connection') and kb.sql_connection:
     try:
@@ -299,24 +300,22 @@ def get_connection_info(kb: Any) -> dict:
       info['database_path'] = kb.knowledge_base_db
 
       # Get table count
-      kb.sql_cursor.execute(
-        "SELECT COUNT(*) FROM sqlite_master WHERE type='table'"
-      )
+      kb.sql_cursor.execute("SELECT COUNT(*) FROM sqlite_master WHERE type='table'")
       info['table_count'] = kb.sql_cursor.fetchone()[0]
 
       # Get row count from main table
       table_name = getattr(kb, 'table_name', 'docs')
       if validate_table_name(table_name):
-        kb.sql_cursor.execute(f"SELECT COUNT(*) FROM {table_name}")
+        kb.sql_cursor.execute(f'SELECT COUNT(*) FROM {table_name}')
         info['row_count'] = kb.sql_cursor.fetchone()[0]
       else:
-        logger.warning(f"Invalid table name in connection info: {table_name}")
+        logger.warning(f'Invalid table name in connection info: {table_name}')
         info['row_count'] = 0
 
     except sqlite3.Error as e:
-      logger.warning(f"Error getting connection info: {e}")
+      logger.warning(f'Error getting connection info: {e}')
 
   return info
 
 
-#fin
+# fin

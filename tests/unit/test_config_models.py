@@ -152,9 +152,7 @@ vector_dimensions = 768
 
   def test_from_cfg_not_found(self):
     """Test FileNotFoundError for missing KB."""
-    with tempfile.TemporaryDirectory() as tmpdir, \
-         patch('config.models.VECTORDBS', tmpdir), \
-         pytest.raises(FileNotFoundError):
+    with tempfile.TemporaryDirectory() as tmpdir, patch('config.models.VECTORDBS', tmpdir), pytest.raises(FileNotFoundError):
       KBConfig.from_cfg('nonexistent')
 
   def test_env_override(self):
@@ -166,10 +164,13 @@ vector_dimensions = 768
 vector_model = from-file
 query_top_k = 30
 """)
-      with patch.dict(os.environ, {
-        'VECTOR_MODEL': 'from-env',
-        'QUERY_TOP_K': '100',
-      }):
+      with patch.dict(
+        os.environ,
+        {
+          'VECTOR_MODEL': 'from-env',
+          'QUERY_TOP_K': '100',
+        },
+      ):
         cfg = KBConfig.from_cfg(cfg_path)
         assert cfg.default.vector_model == 'from-env'
         assert cfg.default.query_top_k == 100
@@ -223,4 +224,5 @@ additional_stopword_languages = spanish,italian,portuguese
     assert cfg.algorithms.enable_hybrid_search is True
     assert cfg.api.api_max_retries == 20
 
-#fin
+
+# fin

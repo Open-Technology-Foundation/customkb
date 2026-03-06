@@ -32,50 +32,50 @@ class TestGetKbInfoFromConfig:
 
   def test_basic_config_path(self):
     """Test extracting info from basic config path."""
-    config_file = "/path/to/mycompany.cfg"
+    config_file = '/path/to/mycompany.cfg'
     directory, kb_name = get_kb_info_from_config(config_file)
 
     # os.path.split doesn't add trailing slash to directories
-    assert directory == "/path/to"
-    assert kb_name == "mycompany"
+    assert directory == '/path/to'
+    assert kb_name == 'mycompany'
 
   def test_domain_style_config(self):
     """Test extracting info from domain-style config."""
-    config_file = "/vectordbs/example.com.cfg"
+    config_file = '/vectordbs/example.com.cfg'
     directory, kb_name = get_kb_info_from_config(config_file)
 
     # os.path.split doesn't add trailing slash to directories
-    assert directory == "/vectordbs"
-    assert kb_name == "example.com"
+    assert directory == '/vectordbs'
+    assert kb_name == 'example.com'
 
   def test_config_without_extension(self):
     """Test config file without .cfg extension."""
-    config_file = "/path/to/config"
+    config_file = '/path/to/config'
     directory, kb_name = get_kb_info_from_config(config_file)
 
     # os.path.split doesn't add trailing slash to directories
-    assert directory == "/path/to"
-    assert kb_name == "config"
+    assert directory == '/path/to'
+    assert kb_name == 'config'
 
   def test_empty_config_file(self):
     """Test handling of empty config file path."""
-    with pytest.raises(ValueError, match="Config file path cannot be empty"):
-      get_kb_info_from_config("")
+    with pytest.raises(ValueError, match='Config file path cannot be empty'):
+      get_kb_info_from_config('')
 
   def test_none_config_file(self):
     """Test handling of None config file path."""
-    with pytest.raises(ValueError, match="Config file path cannot be empty"):
+    with pytest.raises(ValueError, match='Config file path cannot be empty'):
       get_kb_info_from_config(None)
 
   def test_config_with_double_extension(self):
     """Test config file with .cfg.cfg extension."""
-    config_file = "/path/to/test.cfg.cfg"
+    config_file = '/path/to/test.cfg.cfg'
     directory, kb_name = get_kb_info_from_config(config_file)
 
     # os.path.split doesn't add trailing slash to directories
-    assert directory == "/path/to"
+    assert directory == '/path/to'
     # splitext gives 'test.cfg', then .cfg is stripped again → 'test'
-    assert kb_name == "test"
+    assert kb_name == 'test'
 
 
 class TestGetLogFilePath:
@@ -84,20 +84,20 @@ class TestGetLogFilePath:
   def test_auto_log_file(self, temp_data_manager):
     """Test auto-generated log file path."""
     kb_directory = temp_data_manager.create_temp_dir()
-    kb_name = "test_kb"
+    kb_name = 'test_kb'
 
-    result = get_log_file_path("auto", kb_directory, kb_name)
+    result = get_log_file_path('auto', kb_directory, kb_name)
 
-    expected = os.path.join(kb_directory, "logs", "test_kb.log")
+    expected = os.path.join(kb_directory, 'logs', 'test_kb.log')
     assert result == expected
     assert os.path.exists(os.path.dirname(result))
 
   def test_absolute_log_file(self, temp_data_manager):
     """Test absolute log file path."""
     temp_dir = temp_data_manager.create_temp_dir()
-    absolute_path = os.path.join(temp_dir, "custom.log")
+    absolute_path = os.path.join(temp_dir, 'custom.log')
 
-    result = get_log_file_path(absolute_path, "/kb/dir", "kb_name")
+    result = get_log_file_path(absolute_path, '/kb/dir', 'kb_name')
 
     assert result == absolute_path
 
@@ -105,18 +105,18 @@ class TestGetLogFilePath:
     """Test relative log file path."""
     kb_directory = temp_data_manager.create_temp_dir()
 
-    result = get_log_file_path("logs/custom.log", kb_directory, "kb_name")
+    result = get_log_file_path('logs/custom.log', kb_directory, 'kb_name')
 
-    expected = os.path.join(kb_directory, "logs/custom.log")
+    expected = os.path.join(kb_directory, 'logs/custom.log')
     assert result == expected
 
   def test_log_directory_creation(self, temp_data_manager):
     """Test that log directories are created."""
     kb_directory = temp_data_manager.create_temp_dir()
 
-    get_log_file_path("deep/nested/logs/test.log", kb_directory, "kb")
+    get_log_file_path('deep/nested/logs/test.log', kb_directory, 'kb')
 
-    expected_dir = os.path.join(kb_directory, "deep/nested/logs")
+    expected_dir = os.path.join(kb_directory, 'deep/nested/logs')
     assert os.path.exists(expected_dir)
 
 
@@ -159,11 +159,9 @@ json_format = true
 
   def test_environment_variable_overrides(self):
     """Test environment variable overrides."""
-    with patch.dict(os.environ, {
-      'LOGGING_LEVEL': 'ERROR',
-      'LOGGING_FILE': 'env_override.log',
-      'LOGGING_CONSOLE_COLORS': 'false'
-    }):
+    with patch.dict(
+      os.environ, {'LOGGING_LEVEL': 'ERROR', 'LOGGING_FILE': 'env_override.log', 'LOGGING_CONSOLE_COLORS': 'false'}
+    ):
       config = load_logging_config()
 
       assert config['log_level'] == 'ERROR'
@@ -172,7 +170,7 @@ json_format = true
 
   def test_invalid_config_file(self, temp_data_manager):
     """Test handling of invalid config file."""
-    invalid_config = temp_data_manager.create_temp_config("invalid config content [[[")
+    invalid_config = temp_data_manager.create_temp_config('invalid config content [[[')
 
     config = load_logging_config(invalid_config)
 
@@ -201,14 +199,9 @@ class TestSetupLogging:
   def test_setup_with_kb_context(self, temp_data_manager):
     """Test logging setup with KB context."""
     kb_directory = temp_data_manager.create_temp_dir()
-    kb_name = "test_kb"
+    kb_name = 'test_kb'
 
-    logger = setup_logging(
-      verbose=True,
-      debug=False,
-      kb_directory=kb_directory,
-      kb_name=kb_name
-    )
+    logger = setup_logging(verbose=True, debug=False, kb_directory=kb_directory, kb_name=kb_name)
 
     assert logger is not None
     assert logger.level == logging.INFO
@@ -223,12 +216,7 @@ class TestSetupLogging:
     """Test debug level logging setup."""
     kb_directory = temp_data_manager.create_temp_dir()
 
-    logger = setup_logging(
-      verbose=False,
-      debug=True,
-      kb_directory=kb_directory,
-      kb_name="test"
-    )
+    logger = setup_logging(verbose=False, debug=True, kb_directory=kb_directory, kb_name='test')
 
     assert logger.level == logging.DEBUG
 
@@ -236,12 +224,7 @@ class TestSetupLogging:
     """Test setup with file logging disabled."""
     kb_directory = temp_data_manager.create_temp_dir()
 
-    logger = setup_logging(
-      verbose=True,
-      log_to_file=False,
-      kb_directory=kb_directory,
-      kb_name="test"
-    )
+    logger = setup_logging(verbose=True, log_to_file=False, kb_directory=kb_directory, kb_name='test')
 
     # Should have only console handler
     assert len(logger.handlers) == 1
@@ -252,9 +235,10 @@ class TestSetupLogging:
 
     # Mock os.makedirs to raise PermissionError for log directory creation
     original_makedirs = os.makedirs
+
     def mock_makedirs(path, exist_ok=False):
       if 'logs' in path:
-        raise PermissionError(f"Cannot create log directory: {path}")
+        raise PermissionError(f'Cannot create log directory: {path}')
       return original_makedirs(path, exist_ok=exist_ok)
 
     with patch('os.makedirs', side_effect=mock_makedirs):
@@ -263,7 +247,7 @@ class TestSetupLogging:
         verbose=True,
         log_to_file=False,  # Disable file logging since we can't mock deeply enough
         kb_directory=kb_directory,
-        kb_name="test"
+        kb_name='test',
       )
 
       # Should still work with console logging only
@@ -275,15 +259,15 @@ class TestGetLogger:
 
   def test_get_module_logger(self):
     """Test getting module-specific logger."""
-    logger = get_logger("test_module")
+    logger = get_logger('test_module')
 
-    assert logger.name == "test_module"
+    assert logger.name == 'test_module'
     assert isinstance(logger, logging.Logger)
 
   def test_logger_isolation(self):
     """Test that loggers are properly isolated."""
-    logger1 = get_logger("module1")
-    logger2 = get_logger("module2")
+    logger1 = get_logger('module1')
+    logger2 = get_logger('module2')
 
     assert logger1.name != logger2.name
     assert logger1 is not logger2
@@ -299,7 +283,7 @@ class TestElapsedTime:
 
     result = elapsed_time(start_time, end_time)
 
-    assert result == "01m 05s"
+    assert result == '01m 05s'
 
   def test_elapsed_time_with_hours(self):
     """Test elapsed time with hours."""
@@ -308,7 +292,7 @@ class TestElapsedTime:
 
     result = elapsed_time(start_time, end_time)
 
-    assert result == "01h 01m 01s"
+    assert result == '01h 01m 01s'
 
   def test_elapsed_time_with_days(self):
     """Test elapsed time with days."""
@@ -317,7 +301,7 @@ class TestElapsedTime:
 
     result = elapsed_time(start_time, end_time)
 
-    assert result == "1d 01h 01m 01s"
+    assert result == '1d 01h 01m 01s'
 
   def test_elapsed_time_no_end_time(self):
     """Test elapsed time calculation without end time."""
@@ -325,7 +309,7 @@ class TestElapsedTime:
 
     result = elapsed_time(start_time)
 
-    assert "01m" in result or "00m" in result
+    assert '01m' in result or '00m' in result
 
   def test_zero_elapsed_time(self):
     """Test zero elapsed time."""
@@ -334,7 +318,7 @@ class TestElapsedTime:
 
     result = elapsed_time(start_time, end_time)
 
-    assert result == "00s"
+    assert result == '00s'
 
 
 class TestTimeToFinish:
@@ -349,7 +333,7 @@ class TestTimeToFinish:
     result = time_to_finish(start_time, records_processed, total_records)
 
     # Should estimate about 9 minutes remaining
-    assert "m" in result
+    assert 'm' in result
 
   def test_no_records_processed(self):
     """Test time to finish with no records processed."""
@@ -357,7 +341,7 @@ class TestTimeToFinish:
 
     result = time_to_finish(start_time, 0, 100)
 
-    assert result == ""
+    assert result == ''
 
   def test_zero_elapsed_time(self):
     """Test time to finish with zero elapsed time."""
@@ -365,7 +349,7 @@ class TestTimeToFinish:
 
     result = time_to_finish(start_time, 10, 100)
 
-    assert result == ""
+    assert result == ''
 
 
 class TestLogOperationError:
@@ -374,27 +358,27 @@ class TestLogOperationError:
   def test_basic_error_logging(self):
     """Test basic error logging."""
     mock_logger = Mock()
-    error = ValueError("Test error")
+    error = ValueError('Test error')
 
-    log_operation_error(mock_logger, "test_operation", error, key="value")
+    log_operation_error(mock_logger, 'test_operation', error, key='value')
 
     mock_logger.error.assert_called_once()
     call_args = mock_logger.error.call_args[0][0]
-    assert "test_operation" in call_args
-    assert "Test error" in call_args
-    assert "key=value" in call_args
+    assert 'test_operation' in call_args
+    assert 'Test error' in call_args
+    assert 'key=value' in call_args
 
   def test_sensitive_data_masking(self):
     """Test masking of sensitive data in error logs."""
     mock_logger = Mock()
-    error = Exception("Test error")
+    error = Exception('Test error')
 
     # mask_sensitive_data is imported from security_utils into logging_utils
     # Patch where it's imported (logging_utils), not where it's defined (security_utils)
     with patch('utils.security_utils.mask_sensitive_data') as mock_mask:
-      mock_mask.return_value = "***MASKED***"
+      mock_mask.return_value = '***MASKED***'
 
-      log_operation_error(mock_logger, "operation", error, api_key="secret123")
+      log_operation_error(mock_logger, 'operation', error, api_key='secret123')
 
       # The function should be called for sensitive kwargs
       assert mock_mask.called
@@ -402,14 +386,14 @@ class TestLogOperationError:
   def test_error_without_context(self):
     """Test error logging without additional context."""
     mock_logger = Mock()
-    error = RuntimeError("Simple error")
+    error = RuntimeError('Simple error')
 
-    log_operation_error(mock_logger, "simple_operation", error)
+    log_operation_error(mock_logger, 'simple_operation', error)
 
     mock_logger.error.assert_called_once()
     call_args = mock_logger.error.call_args[0][0]
-    assert "simple_operation" in call_args
-    assert "Simple error" in call_args
+    assert 'simple_operation' in call_args
+    assert 'Simple error' in call_args
 
 
 class TestLogPerformanceMetrics:
@@ -419,13 +403,13 @@ class TestLogPerformanceMetrics:
     """Test basic performance metrics logging."""
     mock_logger = Mock()
 
-    log_performance_metrics(mock_logger, "test_operation", 1.5, count=100)
+    log_performance_metrics(mock_logger, 'test_operation', 1.5, count=100)
 
     mock_logger.info.assert_called_once()
     call_args = mock_logger.info.call_args[0][0]
-    assert "test_operation" in call_args
-    assert "duration=1.50s" in call_args
-    assert "count=100" in call_args
+    assert 'test_operation' in call_args
+    assert 'duration=1.50s' in call_args
+    assert 'count=100' in call_args
 
   def test_memory_formatting(self):
     """Test memory usage formatting in performance logs."""
@@ -433,22 +417,22 @@ class TestLogPerformanceMetrics:
 
     log_performance_metrics(
       mock_logger,
-      "memory_operation",
+      'memory_operation',
       2.0,
-      memory_usage=10485760  # 10MB in bytes
+      memory_usage=10485760,  # 10MB in bytes
     )
 
     call_args = mock_logger.info.call_args[0][0]
-    assert "memory_usage=10.0MB" in call_args
+    assert 'memory_usage=10.0MB' in call_args
 
   def test_rate_formatting(self):
     """Test rate formatting in performance logs."""
     mock_logger = Mock()
 
-    log_performance_metrics(mock_logger, "rate_operation", 1.0, throughput=50.5)
+    log_performance_metrics(mock_logger, 'rate_operation', 1.0, throughput=50.5)
 
     call_args = mock_logger.info.call_args[0][0]
-    assert "throughput=50.50/s" in call_args
+    assert 'throughput=50.50/s' in call_args
 
 
 class TestLogFileOperation:
@@ -457,36 +441,36 @@ class TestLogFileOperation:
   def test_basic_file_operation_logging(self, temp_data_manager):
     """Test basic file operation logging."""
     mock_logger = Mock()
-    test_file = temp_data_manager.create_temp_text_file("content", "test.txt")
+    test_file = temp_data_manager.create_temp_text_file('content', 'test.txt')
 
-    log_file_operation(mock_logger, "read", test_file)
+    log_file_operation(mock_logger, 'read', test_file)
 
     mock_logger.info.assert_called_once()
     call_args = mock_logger.info.call_args[0]
-    assert "File read" in call_args[0]
-    assert "test.txt" in call_args[0]
+    assert 'File read' in call_args[0]
+    assert 'test.txt' in call_args[0]
 
   def test_nonexistent_file_logging(self):
     """Test logging for nonexistent files."""
     mock_logger = Mock()
 
-    log_file_operation(mock_logger, "read", "/nonexistent/file.txt")
+    log_file_operation(mock_logger, 'read', '/nonexistent/file.txt')
 
     mock_logger.info.assert_called_once()
     call_args = mock_logger.info.call_args[0][0]
-    assert "file.txt" in call_args
-    assert "file_exists=False" in call_args
+    assert 'file.txt' in call_args
+    assert 'file_exists=False' in call_args
 
   def test_file_operation_with_metadata(self, temp_data_manager):
     """Test file operation logging with additional metadata."""
     mock_logger = Mock()
-    test_file = temp_data_manager.create_temp_text_file("content", "test.txt")
+    test_file = temp_data_manager.create_temp_text_file('content', 'test.txt')
 
-    log_file_operation(mock_logger, "process", test_file, duration=1.5)
+    log_file_operation(mock_logger, 'process', test_file, duration=1.5)
 
     mock_logger.info.assert_called_once()
     call_args = mock_logger.info.call_args[0]
-    assert "duration=1.5" in call_args[0]
+    assert 'duration=1.5' in call_args[0]
 
 
 class TestLogModelOperation:
@@ -496,28 +480,22 @@ class TestLogModelOperation:
     """Test basic model operation logging."""
     mock_logger = Mock()
 
-    log_model_operation(mock_logger, "embedding", "text-embedding-3-small")
+    log_model_operation(mock_logger, 'embedding', 'text-embedding-3-small')
 
     mock_logger.info.assert_called_once()
     call_args = mock_logger.info.call_args[0][0]
-    assert "Model embedding" in call_args
-    assert "text-embedding-3-small" in call_args
+    assert 'Model embedding' in call_args
+    assert 'text-embedding-3-small' in call_args
 
   def test_model_operation_with_parameters(self):
     """Test model operation logging with parameters."""
     mock_logger = Mock()
 
-    log_model_operation(
-      mock_logger,
-      "query",
-      "gpt-4",
-      temperature=0.7,
-      max_tokens=1000
-    )
+    log_model_operation(mock_logger, 'query', 'gpt-4', temperature=0.7, max_tokens=1000)
 
     call_args = mock_logger.info.call_args[0][0]
-    assert "temperature=0.70" in call_args
-    assert "max_tokens=1,000tokens" in call_args
+    assert 'temperature=0.70' in call_args
+    assert 'max_tokens=1,000tokens' in call_args
 
 
 class TestOperationLogger:
@@ -527,7 +505,7 @@ class TestOperationLogger:
     """Test operation logger for successful operations."""
     mock_logger = Mock()
 
-    with OperationLogger(mock_logger, "test_operation", param="value"):
+    with OperationLogger(mock_logger, 'test_operation', param='value'):
       time.sleep(0.01)  # Small delay to test timing
 
     # Should log start and completion
@@ -538,8 +516,8 @@ class TestOperationLogger:
     """Test operation logger for failed operations."""
     mock_logger = Mock()
 
-    with pytest.raises(ValueError), OperationLogger(mock_logger, "failing_operation"):
-      raise ValueError("Test error")
+    with pytest.raises(ValueError), OperationLogger(mock_logger, 'failing_operation'):
+      raise ValueError('Test error')
 
     # Should log error
     assert mock_logger.error.call_count >= 1
@@ -548,8 +526,8 @@ class TestOperationLogger:
     """Test adding context during operation."""
     mock_logger = Mock()
 
-    with OperationLogger(mock_logger, "context_operation") as op_logger:
-      op_logger.add_context(extra_param="added_value")
+    with OperationLogger(mock_logger, 'context_operation') as op_logger:
+      op_logger.add_context(extra_param='added_value')
 
     # Context should be included in final log
     mock_logger.info.assert_called()
@@ -558,13 +536,12 @@ class TestOperationLogger:
     """Test checkpoint logging during operation."""
     mock_logger = Mock()
 
-    with OperationLogger(mock_logger, "checkpoint_operation") as op_logger:
-      op_logger.checkpoint("halfway done", progress=50)
+    with OperationLogger(mock_logger, 'checkpoint_operation') as op_logger:
+      op_logger.checkpoint('halfway done', progress=50)
 
     # Should log checkpoint
     mock_logger.debug.assert_called()
-    checkpoint_call = [call for call in mock_logger.debug.call_args_list
-                      if "checkpoint" in call[0][0]]
+    checkpoint_call = [call for call in mock_logger.debug.call_args_list if 'checkpoint' in call[0][0]]
     assert len(checkpoint_call) > 0
 
 
@@ -600,4 +577,5 @@ class TestDashes:
 
     assert all(c == 'a' for c in result)
 
-#fin
+
+# fin

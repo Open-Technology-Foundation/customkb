@@ -16,9 +16,14 @@ from utils.logging_config import get_logger
 
 logger = get_logger(__name__)
 
-def validate_file_path(filepath: str, allowed_extensions: list[str] = None,
-                      base_dir: str = None, allow_absolute: bool = False,
-                      allow_relative_traversal: bool = False) -> str:
+
+def validate_file_path(
+  filepath: str,
+  allowed_extensions: list[str] | None = None,
+  base_dir: str | None = None,
+  allow_absolute: bool = False,
+  allow_relative_traversal: bool = False,
+) -> str:
   """
   Validate and sanitize file paths to prevent path traversal attacks.
 
@@ -36,19 +41,17 @@ def validate_file_path(filepath: str, allowed_extensions: list[str] = None,
       ValueError: If path is invalid or potentially dangerous
   """
   if not filepath:
-    raise ValueError("File path cannot be empty")
+    raise ValueError('File path cannot be empty')
 
   # Remove null bytes and normalize whitespace
   clean_path = filepath.replace('\0', '').strip()
 
   if not clean_path:
-    raise ValueError("File path cannot be empty after cleaning")
+    raise ValueError('File path cannot be empty after cleaning')
 
   # Detect test environment and allow temporary test files
   is_test_env = (
-    'pytest' in sys.modules or
-    'PYTEST_CURRENT_TEST' in os.environ or
-    '/tmp/' in clean_path and 'test' in clean_path.lower()
+    'pytest' in sys.modules or 'PYTEST_CURRENT_TEST' in os.environ or '/tmp/' in clean_path and 'test' in clean_path.lower()
   )
 
   # Allow VECTORDBS directory for knowledgebase operations
@@ -60,7 +63,7 @@ def validate_file_path(filepath: str, allowed_extensions: list[str] = None,
     if allowed_extensions:
       path_obj = Path(clean_path)
       if path_obj.suffix not in allowed_extensions:
-        raise ValueError(f"File extension {path_obj.suffix} not allowed")
+        raise ValueError(f'File extension {path_obj.suffix} not allowed')
     return clean_path
 
   # Check for actual path traversal (not just any double dots in filenames)
@@ -69,11 +72,13 @@ def validate_file_path(filepath: str, allowed_extensions: list[str] = None,
     try:
       path_parts = Path(clean_path).parts
       if any(part == '..' for part in path_parts):
-        raise ValueError("Invalid file path: path traversal detected")
+        raise ValueError('Invalid file path: path traversal detected')
     except (OSError, ValueError):
       # If path parsing fails, it might be malformed
-      if '..' in clean_path and ('/..' in clean_path or '../' in clean_path or '\\..\\' in clean_path or clean_path.startswith('..')):
-        raise ValueError("Invalid file path: path traversal detected") from None
+      if '..' in clean_path and (
+        '/..' in clean_path or '../' in clean_path or '\\..\\' in clean_path or clean_path.startswith('..')
+      ):
+        raise ValueError('Invalid file path: path traversal detected') from None
 
   # Check for absolute paths (unless explicitly allowed)
   if clean_path.startswith('/') or (len(clean_path) > 1 and clean_path[1] == ':'):
@@ -82,24 +87,25 @@ def validate_file_path(filepath: str, allowed_extensions: list[str] = None,
       abs_path = os.path.abspath(clean_path)
       abs_base = os.path.abspath(base_dir)
       if not abs_path.startswith(abs_base):
-        raise ValueError("File path outside allowed directory")
+        raise ValueError('File path outside allowed directory')
     elif not allow_absolute:
-      raise ValueError("Absolute paths not allowed")
+      raise ValueError('Absolute paths not allowed')
 
   # Validate file extension
   if allowed_extensions:
     ext = Path(clean_path).suffix.lower()
     if ext not in [e.lower() for e in allowed_extensions]:
-      raise ValueError(f"Invalid file extension. Allowed: {allowed_extensions}")
+      raise ValueError(f'Invalid file extension. Allowed: {allowed_extensions}')
 
   # Check for dangerous characters in filename only (not directory path)
   # Directory paths are user-controlled and may contain characters like &
   dangerous_chars = ['<', '>', '|', '&', ';', '`', '$']
   filename = os.path.basename(clean_path)
   if any(char in filename for char in dangerous_chars):
-    raise ValueError("File path contains dangerous characters")
+    raise ValueError('File path contains dangerous characters')
 
   return clean_path
+
 
 def validate_safe_path(filepath: str, base_dir: str) -> bool:
   """
@@ -118,6 +124,7 @@ def validate_safe_path(filepath: str, base_dir: str) -> bool:
     return abs_path.startswith(abs_base)
   except (OSError, ValueError):
     return False
+
 
 def validate_table_name(table_name: str) -> bool:
   """
@@ -138,8 +145,15 @@ def validate_table_name(table_name: str) -> bool:
 
   # Block SQL keywords and dangerous names
   dangerous_names = {
-    'sqlite_master', 'sqlite_temp_master', 'sqlite_sequence',
-    'information_schema', 'pg_', 'sys', 'master', 'msdb', 'tempdb'
+    'sqlite_master',
+    'sqlite_temp_master',
+    'sqlite_sequence',
+    'information_schema',
+    'pg_',
+    'sys',
+    'master',
+    'msdb',
+    'tempdb',
   }
 
   table_lower = table_name.lower()
@@ -149,7 +163,8 @@ def validate_table_name(table_name: str) -> bool:
   # Length check
   return len(table_name) <= 64
 
-def validate_api_key(api_key: str, prefix: str = None, min_length: int = 20) -> bool:
+
+def validate_api_key(api_key: str, prefix: str | None = None, min_length: int = 20) -> bool:
   """
   Basic API key format validation.
 
@@ -170,6 +185,7 @@ def validate_api_key(api_key: str, prefix: str = None, min_length: int = 20) -> 
   # Check for reasonable key format (alphanumeric + common symbols)
   return re.match(r'^[a-zA-Z0-9_.-]+$', api_key)
 
+
 def sanitize_query_text(query: str, max_length: int = 10000) -> str:
   """
   Sanitize user query text to prevent injection attacks.
@@ -185,15 +201,16 @@ def sanitize_query_text(query: str, max_length: int = 10000) -> str:
       ValueError: If query is invalid or too long
   """
   if not query:
-    raise ValueError("Query text cannot be empty")
+    raise ValueError('Query text cannot be empty')
 
   if len(query) > max_length:
-    raise ValueError(f"Query too long. Maximum {max_length} characters allowed")
+    raise ValueError(f'Query too long. Maximum {max_length} characters allowed')
 
   # Remove control characters except newlines and tabs
   sanitized = re.sub(r'[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]', '', query)
 
   return sanitized.strip()
+
 
 def sanitize_config_value(value: str, max_length: int = 1000) -> str:
   """
@@ -210,15 +227,15 @@ def sanitize_config_value(value: str, max_length: int = 1000) -> str:
       ValueError: If value is invalid
   """
   if len(value) > max_length:
-    raise ValueError(f"Configuration value too long. Maximum {max_length} characters")
+    raise ValueError(f'Configuration value too long. Maximum {max_length} characters')
 
   # Remove control characters
   sanitized = re.sub(r'[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]', '', value)
 
   return sanitized.strip()
 
-def safe_sql_in_query(cursor: sqlite3.Cursor, query_template: str,
-                     id_list: list[int], additional_params: tuple = ()) -> None:
+
+def safe_sql_in_query(cursor: sqlite3.Cursor, query_template: str, id_list: list[int], additional_params: tuple = ()) -> None:
   """
   Safely execute SQL IN queries with proper parameterization.
 
@@ -233,7 +250,7 @@ def safe_sql_in_query(cursor: sqlite3.Cursor, query_template: str,
 
   # Validate that all items are integers (for ID lists)
   if not all(isinstance(item, int) for item in id_list):
-    raise ValueError("All items in id_list must be integers")
+    raise ValueError('All items in id_list must be integers')
 
   placeholders = ','.join(['?'] * len(id_list))
   full_query = query_template.format(placeholders=placeholders)
@@ -242,6 +259,7 @@ def safe_sql_in_query(cursor: sqlite3.Cursor, query_template: str,
   all_params = list(id_list) + list(additional_params)
 
   cursor.execute(full_query, all_params)
+
 
 def mask_sensitive_data(text: str) -> str:
   """
@@ -264,6 +282,7 @@ def mask_sensitive_data(text: str) -> str:
 
   return text
 
+
 def safe_log_error(error_msg: str, **kwargs) -> None:
   """
   Log errors while masking sensitive information.
@@ -282,9 +301,10 @@ def safe_log_error(error_msg: str, **kwargs) -> None:
 
   # Log using the module logger (which should always be available)
   if safe_context:
-    logger.error(f"{safe_msg} | Context: {safe_context}")
+    logger.error(f'{safe_msg} | Context: {safe_context}')
   else:
     logger.error(safe_msg)
+
 
 def safe_json_loads(json_str: str, max_size: int = 10000) -> dict[str, Any]:
   """
@@ -301,12 +321,13 @@ def safe_json_loads(json_str: str, max_size: int = 10000) -> dict[str, Any]:
       ValueError: If JSON is invalid or too large
   """
   if len(json_str) > max_size:
-    raise ValueError(f"JSON data too large. Maximum {max_size} characters")
+    raise ValueError(f'JSON data too large. Maximum {max_size} characters')
 
   try:
     return json.loads(json_str)
   except json.JSONDecodeError as e:
-    raise ValueError(f"Invalid JSON format: {e}") from e
+    raise ValueError(f'Invalid JSON format: {e}') from e
+
 
 def validate_database_name(db_name: str) -> str:
   """
@@ -322,16 +343,17 @@ def validate_database_name(db_name: str) -> str:
       ValueError: If name is invalid
   """
   if not db_name:
-    raise ValueError("Database name cannot be empty")
+    raise ValueError('Database name cannot be empty')
 
   # Allow only alphanumeric, underscore, dash, and dot
   if not re.match(r'^[a-zA-Z0-9_.-]+$', db_name):
-    raise ValueError("Database name contains invalid characters")
+    raise ValueError('Database name contains invalid characters')
 
   # Prevent path traversal
   if '..' in db_name or db_name.startswith('/'):
-    raise ValueError("Invalid database name: path traversal detected")
+    raise ValueError('Invalid database name: path traversal detected')
 
   return db_name
 
-#fin
+
+# fin

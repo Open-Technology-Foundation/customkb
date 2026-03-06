@@ -30,12 +30,7 @@ def convert_file_to_utf8(file_path: str, backup: bool = True, dry_run: bool = Fa
       - 'message': str
       - 'backup_path': str (if backup created)
   """
-  result = {
-    'success': False,
-    'original_encoding': None,
-    'message': '',
-    'backup_path': None
-  }
+  result = {'success': False, 'original_encoding': None, 'message': '', 'backup_path': None}
 
   try:
     # Detect current encoding
@@ -91,10 +86,7 @@ def convert_file_to_utf8(file_path: str, backup: bool = True, dry_run: bool = Fa
 
 
 def convert_files_to_utf8(
-  file_patterns: list[str],
-  backup: bool = True,
-  dry_run: bool = False,
-  recursive: bool = False
+  file_patterns: list[str], backup: bool = True, dry_run: bool = False, recursive: bool = False
 ) -> dict:
   """
   Convert multiple files to UTF-8 encoding.
@@ -113,13 +105,7 @@ def convert_files_to_utf8(
       - 'failed': int - Failed conversions
       - 'details': list - Per-file results
   """
-  results = {
-    'total': 0,
-    'converted': 0,
-    'skipped': 0,
-    'failed': 0,
-    'details': []
-  }
+  results = {'total': 0, 'converted': 0, 'skipped': 0, 'failed': 0, 'details': []}
 
   # Collect all files
   all_files = []
@@ -132,14 +118,14 @@ def convert_files_to_utf8(
   results['total'] = len(all_files)
 
   if not all_files:
-    logger.warning("No files found matching patterns")
+    logger.warning('No files found matching patterns')
     return results
 
-  logger.info(f"Processing {len(all_files)} file(s)...")
+  logger.info(f'Processing {len(all_files)} file(s)...')
 
   # Process each file
   for file_path in all_files:
-    logger.debug(f"Processing: {file_path}")
+    logger.debug(f'Processing: {file_path}')
 
     file_result = convert_file_to_utf8(file_path, backup=backup, dry_run=dry_run)
 
@@ -147,19 +133,16 @@ def convert_files_to_utf8(
     if file_result['success']:
       if 'Already' in file_result['message']:
         results['skipped'] += 1
-        logger.debug(f"  ✓ {os.path.basename(file_path)}: {file_result['message']}")
+        logger.debug(f'  ✓ {os.path.basename(file_path)}: {file_result["message"]}')
       else:
         results['converted'] += 1
-        logger.info(f"  ✓ {os.path.basename(file_path)}: {file_result['message']}")
+        logger.info(f'  ✓ {os.path.basename(file_path)}: {file_result["message"]}')
     else:
       results['failed'] += 1
-      logger.error(f"  ✗ {os.path.basename(file_path)}: {file_result['message']}")
+      logger.error(f'  ✗ {os.path.basename(file_path)}: {file_result["message"]}')
 
     # Add to details
-    results['details'].append({
-      'file': file_path,
-      **file_result
-    })
+    results['details'].append({'file': file_path, **file_result})
 
   return results
 
@@ -175,19 +158,19 @@ def format_conversion_summary(results: dict) -> str:
       Formatted summary string
   """
   lines = []
-  lines.append("\n=== Encoding Conversion Summary ===")
-  lines.append(f"Total files: {results['total']}")
-  lines.append(f"Converted: {results['converted']}")
-  lines.append(f"Skipped (already UTF-8): {results['skipped']}")
-  lines.append(f"Failed: {results['failed']}")
+  lines.append('\n=== Encoding Conversion Summary ===')
+  lines.append(f'Total files: {results["total"]}')
+  lines.append(f'Converted: {results["converted"]}')
+  lines.append(f'Skipped (already UTF-8): {results["skipped"]}')
+  lines.append(f'Failed: {results["failed"]}')
 
   if results['failed'] > 0:
-    lines.append("\n=== Failed Conversions ===")
+    lines.append('\n=== Failed Conversions ===')
     for detail in results['details']:
       if not detail['success']:
-        lines.append(f"  {detail['file']}: {detail['message']}")
+        lines.append(f'  {detail["file"]}: {detail["message"]}')
 
   return '\n'.join(lines)
 
 
-#fin
+# fin

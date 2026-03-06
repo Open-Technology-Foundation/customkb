@@ -43,7 +43,13 @@ def _get_env(var_name: str, default: Any, cast_type: type = str) -> Any:
 
 
 class DefaultConfig(BaseModel):
-  """Core model and processing settings (DEFAULT section)."""
+  """Core model and processing settings from the DEFAULT .cfg section.
+
+  Controls embedding model, query model, chunking parameters, and
+  response formatting. All fields can be overridden by uppercase
+  environment variables (e.g., VECTOR_MODEL, QUERY_TOP_K).
+  """
+
   vector_model: str = 'text-embedding-3-small'
   vector_dimensions: int = 1536
   vector_chunks: int = 200
@@ -61,7 +67,13 @@ class DefaultConfig(BaseModel):
 
 
 class ApiConfig(BaseModel):
-  """External API interaction parameters (API section)."""
+  """External API interaction parameters from the API .cfg section.
+
+  Governs rate limiting, retry logic, and concurrency for embedding
+  and LLM API calls. Env var overrides use uppercase field names
+  (e.g., API_MAX_RETRIES, API_MAX_CONCURRENCY).
+  """
+
   api_call_delay_seconds: float = 0.05
   api_max_retries: int = 20
   api_max_concurrency: int = 8
@@ -71,7 +83,13 @@ class ApiConfig(BaseModel):
 
 
 class LimitsConfig(BaseModel):
-  """Resource and security constraints (LIMITS section)."""
+  """Resource and security constraints from the LIMITS .cfg section.
+
+  Sets upper bounds on file sizes, cache memory, query lengths, and
+  API key validation. Env var overrides use uppercase field names
+  (e.g., MAX_FILE_SIZE_MB, MEMORY_CACHE_SIZE).
+  """
+
   max_file_size_mb: int = 100
   max_query_file_size_mb: int = 1
   memory_cache_size: int = 10000
@@ -83,7 +101,13 @@ class LimitsConfig(BaseModel):
 
 
 class PerformanceConfig(BaseModel):
-  """Optimization and tuning settings (PERFORMANCE section)."""
+  """Optimization and tuning settings from the PERFORMANCE .cfg section.
+
+  Controls batch sizes, commit frequencies, thread pools, and caching
+  behavior. Env var overrides use uppercase field names
+  (e.g., EMBEDDING_BATCH_SIZE, COMMIT_FREQUENCY).
+  """
+
   embedding_batch_size: int = 100
   checkpoint_interval: int = 10
   commit_frequency: int = 1000
@@ -98,7 +122,13 @@ class PerformanceConfig(BaseModel):
 
 
 class AlgorithmsConfig(BaseModel):
-  """Algorithm-specific thresholds and parameters (ALGORITHMS section)."""
+  """Algorithm-specific thresholds and parameters from the ALGORITHMS .cfg section.
+
+  Configures FAISS indexing, BM25 hybrid search, reranking, language
+  detection, query enhancement, and encoding detection. Env var
+  overrides use uppercase field names (e.g., SIMILARITY_THRESHOLD).
+  """
+
   high_dimension_threshold: int = 1536
   small_dataset_threshold: int = 1000
   medium_dataset_threshold: int = 100000
@@ -118,15 +148,11 @@ class AlgorithmsConfig(BaseModel):
   language_detection_enabled: bool = False
   language_detection_confidence: float = 0.95
   language_detection_sample_size: int = 3072
-  additional_stopword_languages: list[str] = Field(
-    default_factory=lambda: ['indonesian', 'french', 'german', 'swedish']
-  )
+  additional_stopword_languages: list[str] = Field(default_factory=lambda: ['indonesian', 'french', 'german', 'swedish'])
   # Encoding detection
   auto_detect_encoding: bool = True
   default_encoding: str = 'utf-8'
-  encoding_fallbacks: list[str] = Field(
-    default_factory=lambda: ['utf-8', 'windows-1252', 'latin-1', 'cp1252']
-  )
+  encoding_fallbacks: list[str] = Field(default_factory=lambda: ['utf-8', 'windows-1252', 'latin-1', 'cp1252'])
   # BM25/Hybrid search
   enable_hybrid_search: bool = False
   hybrid_fusion_method: str = 'rrf'
@@ -176,6 +202,7 @@ class KBConfig(BaseModel):
     >>> print(config.api.api_max_retries)
     20
   """
+
   default: DefaultConfig = Field(default_factory=DefaultConfig)
   api: ApiConfig = Field(default_factory=ApiConfig)
   limits: LimitsConfig = Field(default_factory=LimitsConfig)
@@ -203,10 +230,7 @@ class KBConfig(BaseModel):
     """
     cfg_path = cls._resolve_cfg_path(kb_name_or_path)
     if cfg_path is None:
-      raise FileNotFoundError(
-        f"Cannot find config for '{kb_name_or_path}'. "
-        f"Looked in {VECTORDBS}/"
-      )
+      raise FileNotFoundError(f"Cannot find config for '{kb_name_or_path}'. Looked in {VECTORDBS}/")
 
     parser = configparser.ConfigParser()
     try:
@@ -255,7 +279,12 @@ class KBConfig(BaseModel):
 
   @classmethod
   def _load_default_section(cls, parser: configparser.ConfigParser) -> DefaultConfig:
-    """Load DEFAULT section from parsed config."""
+    """Load DEFAULT section from parsed config.
+
+    ConfigParser always has a DEFAULT section, so no fallback is needed.
+    Each field is resolved as: env var (via _get_env) > .cfg value > hardcoded default.
+    List fields (query_context_files) are parsed from comma-separated strings.
+    """
     df = parser['DEFAULT']
     ctx_str = df.get('query_context_files', '')
     ctx_files = [f.strip() for f in ctx_str.split(',') if f.strip()] if ctx_str else []
@@ -284,7 +313,11 @@ class KBConfig(BaseModel):
 
   @classmethod
   def _load_api_section(cls, parser: configparser.ConfigParser) -> ApiConfig:
-    """Load API section from parsed config."""
+    """Load API section from parsed config.
+
+    Falls back to DEFAULT section if API section is absent.
+    Each field is resolved as: env var > .cfg value > hardcoded default.
+    """
     section = parser['API'] if 'API' in parser else parser['DEFAULT']
     return ApiConfig(
       api_call_delay_seconds=_get_env('API_CALL_DELAY_SECONDS', _cfg_float(section, 'api_call_delay_seconds', 0.05), float),
@@ -297,7 +330,11 @@ class KBConfig(BaseModel):
 
   @classmethod
   def _load_limits_section(cls, parser: configparser.ConfigParser) -> LimitsConfig:
-    """Load LIMITS section from parsed config."""
+    """Load LIMITS section from parsed config.
+
+    Falls back to DEFAULT section if LIMITS section is absent.
+    Each field is resolved as: env var > .cfg value > hardcoded default.
+    """
     section = parser['LIMITS'] if 'LIMITS' in parser else parser['DEFAULT']
     return LimitsConfig(
       max_file_size_mb=_get_env('MAX_FILE_SIZE_MB', _cfg_int(section, 'max_file_size_mb', 100), int),
@@ -312,7 +349,11 @@ class KBConfig(BaseModel):
 
   @classmethod
   def _load_performance_section(cls, parser: configparser.ConfigParser) -> PerformanceConfig:
-    """Load PERFORMANCE section from parsed config."""
+    """Load PERFORMANCE section from parsed config.
+
+    Falls back to DEFAULT section if PERFORMANCE section is absent.
+    Each field is resolved as: env var > .cfg value > hardcoded default.
+    """
     section = parser['PERFORMANCE'] if 'PERFORMANCE' in parser else parser['DEFAULT']
     return PerformanceConfig(
       embedding_batch_size=_get_env('EMBEDDING_BATCH_SIZE', _cfg_int(section, 'embedding_batch_size', 100), int),
@@ -320,7 +361,9 @@ class KBConfig(BaseModel):
       commit_frequency=_get_env('COMMIT_FREQUENCY', _cfg_int(section, 'commit_frequency', 1000), int),
       io_thread_pool_size=_get_env('IO_THREAD_POOL_SIZE', _cfg_int(section, 'io_thread_pool_size', 4), int),
       cache_thread_pool_size=_get_env('CACHE_THREAD_POOL_SIZE', _cfg_int(section, 'cache_thread_pool_size', 4), int),
-      file_processing_batch_size=_get_env('FILE_PROCESSING_BATCH_SIZE', _cfg_int(section, 'file_processing_batch_size', 500), int),
+      file_processing_batch_size=_get_env(
+        'FILE_PROCESSING_BATCH_SIZE', _cfg_int(section, 'file_processing_batch_size', 500), int
+      ),
       sql_batch_size=_get_env('SQL_BATCH_SIZE', _cfg_int(section, 'sql_batch_size', 500), int),
       reference_batch_size=_get_env('REFERENCE_BATCH_SIZE', _cfg_int(section, 'reference_batch_size', 5), int),
       query_cache_ttl_days=_get_env('QUERY_CACHE_TTL_DAYS', _cfg_int(section, 'query_cache_ttl_days', 7), int),
@@ -330,12 +373,19 @@ class KBConfig(BaseModel):
 
   @classmethod
   def _load_algorithms_section(cls, parser: configparser.ConfigParser) -> AlgorithmsConfig:
-    """Load ALGORITHMS section from parsed config."""
+    """Load ALGORITHMS section from parsed config.
+
+    Falls back to DEFAULT section if ALGORITHMS section is absent.
+    Each field is resolved as: env var > .cfg value > hardcoded default.
+    List fields (stopwords, encoding_fallbacks) are stored as
+    comma-separated strings in the .cfg and parsed into Python lists here.
+    """
     section = parser['ALGORITHMS'] if 'ALGORITHMS' in parser else parser['DEFAULT']
+
     def _g(key, default):
       return section.get(key, default) if hasattr(section, 'get') else default
 
-    # List fields
+    # Parse comma-separated list fields into Python lists
     stopword_str = _g('additional_stopword_languages', 'indonesian,french,german,swedish')
     stopwords = [lang.strip() for lang in stopword_str.split(',') if lang.strip()]
 
@@ -345,22 +395,36 @@ class KBConfig(BaseModel):
     return AlgorithmsConfig(
       high_dimension_threshold=_get_env('HIGH_DIMENSION_THRESHOLD', _cfg_int(section, 'high_dimension_threshold', 1536), int),
       small_dataset_threshold=_get_env('SMALL_DATASET_THRESHOLD', _cfg_int(section, 'small_dataset_threshold', 1000), int),
-      medium_dataset_threshold=_get_env('MEDIUM_DATASET_THRESHOLD', _cfg_int(section, 'medium_dataset_threshold', 100000), int),
+      medium_dataset_threshold=_get_env(
+        'MEDIUM_DATASET_THRESHOLD', _cfg_int(section, 'medium_dataset_threshold', 100000), int
+      ),
       ivf_centroid_multiplier=_get_env('IVF_CENTROID_MULTIPLIER', _cfg_int(section, 'ivf_centroid_multiplier', 4), int),
       max_centroids=_get_env('MAX_CENTROIDS', _cfg_int(section, 'max_centroids', 256), int),
-      token_estimation_sample_size=_get_env('TOKEN_ESTIMATION_SAMPLE_SIZE', _cfg_int(section, 'token_estimation_sample_size', 10), int),
-      token_estimation_multiplier=_get_env('TOKEN_ESTIMATION_MULTIPLIER', _cfg_float(section, 'token_estimation_multiplier', 1.3), float),
+      token_estimation_sample_size=_get_env(
+        'TOKEN_ESTIMATION_SAMPLE_SIZE', _cfg_int(section, 'token_estimation_sample_size', 10), int
+      ),
+      token_estimation_multiplier=_get_env(
+        'TOKEN_ESTIMATION_MULTIPLIER', _cfg_float(section, 'token_estimation_multiplier', 1.3), float
+      ),
       similarity_threshold=_get_env('SIMILARITY_THRESHOLD', _cfg_float(section, 'similarity_threshold', 0.6), float),
-      low_similarity_scope_factor=_get_env('LOW_SIMILARITY_SCOPE_FACTOR', _cfg_float(section, 'low_similarity_scope_factor', 0.5), float),
+      low_similarity_scope_factor=_get_env(
+        'LOW_SIMILARITY_SCOPE_FACTOR', _cfg_float(section, 'low_similarity_scope_factor', 0.5), float
+      ),
       max_chunk_overlap=_get_env('MAX_CHUNK_OVERLAP', _cfg_int(section, 'max_chunk_overlap', 100), int),
       overlap_ratio=_get_env('OVERLAP_RATIO', _cfg_float(section, 'overlap_ratio', 0.5), float),
       heading_search_limit=_get_env('HEADING_SEARCH_LIMIT', _cfg_int(section, 'heading_search_limit', 200), int),
       entity_extraction_limit=_get_env('ENTITY_EXTRACTION_LIMIT', _cfg_int(section, 'entity_extraction_limit', 500), int),
       default_dir_permissions=_get_env('DEFAULT_DIR_PERMISSIONS', _cfg_int(section, 'default_dir_permissions', 0o770), int),
       default_code_language=_get_env('DEFAULT_CODE_LANGUAGE', _g('default_code_language', 'python')),
-      language_detection_enabled=_get_env('LANGUAGE_DETECTION_ENABLED', _cfg_bool(section, 'language_detection_enabled', False), bool),
-      language_detection_confidence=_get_env('LANGUAGE_DETECTION_CONFIDENCE', _cfg_float(section, 'language_detection_confidence', 0.95), float),
-      language_detection_sample_size=_get_env('LANGUAGE_DETECTION_SAMPLE_SIZE', _cfg_int(section, 'language_detection_sample_size', 3072), int),
+      language_detection_enabled=_get_env(
+        'LANGUAGE_DETECTION_ENABLED', _cfg_bool(section, 'language_detection_enabled', False), bool
+      ),
+      language_detection_confidence=_get_env(
+        'LANGUAGE_DETECTION_CONFIDENCE', _cfg_float(section, 'language_detection_confidence', 0.95), float
+      ),
+      language_detection_sample_size=_get_env(
+        'LANGUAGE_DETECTION_SAMPLE_SIZE', _cfg_int(section, 'language_detection_sample_size', 3072), int
+      ),
       additional_stopword_languages=stopwords,
       auto_detect_encoding=_get_env('AUTO_DETECT_ENCODING', _cfg_bool(section, 'auto_detect_encoding', True), bool),
       default_encoding=_get_env('DEFAULT_ENCODING', _g('default_encoding', 'utf-8')),
@@ -375,13 +439,25 @@ class KBConfig(BaseModel):
       bm25_min_token_length=_get_env('BM25_MIN_TOKEN_LENGTH', _cfg_int(section, 'bm25_min_token_length', 2), int),
       bm25_rebuild_threshold=_get_env('BM25_REBUILD_THRESHOLD', _cfg_int(section, 'bm25_rebuild_threshold', 1000), int),
       bm25_max_results=_get_env('BM25_MAX_RESULTS', _cfg_int(section, 'bm25_max_results', 1000), int),
-      enable_query_enhancement=_get_env('ENABLE_QUERY_ENHANCEMENT', _cfg_bool(section, 'enable_query_enhancement', True), bool),
-      query_enhancement_synonyms=_get_env('QUERY_ENHANCEMENT_SYNONYMS', _cfg_bool(section, 'query_enhancement_synonyms', True), bool),
-      query_enhancement_spelling=_get_env('QUERY_ENHANCEMENT_SPELLING', _cfg_bool(section, 'query_enhancement_spelling', True), bool),
+      enable_query_enhancement=_get_env(
+        'ENABLE_QUERY_ENHANCEMENT', _cfg_bool(section, 'enable_query_enhancement', True), bool
+      ),
+      query_enhancement_synonyms=_get_env(
+        'QUERY_ENHANCEMENT_SYNONYMS', _cfg_bool(section, 'query_enhancement_synonyms', True), bool
+      ),
+      query_enhancement_spelling=_get_env(
+        'QUERY_ENHANCEMENT_SPELLING', _cfg_bool(section, 'query_enhancement_spelling', True), bool
+      ),
       max_synonyms_per_word=_get_env('MAX_SYNONYMS_PER_WORD', _cfg_int(section, 'max_synonyms_per_word', 2), int),
-      query_enhancement_cache_ttl_days=_get_env('QUERY_ENHANCEMENT_CACHE_TTL_DAYS', _cfg_int(section, 'query_enhancement_cache_ttl_days', 30), int),
-      spelling_correction_threshold=_get_env('SPELLING_CORRECTION_THRESHOLD', _cfg_float(section, 'spelling_correction_threshold', 0.8), float),
-      synonym_relevance_threshold=_get_env('SYNONYM_RELEVANCE_THRESHOLD', _cfg_float(section, 'synonym_relevance_threshold', 0.6), float),
+      query_enhancement_cache_ttl_days=_get_env(
+        'QUERY_ENHANCEMENT_CACHE_TTL_DAYS', _cfg_int(section, 'query_enhancement_cache_ttl_days', 30), int
+      ),
+      spelling_correction_threshold=_get_env(
+        'SPELLING_CORRECTION_THRESHOLD', _cfg_float(section, 'spelling_correction_threshold', 0.8), float
+      ),
+      synonym_relevance_threshold=_get_env(
+        'SYNONYM_RELEVANCE_THRESHOLD', _cfg_float(section, 'synonym_relevance_threshold', 0.6), float
+      ),
       enable_categorization=_get_env('ENABLE_CATEGORIZATION', _cfg_bool(section, 'enable_categorization', False), bool),
       enable_reranking=_get_env('ENABLE_RERANKING', _cfg_bool(section, 'enable_reranking', True), bool),
       reranking_model=_get_env('RERANKING_MODEL', _g('reranking_model', 'cross-encoder/ms-marco-MiniLM-L-6-v2')),
@@ -391,7 +467,9 @@ class KBConfig(BaseModel):
       reranking_cache_size=_get_env('RERANKING_CACHE_SIZE', _cfg_int(section, 'reranking_cache_size', 1000), int),
       faiss_gpu_batch_size=_get_env('FAISS_GPU_BATCH_SIZE', _cfg_int(section, 'faiss_gpu_batch_size', 1024), int),
       faiss_gpu_use_float16=_get_env('FAISS_GPU_USE_FLOAT16', _cfg_bool(section, 'faiss_gpu_use_float16', True), bool),
-      faiss_gpu_memory_buffer_gb=_get_env('FAISS_GPU_MEMORY_BUFFER_GB', _cfg_float(section, 'faiss_gpu_memory_buffer_gb', 4.0), float),
+      faiss_gpu_memory_buffer_gb=_get_env(
+        'FAISS_GPU_MEMORY_BUFFER_GB', _cfg_float(section, 'faiss_gpu_memory_buffer_gb', 4.0), float
+      ),
       faiss_gpu_memory_limit_mb=_get_env('FAISS_GPU_MEMORY_LIMIT_MB', _cfg_int(section, 'faiss_gpu_memory_limit_mb', 0), int),
       faiss_nprobe=_get_env('FAISS_NPROBE', _cfg_int(section, 'faiss_nprobe', 32), int),
     )
@@ -431,4 +509,5 @@ def _cfg_bool(section: Any, key: str, default: bool) -> bool:
     return default
   return str(val).lower() in ('true', '1', 'yes')
 
-#fin
+
+# fin

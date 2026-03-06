@@ -31,31 +31,29 @@ def get_gpu_memory_mb() -> int | None:
 
   # Check if GPU is disabled via environment
   if os.environ.get('FAISS_NO_GPU', '').lower() in ['1', 'true']:
-    logger.info("GPU disabled via FAISS_NO_GPU environment variable")
+    logger.info('GPU disabled via FAISS_NO_GPU environment variable')
     return None
 
   # Try PyTorch first (most reliable)
   try:
     import torch
+
     if torch.cuda.is_available():
       device_props = torch.cuda.get_device_properties(0)
       memory_bytes = device_props.total_memory
       memory_mb = memory_bytes // (1024 * 1024)
-      logger.info(f"Detected GPU memory via PyTorch: {memory_mb} MB")
+      logger.info(f'Detected GPU memory via PyTorch: {memory_mb} MB')
       _gpu_memory_cache = memory_mb
       return memory_mb
   except ImportError:
-    logger.debug("PyTorch not available for GPU detection")
+    logger.debug('PyTorch not available for GPU detection')
   except (RuntimeError, OSError) as e:
-    logger.warning(f"PyTorch GPU detection failed: {e}")
+    logger.warning(f'PyTorch GPU detection failed: {e}')
 
   # Fallback to nvidia-smi
   try:
     result = subprocess.run(
-      ['nvidia-smi', '--query-gpu=memory.total', '--format=csv,noheader,nounits'],
-      capture_output=True,
-      text=True,
-      timeout=5
+      ['nvidia-smi', '--query-gpu=memory.total', '--format=csv,noheader,nounits'], capture_output=True, text=True, timeout=5
     )
 
     if result.returncode == 0:
@@ -64,16 +62,16 @@ def get_gpu_memory_mb() -> int | None:
       if lines and lines[0]:
         # Use first GPU's memory
         memory_mb = int(lines[0])
-        logger.info(f"Detected GPU memory via nvidia-smi: {memory_mb} MB")
+        logger.info(f'Detected GPU memory via nvidia-smi: {memory_mb} MB')
         _gpu_memory_cache = memory_mb
         return memory_mb
   except (subprocess.SubprocessError, ValueError) as e:
-    logger.debug(f"nvidia-smi GPU detection failed: {e}")
+    logger.debug(f'nvidia-smi GPU detection failed: {e}')
   except FileNotFoundError:
-    logger.debug("nvidia-smi not found")
+    logger.debug('nvidia-smi not found')
 
   # No GPU detected
-  logger.info("No GPU detected for FAISS operations")
+  logger.info('No GPU detected for FAISS operations')
   _gpu_memory_cache = None
   return None
 
@@ -95,10 +93,10 @@ def get_safe_gpu_memory_limit_mb(buffer_gb: float = 4.0) -> int | None:
   if override:
     try:
       limit = int(override)
-      logger.info(f"Using manual GPU memory limit: {limit} MB")
+      logger.info(f'Using manual GPU memory limit: {limit} MB')
       return limit
     except ValueError:
-      logger.warning(f"Invalid FAISS_GPU_MEMORY_LIMIT_MB: {override}")
+      logger.warning(f'Invalid FAISS_GPU_MEMORY_LIMIT_MB: {override}')
 
   # Detect GPU memory
   total_memory_mb = get_gpu_memory_mb()
@@ -109,7 +107,7 @@ def get_safe_gpu_memory_limit_mb(buffer_gb: float = 4.0) -> int | None:
   buffer_mb = int(buffer_gb * 1024)
   safe_limit_mb = max(0, total_memory_mb - buffer_mb)
 
-  logger.info(f"GPU memory: {total_memory_mb} MB total, {safe_limit_mb} MB available for FAISS (buffer: {buffer_gb} GB)")
+  logger.info(f'GPU memory: {total_memory_mb} MB total, {safe_limit_mb} MB available for FAISS (buffer: {buffer_gb} GB)')
 
   return safe_limit_mb
 
@@ -134,19 +132,19 @@ def should_use_gpu_for_index(index_size_mb: float, kb_config: object | None = No
   safe_limit_mb = get_safe_gpu_memory_limit_mb(buffer_gb)
 
   if safe_limit_mb is None:
-    return False, "No GPU detected"
+    return False, 'No GPU detected'
 
   if safe_limit_mb <= 0:
-    return False, f"Insufficient GPU memory (buffer: {buffer_gb} GB)"
+    return False, f'Insufficient GPU memory (buffer: {buffer_gb} GB)'
 
   if index_size_mb > safe_limit_mb:
-    return False, f"Index too large ({index_size_mb:.1f} MB > {safe_limit_mb} MB limit)"
+    return False, f'Index too large ({index_size_mb:.1f} MB > {safe_limit_mb} MB limit)'
 
   # Check if GPU is explicitly disabled for this KB
   if kb_config and hasattr(kb_config, 'disable_gpu_faiss') and kb_config.disable_gpu_faiss:
-    return False, "GPU disabled in knowledgebase configuration"
+    return False, 'GPU disabled in knowledgebase configuration'
 
-  return True, f"Index fits in GPU memory ({index_size_mb:.1f} MB < {safe_limit_mb} MB limit)"
+  return True, f'Index fits in GPU memory ({index_size_mb:.1f} MB < {safe_limit_mb} MB limit)'
 
 
 def get_gpu_info_string() -> str:
@@ -159,10 +157,10 @@ def get_gpu_info_string() -> str:
   memory_mb = get_gpu_memory_mb()
 
   if memory_mb is None:
-    return "No GPU detected"
+    return 'No GPU detected'
 
   memory_gb = memory_mb / 1024.0
-  return f"GPU detected: {memory_gb:.1f} GB memory"
+  return f'GPU detected: {memory_gb:.1f} GB memory'
 
 
 def reset_gpu_memory_cache():
@@ -171,4 +169,4 @@ def reset_gpu_memory_cache():
   _gpu_memory_cache = None
 
 
-#fin
+# fin

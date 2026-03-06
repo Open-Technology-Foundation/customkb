@@ -23,7 +23,7 @@ class TestBM25BackwardCompatibility:
   def test_legacy_database_migration(self, temp_legacy_database, temp_kb_directory):
     """Test that legacy databases are properly migrated to support BM25."""
     # Create KnowledgeBase pointing to legacy database
-    config_file = os.path.join(temp_kb_directory, "legacy_test.cfg")
+    config_file = os.path.join(temp_kb_directory, 'legacy_test.cfg')
     with open(config_file, 'w') as f:
       f.write("""[DEFAULT]
 vector_model = text-embedding-3-small
@@ -36,6 +36,7 @@ enable_hybrid_search = true
     # Copy legacy database to expected location
     kb = KnowledgeBase(config_file)
     import shutil
+
     shutil.copy2(temp_legacy_database, kb.knowledge_base_db)
 
     # Setup KB with legacy database
@@ -43,7 +44,7 @@ enable_hybrid_search = true
     kb.sql_cursor = kb.sql_connection.cursor()
 
     # Verify legacy schema
-    kb.sql_cursor.execute("PRAGMA table_info(docs)")
+    kb.sql_cursor.execute('PRAGMA table_info(docs)')
     columns_before = [col[1] for col in kb.sql_cursor.fetchall()]
     assert 'bm25_tokens' not in columns_before
     assert 'doc_length' not in columns_before
@@ -52,20 +53,20 @@ enable_hybrid_search = true
     migrate_for_bm25(kb)
 
     # Verify migration worked
-    kb.sql_cursor.execute("PRAGMA table_info(docs)")
+    kb.sql_cursor.execute('PRAGMA table_info(docs)')
     columns_after = [col[1] for col in kb.sql_cursor.fetchall()]
     assert 'bm25_tokens' in columns_after
     assert 'doc_length' in columns_after
 
     # Verify existing data is preserved
-    kb.sql_cursor.execute("SELECT COUNT(*) FROM docs")
+    kb.sql_cursor.execute('SELECT COUNT(*) FROM docs')
     count = kb.sql_cursor.fetchone()[0]
     assert count > 0  # Should have data from fixture
 
     # Verify existing data has null BM25 values (not processed yet)
-    kb.sql_cursor.execute("SELECT bm25_tokens, doc_length FROM docs LIMIT 1")
+    kb.sql_cursor.execute('SELECT bm25_tokens, doc_length FROM docs LIMIT 1')
     tokens, length = kb.sql_cursor.fetchone()
-    assert tokens is None or tokens == ""
+    assert tokens is None or tokens == ''
     assert length == 0
 
     kb.sql_connection.close()
@@ -103,7 +104,7 @@ db_max_tokens = 150
       kb.sql_cursor = kb.sql_connection.cursor()
 
       # Create table (this would normally be done by process_database)
-      kb.sql_cursor.execute('''
+      kb.sql_cursor.execute("""
         CREATE TABLE docs (
           id INTEGER PRIMARY KEY,
           sid INTEGER,
@@ -117,7 +118,7 @@ db_max_tokens = 150
           bm25_tokens TEXT,
           doc_length INTEGER DEFAULT 0
         )
-      ''')
+      """)
       kb.sql_connection.commit()
 
       # Test text processing without BM25
@@ -132,11 +133,11 @@ db_max_tokens = 150
       assert result is True  # Should successfully process the file
 
       # Verify BM25 columns are not populated when disabled
-      kb.sql_cursor.execute("SELECT bm25_tokens, keyphrase_processed FROM docs")
+      kb.sql_cursor.execute('SELECT bm25_tokens, keyphrase_processed FROM docs')
       results = kb.sql_cursor.fetchall()
 
       for tokens, processed in results:
-        assert tokens is None or tokens == ""  # BM25 should not be processed
+        assert tokens is None or tokens == ''  # BM25 should not be processed
         assert processed == 0  # keyphrase_processed should be 0
 
       kb.sql_connection.close()
@@ -174,7 +175,7 @@ enable_hybrid_search = true
     kb.sql_connection = sqlite3.connect(kb.knowledge_base_db)
     kb.sql_cursor = kb.sql_connection.cursor()
 
-    kb.sql_cursor.execute('''
+    kb.sql_cursor.execute("""
       CREATE TABLE docs (
         id INTEGER PRIMARY KEY,
         sid INTEGER,
@@ -188,7 +189,7 @@ enable_hybrid_search = true
         bm25_tokens TEXT,
         doc_length INTEGER DEFAULT 0
       )
-    ''')
+    """)
     kb.sql_connection.commit()
 
     # Test text processing with BM25
@@ -202,12 +203,12 @@ enable_hybrid_search = true
     assert result is True  # Should successfully process the file
 
     # Verify BM25 columns are populated when enabled
-    kb.sql_cursor.execute("SELECT bm25_tokens, keyphrase_processed FROM docs WHERE keyphrase_processed = 1")
+    kb.sql_cursor.execute('SELECT bm25_tokens, keyphrase_processed FROM docs WHERE keyphrase_processed = 1')
     results = kb.sql_cursor.fetchall()
 
     assert len(results) > 0  # Should have processed some chunks
     for tokens, processed in results:
-      assert tokens is not None and tokens != ""  # BM25 should be processed
+      assert tokens is not None and tokens != ''  # BM25 should be processed
       assert processed == 1  # keyphrase_processed should be 1
 
     kb.sql_connection.close()
@@ -252,18 +253,18 @@ similarity_threshold = 0.6
 
     # Verify default BM25 values are set
     assert kb.enable_hybrid_search is False  # Should default to False
-    assert kb.vector_weight == 0.7          # Should use default
-    assert kb.bm25_k1 == 1.2               # Should use default
-    assert kb.bm25_b == 0.75               # Should use default
-    assert kb.bm25_min_token_length == 2   # Should use default
+    assert kb.vector_weight == 0.7  # Should use default
+    assert kb.bm25_k1 == 1.2  # Should use default
+    assert kb.bm25_b == 0.75  # Should use default
+    assert kb.bm25_min_token_length == 2  # Should use default
     assert kb.bm25_rebuild_threshold == 1000  # Should use default
 
     # Verify existing config values are preserved
-    assert kb.vector_model == "text-embedding-3-small"
+    assert kb.vector_model == 'text-embedding-3-small'
     assert kb.vector_dimensions == 1536
     assert kb.similarity_threshold == 0.6
 
-  @pytest.mark.skip(reason="Module refactored - faiss moved from query.query_manager to query.search via utils.faiss_loader")
+  @pytest.mark.skip(reason='Module refactored - faiss moved from query.query_manager to query.search via utils.faiss_loader')
   def test_query_operations_backward_compatibility(self, temp_database, temp_kb_directory):
     """Test that query operations work with both old and new database schemas.
 
@@ -290,7 +291,7 @@ enable_hybrid_search = true
     kb = KnowledgeBase(config_file)
 
     # Test with missing BM25 dependencies
-    with patch('embedding.bm25_manager.BM25Okapi', side_effect=ImportError("BM25 not available")):
+    with patch('embedding.bm25_manager.BM25Okapi', side_effect=ImportError('BM25 not available')):
       from embedding.bm25_manager import build_bm25_index
 
       # Should handle missing dependencies gracefully
@@ -318,12 +319,12 @@ enable_hybrid_search = true
     kb.sql_cursor = kb.sql_connection.cursor()
 
     # Basic database query should work
-    kb.sql_cursor.execute("SELECT COUNT(*) FROM docs")
+    kb.sql_cursor.execute('SELECT COUNT(*) FROM docs')
     count = kb.sql_cursor.fetchone()[0]
     assert count > 0
 
     # Should have BM25 columns now (due to updated fixture)
-    kb.sql_cursor.execute("PRAGMA table_info(docs)")
+    kb.sql_cursor.execute('PRAGMA table_info(docs)')
     columns = [col[1] for col in kb.sql_cursor.fetchall()]
     assert 'bm25_tokens' in columns
     assert 'doc_length' in columns
@@ -341,7 +342,6 @@ enable_hybrid_search = true
 vector_model = text-embedding-3-small
 db_min_tokens = 50
 db_max_tokens = 100""",
-
       # BM25 disabled explicitly
       """[DEFAULT]
 vector_model = text-embedding-3-small
@@ -350,7 +350,6 @@ db_max_tokens = 100
 
 [ALGORITHMS]
 enable_hybrid_search = false""",
-
       # BM25 enabled
       """[DEFAULT]
 vector_model = text-embedding-3-small
@@ -358,7 +357,7 @@ db_min_tokens = 50
 db_max_tokens = 100
 
 [ALGORITHMS]
-enable_hybrid_search = true"""
+enable_hybrid_search = true""",
     ]
 
     for i, config_content in enumerate(test_configs):
@@ -378,7 +377,7 @@ enable_hybrid_search = true"""
       kb.sql_cursor = kb.sql_connection.cursor()
 
       # Ensure BM25 columns exist (migration handles this)
-      kb.sql_cursor.execute('''
+      kb.sql_cursor.execute("""
         CREATE TABLE docs (
           id INTEGER PRIMARY KEY,
           sid INTEGER,
@@ -392,7 +391,7 @@ enable_hybrid_search = true"""
           bm25_tokens TEXT,
           doc_length INTEGER DEFAULT 0
         )
-      ''')
+      """)
       kb.sql_connection.commit()
 
       # Test file processing
@@ -405,7 +404,7 @@ enable_hybrid_search = true"""
       assert result is True  # Should successfully process the file
 
       # Verify BM25 behavior based on config
-      kb.sql_cursor.execute("SELECT keyphrase_processed FROM docs")
+      kb.sql_cursor.execute('SELECT keyphrase_processed FROM docs')
       processed_values = [row[0] for row in kb.sql_cursor.fetchall()]
 
       if i < 2:  # BM25 disabled or not configured
@@ -423,7 +422,7 @@ class TestBM25MigrationEdgeCases:
 
   def test_migration_idempotency(self, temp_legacy_database, temp_kb_directory):
     """Test that running migration multiple times is safe."""
-    config_file = os.path.join(temp_kb_directory, "migration_test.cfg")
+    config_file = os.path.join(temp_kb_directory, 'migration_test.cfg')
     with open(config_file, 'w') as f:
       f.write("""[DEFAULT]
 vector_model = text-embedding-3-small
@@ -434,6 +433,7 @@ enable_hybrid_search = true
 
     kb = KnowledgeBase(config_file)
     import shutil
+
     shutil.copy2(temp_legacy_database, kb.knowledge_base_db)
 
     kb.sql_connection = sqlite3.connect(kb.knowledge_base_db)
@@ -443,21 +443,21 @@ enable_hybrid_search = true
     migrate_for_bm25(kb)
 
     # Get column count after first migration
-    kb.sql_cursor.execute("PRAGMA table_info(docs)")
+    kb.sql_cursor.execute('PRAGMA table_info(docs)')
     columns_after_first = len(kb.sql_cursor.fetchall())
 
     # Run migration second time (should be safe)
     migrate_for_bm25(kb)
 
     # Get column count after second migration
-    kb.sql_cursor.execute("PRAGMA table_info(docs)")
+    kb.sql_cursor.execute('PRAGMA table_info(docs)')
     columns_after_second = len(kb.sql_cursor.fetchall())
 
     # Should be the same (no duplicate columns)
     assert columns_after_first == columns_after_second
 
     # Verify BM25 columns exist
-    kb.sql_cursor.execute("PRAGMA table_info(docs)")
+    kb.sql_cursor.execute('PRAGMA table_info(docs)')
     column_names = [col[1] for col in kb.sql_cursor.fetchall()]
     assert 'bm25_tokens' in column_names
     assert 'doc_length' in column_names
@@ -466,7 +466,7 @@ enable_hybrid_search = true
 
   def test_migration_preserves_data_integrity(self, temp_legacy_database, temp_kb_directory):
     """Test that migration preserves all existing data."""
-    config_file = os.path.join(temp_kb_directory, "integrity_test.cfg")
+    config_file = os.path.join(temp_kb_directory, 'integrity_test.cfg')
     with open(config_file, 'w') as f:
       f.write("""[DEFAULT]
 vector_model = text-embedding-3-small
@@ -477,38 +477,39 @@ enable_hybrid_search = true
 
     kb = KnowledgeBase(config_file)
     import shutil
+
     shutil.copy2(temp_legacy_database, kb.knowledge_base_db)
 
     kb.sql_connection = sqlite3.connect(kb.knowledge_base_db)
     kb.sql_cursor = kb.sql_connection.cursor()
 
     # Get original data
-    kb.sql_cursor.execute("SELECT id, sourcedoc, originaltext FROM docs ORDER BY id")
+    kb.sql_cursor.execute('SELECT id, sourcedoc, originaltext FROM docs ORDER BY id')
     original_data = kb.sql_cursor.fetchall()
 
     # Run migration
     migrate_for_bm25(kb)
 
     # Get data after migration
-    kb.sql_cursor.execute("SELECT id, sourcedoc, originaltext FROM docs ORDER BY id")
+    kb.sql_cursor.execute('SELECT id, sourcedoc, originaltext FROM docs ORDER BY id')
     migrated_data = kb.sql_cursor.fetchall()
 
     # Should be identical
     assert original_data == migrated_data
 
     # Verify new columns have default values
-    kb.sql_cursor.execute("SELECT bm25_tokens, doc_length FROM docs")
+    kb.sql_cursor.execute('SELECT bm25_tokens, doc_length FROM docs')
     bm25_data = kb.sql_cursor.fetchall()
 
     for tokens, length in bm25_data:
-      assert tokens is None or tokens == ""
+      assert tokens is None or tokens == ''
       assert length == 0
 
     kb.sql_connection.close()
 
   def test_migration_error_handling(self, temp_kb_directory):
     """Test migration error handling with corrupted database."""
-    config_file = os.path.join(temp_kb_directory, "error_test.cfg")
+    config_file = os.path.join(temp_kb_directory, 'error_test.cfg')
     with open(config_file, 'w') as f:
       f.write("""[DEFAULT]
 vector_model = text-embedding-3-small
@@ -531,4 +532,5 @@ enable_hybrid_search = true
 
     kb.sql_connection.close()
 
-#fin
+
+# fin

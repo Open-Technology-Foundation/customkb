@@ -21,7 +21,7 @@ logger = get_logger(__name__)
 _tiktoken_encodings: dict[str, Any] = {}
 
 
-def get_token_counter(encoding_name: str = "cl100k_base") -> Callable[[str], int]:
+def get_token_counter(encoding_name: str = 'cl100k_base') -> Callable[[str], int]:
   """
   Get a token counting function using tiktoken.
 
@@ -46,16 +46,17 @@ def get_token_counter(encoding_name: str = "cl100k_base") -> Callable[[str], int
 
   try:
     import tiktoken
+
     encoding = tiktoken.get_encoding(encoding_name)
     _tiktoken_encodings[encoding_name] = encoding
-    logger.debug(f"Initialized tiktoken encoding: {encoding_name}")
+    logger.debug(f'Initialized tiktoken encoding: {encoding_name}')
     return lambda text: len(encoding.encode(text))
   except ImportError:
-    logger.warning("tiktoken not installed, falling back to word-based estimation")
+    logger.warning('tiktoken not installed, falling back to word-based estimation')
     # Fallback: ~1.3 tokens per word is a reasonable approximation
     return lambda text: int(len(text.split()) * 1.3)
   except (KeyError, ValueError) as e:
-    logger.warning(f"Failed to load tiktoken encoding {encoding_name}: {e}")
+    logger.warning(f'Failed to load tiktoken encoding {encoding_name}: {e}')
     return lambda text: int(len(text.split()) * 1.3)
 
 
@@ -63,16 +64,34 @@ def get_token_counter(encoding_name: str = "cl100k_base") -> Callable[[str], int
 FILE_TYPE_PATTERNS = {
   'markdown': ['.md', '.markdown', '.mdown', '.mkd'],
   'html': ['.html', '.htm', '.xhtml'],
-  'code': ['.py', '.js', '.ts', '.java', '.cpp', '.c', '.cs', '.go', '.rs',
-           '.rb', '.php', '.swift', '.kt', '.scala', '.r', '.m', '.sh'],
+  'code': [
+    '.py',
+    '.js',
+    '.ts',
+    '.java',
+    '.cpp',
+    '.c',
+    '.cs',
+    '.go',
+    '.rs',
+    '.rb',
+    '.php',
+    '.swift',
+    '.kt',
+    '.scala',
+    '.r',
+    '.m',
+    '.sh',
+  ],
   'json': ['.json', '.jsonl'],
   'yaml': ['.yaml', '.yml'],
   'xml': ['.xml', '.svg'],
   'config': ['.ini', '.cfg', '.conf', '.config', '.toml'],
-  'text': ['.txt', '.text', '.log', '.csv', '.tsv']
+  'text': ['.txt', '.text', '.log', '.csv', '.tsv'],
 }
 
-# Language-specific splitters
+# Maps file extensions to LangChain Language enums for syntax-aware splitting.
+# Enables language-specific separators (e.g., class/function boundaries).
 LANGUAGE_MAP = {
   '.py': Language.PYTHON,
   '.js': Language.JS,
@@ -145,55 +164,45 @@ def init_text_splitter(kb: Any, file_type: str = 'text') -> Any:
     token_counter = get_token_counter()
 
     if file_type == 'markdown':
-      logger.debug(f"Initializing Markdown splitter (chunk_size={chunk_size} tokens)")
-      return MarkdownTextSplitter(
-        chunk_size=chunk_size,
-        chunk_overlap=chunk_overlap,
-        length_function=token_counter
-      )
+      logger.debug(f'Initializing Markdown splitter (chunk_size={chunk_size} tokens)')
+      return MarkdownTextSplitter(chunk_size=chunk_size, chunk_overlap=chunk_overlap, length_function=token_counter)
 
     elif file_type == 'code':
       # For code files, use language-specific splitter if available
-      logger.debug(f"Initializing code splitter (chunk_size={chunk_size} tokens)")
+      logger.debug(f'Initializing code splitter (chunk_size={chunk_size} tokens)')
       return RecursiveCharacterTextSplitter(
-        chunk_size=chunk_size,
-        chunk_overlap=chunk_overlap,
-        separators=["\n\n", "\n", " ", ""],
-        length_function=token_counter
+        chunk_size=chunk_size, chunk_overlap=chunk_overlap, separators=['\n\n', '\n', ' ', ''], length_function=token_counter
       )
 
     elif file_type == 'html':
-      logger.debug(f"Initializing HTML splitter (chunk_size={chunk_size} tokens)")
+      logger.debug(f'Initializing HTML splitter (chunk_size={chunk_size} tokens)')
       return RecursiveCharacterTextSplitter.from_language(
-        language=Language.HTML,
-        chunk_size=chunk_size,
-        chunk_overlap=chunk_overlap,
-        length_function=token_counter
+        language=Language.HTML, chunk_size=chunk_size, chunk_overlap=chunk_overlap, length_function=token_counter
       )
 
     elif file_type == 'json' or file_type == 'yaml':
       # For structured data, preserve structure where possible
-      logger.debug(f"Initializing structured data splitter (chunk_size={chunk_size} tokens)")
+      logger.debug(f'Initializing structured data splitter (chunk_size={chunk_size} tokens)')
       return RecursiveCharacterTextSplitter(
         chunk_size=chunk_size,
         chunk_overlap=chunk_overlap,
-        separators=["\n\n", "\n", ",", " ", ""],
-        length_function=token_counter
+        separators=['\n\n', '\n', ',', ' ', ''],
+        length_function=token_counter,
       )
 
     else:
       # Default text splitter
-      logger.debug(f"Initializing default text splitter (chunk_size={chunk_size} tokens)")
+      logger.debug(f'Initializing default text splitter (chunk_size={chunk_size} tokens)')
       return RecursiveCharacterTextSplitter(
         chunk_size=chunk_size,
         chunk_overlap=chunk_overlap,
-        separators=["\n\n", "\n", ". ", " ", ""],
-        length_function=token_counter
+        separators=['\n\n', '\n', '. ', ' ', ''],
+        length_function=token_counter,
       )
 
   except (ValueError, KeyError, ImportError, AttributeError, TypeError) as e:
-    logger.error(f"Failed to initialize text splitter: {e}")
-    raise ChunkingError(f"Text splitter initialization failed: {e}") from e
+    logger.error(f'Failed to initialize text splitter: {e}')
+    raise ChunkingError(f'Text splitter initialization failed: {e}') from e
 
 
 def get_language_specific_splitter(file_path: str, kb: Any) -> Any | None:
@@ -223,16 +232,13 @@ def get_language_specific_splitter(file_path: str, kb: Any) -> Any | None:
       # Get token counter (uses tiktoken with fallback)
       token_counter = get_token_counter()
 
-      logger.debug(f"Creating {language} splitter for {extension} (chunk_size={chunk_size} tokens)")
+      logger.debug(f'Creating {language} splitter for {extension} (chunk_size={chunk_size} tokens)')
 
       return RecursiveCharacterTextSplitter.from_language(
-        language=language,
-        chunk_size=chunk_size,
-        chunk_overlap=chunk_overlap,
-        length_function=token_counter
+        language=language, chunk_size=chunk_size, chunk_overlap=chunk_overlap, length_function=token_counter
       )
     except (ValueError, KeyError, AttributeError) as e:
-      logger.warning(f"Failed to create language-specific splitter: {e}")
+      logger.warning(f'Failed to create language-specific splitter: {e}')
       return None
 
   return None
@@ -258,18 +264,13 @@ def split_text(text: str, splitter: Any, metadata: dict | None = None) -> list[d
     chunks = splitter.split_text(text)
 
     if not chunks:
-      logger.warning("Text splitter returned no chunks")
+      logger.warning('Text splitter returned no chunks')
       return []
 
     # Create chunk dictionaries with metadata
     result = []
     for i, chunk_text in enumerate(chunks):
-      chunk_dict = {
-        'text': chunk_text,
-        'chunk_index': i,
-        'total_chunks': len(chunks),
-        'char_count': len(chunk_text)
-      }
+      chunk_dict = {'text': chunk_text, 'chunk_index': i, 'total_chunks': len(chunks), 'char_count': len(chunk_text)}
 
       # Add provided metadata
       if metadata:
@@ -277,12 +278,12 @@ def split_text(text: str, splitter: Any, metadata: dict | None = None) -> list[d
 
       result.append(chunk_dict)
 
-    logger.debug(f"Split text into {len(chunks)} chunks")
+    logger.debug(f'Split text into {len(chunks)} chunks')
     return result
 
   except (ValueError, TypeError, AttributeError, RuntimeError) as e:
-    logger.error(f"Text splitting failed: {e}")
-    raise ChunkingError(f"Failed to split text: {e}") from e
+    logger.error(f'Text splitting failed: {e}')
+    raise ChunkingError(f'Failed to split text: {e}') from e
 
 
 def calculate_chunk_statistics(chunks: list[dict]) -> dict[str, Any]:
@@ -296,13 +297,7 @@ def calculate_chunk_statistics(chunks: list[dict]) -> dict[str, Any]:
       Dictionary with statistics
   """
   if not chunks:
-    return {
-      'total_chunks': 0,
-      'total_chars': 0,
-      'avg_chunk_size': 0,
-      'min_chunk_size': 0,
-      'max_chunk_size': 0
-    }
+    return {'total_chunks': 0, 'total_chars': 0, 'avg_chunk_size': 0, 'min_chunk_size': 0, 'max_chunk_size': 0}
 
   sizes = [len(chunk.get('text', '')) for chunk in chunks]
 
@@ -311,7 +306,7 @@ def calculate_chunk_statistics(chunks: list[dict]) -> dict[str, Any]:
     'total_chars': sum(sizes),
     'avg_chunk_size': sum(sizes) / len(sizes) if sizes else 0,
     'min_chunk_size': min(sizes) if sizes else 0,
-    'max_chunk_size': max(sizes) if sizes else 0
+    'max_chunk_size': max(sizes) if sizes else 0,
   }
 
 
@@ -340,7 +335,7 @@ def optimize_chunk_size(text_length: int, target_chunks: int = 10) -> int:
   chunk_size = max(min_size, min(max_size, base_size))
   chunk_size = (chunk_size // 50) * 50
 
-  logger.debug(f"Optimized chunk size: {chunk_size} for text length {text_length}")
+  logger.debug(f'Optimized chunk size: {chunk_size} for text length {text_length}')
   return chunk_size
 
 
@@ -361,6 +356,8 @@ def merge_small_chunks(chunks: list[dict], min_size: int = 100) -> list[dict]:
   merged = []
   current = None
 
+  # Single-pass merge: accumulate consecutive small chunks into one.
+  # A chunk is emitted when either it or the next chunk meets min_size.
   for chunk in chunks:
     chunk_text = chunk.get('text', '')
     chunk_size = len(chunk_text)
@@ -387,7 +384,7 @@ def merge_small_chunks(chunks: list[dict], min_size: int = 100) -> list[dict]:
     chunk['total_chunks'] = len(merged)
 
   if len(merged) < len(chunks):
-    logger.debug(f"Merged {len(chunks)} chunks into {len(merged)}")
+    logger.debug(f'Merged {len(chunks)} chunks into {len(merged)}')
 
   return merged
 
@@ -407,7 +404,7 @@ def validate_chunks(chunks: list[dict], kb: Any) -> bool:
       ProcessingError: If validation fails
   """
   if not chunks:
-    raise ProcessingError("No chunks to validate")
+    raise ProcessingError('No chunks to validate')
 
   max_chunk_size = getattr(kb, 'max_chunk_size', 2000)
   min_chunk_size = getattr(kb, 'min_chunk_size', 50)
@@ -416,18 +413,16 @@ def validate_chunks(chunks: list[dict], kb: Any) -> bool:
     text = chunk.get('text', '')
 
     if not text:
-      raise ProcessingError(f"Chunk {i} has no text")
+      raise ProcessingError(f'Chunk {i} has no text')
 
     if len(text) > max_chunk_size:
-      raise ProcessingError(
-        f"Chunk {i} exceeds maximum size: {len(text)} > {max_chunk_size}"
-      )
+      raise ProcessingError(f'Chunk {i} exceeds maximum size: {len(text)} > {max_chunk_size}')
 
     if len(text) < min_chunk_size and i < len(chunks) - 1:
       # Allow last chunk to be smaller
-      logger.warning(f"Chunk {i} below minimum size: {len(text)} < {min_chunk_size}")
+      logger.warning(f'Chunk {i} below minimum size: {len(text)} < {min_chunk_size}')
 
   return True
 
 
-#fin
+# fin

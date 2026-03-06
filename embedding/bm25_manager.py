@@ -22,6 +22,7 @@ if TYPE_CHECKING:
 
 logger = get_logger(__name__)
 
+
 def build_bm25_index(kb: 'KnowledgeBase') -> BM25Okapi | None:
   """
   Build BM25 index from database and save to disk.
@@ -35,7 +36,7 @@ def build_bm25_index(kb: 'KnowledgeBase') -> BM25Okapi | None:
   try:
     cursor = kb.sql_cursor
     if cursor is None:
-      logger.warning("No database cursor available. Cannot build BM25 index.")
+      logger.warning('No database cursor available. Cannot build BM25 index.')
       return None
     cursor.execute("""
       SELECT id, bm25_tokens, doc_length
@@ -57,14 +58,14 @@ def build_bm25_index(kb: 'KnowledgeBase') -> BM25Okapi | None:
           total_length += doc_length or len(tokens)
 
     if not corpus:
-      logger.warning("No BM25 tokens found in database. Ensure documents are processed with BM25 enabled.")
+      logger.warning('No BM25 tokens found in database. Ensure documents are processed with BM25 enabled.')
       return None
 
     # Create BM25 index with configurable parameters
     k1 = getattr(kb, 'bm25_k1', 1.2)
     b = getattr(kb, 'bm25_b', 0.75)
 
-    logger.info(f"Building BM25 index with k1={k1}, b={b}")
+    logger.info(f'Building BM25 index with k1={k1}, b={b}')
     bm25 = BM25Okapi(corpus, k1=k1, b=b)
 
     # Extract BM25 internal data for NPZ serialization
@@ -82,7 +83,7 @@ def build_bm25_index(kb: 'KnowledgeBase') -> BM25Okapi | None:
       idf_scores=np.array(idf_scores, dtype=np.float32),
       doc_len=np.array(bm25.doc_len, dtype=np.int32),
       doc_ids=np.array(doc_ids, dtype=np.int32),
-      doc_freqs=np.array(bm25.doc_freqs, dtype=object)
+      doc_freqs=np.array(bm25.doc_freqs, dtype=object),
     )
 
     # Save metadata with JSON (human-readable, secure)
@@ -94,21 +95,22 @@ def build_bm25_index(kb: 'KnowledgeBase') -> BM25Okapi | None:
       'corpus_size': int(bm25.corpus_size),
       'k1': k1,
       'b': b,
-      'version': '2.0'  # Version 2.0 for NPZ format
+      'version': '2.0',  # Version 2.0 for NPZ format
     }
 
     with open(metadata_path, 'w') as f:
       json.dump(metadata, f, indent=2)
 
-    logger.info(f"Built BM25 index with {len(doc_ids)} documents, saved to {bm25_path}")
+    logger.info(f'Built BM25 index with {len(doc_ids)} documents, saved to {bm25_path}')
     return bm25
 
   except sqlite3.Error as e:
-    logger.error(f"Database error building BM25 index: {e}")
+    logger.error(f'Database error building BM25 index: {e}')
     return None
   except (ImportError, OSError, ValueError, RuntimeError) as e:
-    logger.error(f"Error building BM25 index: {e}")
+    logger.error(f'Error building BM25 index: {e}')
     return None
+
 
 def load_bm25_index(kb: 'KnowledgeBase') -> dict[str, Any] | None:
   """
@@ -167,45 +169,47 @@ def load_bm25_index(kb: 'KnowledgeBase') -> dict[str, Any] | None:
         'total_tokens': metadata['total_tokens'],
         'k1': metadata['k1'],
         'b': metadata['b'],
-        'version': metadata.get('version', '2.0')
+        'version': metadata.get('version', '2.0'),
       }
 
-      logger.debug(f"Loaded BM25 index (NPZ) with {metadata['total_docs']} documents")
+      logger.debug(f'Loaded BM25 index (NPZ) with {metadata["total_docs"]} documents')
       return bm25_data
 
     except (FileNotFoundError, json.JSONDecodeError, KeyError, ValueError, TypeError, OSError) as e:
-      logger.warning(f"Failed to load NPZ format BM25 index: {e}")
+      logger.warning(f'Failed to load NPZ format BM25 index: {e}')
 
   # Legacy pickle format is no longer supported (removed for security)
   # Check if there's an old pickle file that needs migration
   if os.path.exists(bm25_path) and not os.path.exists(metadata_path):
-    logger.warning("=" * 70)
-    logger.warning("LEGACY BM25 INDEX FORMAT DETECTED")
-    logger.warning("=" * 70)
-    logger.warning(f"The BM25 index at {bm25_path} uses the old pickle format.")
-    logger.warning("For security reasons, this format is no longer supported.")
-    logger.warning("")
-    logger.info("Auto-migration option: The index will be rebuilt automatically")
+    logger.warning('=' * 70)
+    logger.warning('LEGACY BM25 INDEX FORMAT DETECTED')
+    logger.warning('=' * 70)
+    logger.warning(f'The BM25 index at {bm25_path} uses the old pickle format.')
+    logger.warning('For security reasons, this format is no longer supported.')
+    logger.warning('')
+    logger.info('Auto-migration option: The index will be rebuilt automatically')
     logger.info("during the next 'customkb bm25' operation, or you can rebuild now:")
-    logger.info("  customkb bm25 <kb_name> --force")
-    logger.warning("")
-    logger.warning("Note: BM25 hybrid search will be disabled until rebuild completes.")
-    logger.warning("=" * 70)
+    logger.info('  customkb bm25 <kb_name> --force')
+    logger.warning('')
+    logger.warning('Note: BM25 hybrid search will be disabled until rebuild completes.')
+    logger.warning('=' * 70)
 
     # Rename the legacy file to prevent repeated warnings
     try:
       legacy_backup = bm25_path + '.legacy.backup'
       if not os.path.exists(legacy_backup):
         import shutil
+
         shutil.move(bm25_path, legacy_backup)
-        logger.info(f"Legacy index backed up to: {legacy_backup}")
+        logger.info(f'Legacy index backed up to: {legacy_backup}')
     except (OSError, PermissionError, FileNotFoundError) as e:
-      logger.debug(f"Could not backup legacy index: {e}")
+      logger.debug(f'Could not backup legacy index: {e}')
 
     return None
 
-  logger.debug(f"BM25 index not found at {npz_path}")
+  logger.debug(f'BM25 index not found at {npz_path}')
   return None
+
 
 def get_bm25_index_path(kb: 'KnowledgeBase') -> str:
   """
@@ -219,6 +223,7 @@ def get_bm25_index_path(kb: 'KnowledgeBase') -> str:
   """
   return kb.knowledge_base_vector.replace('.faiss', '.bm25')
 
+
 def rebuild_bm25_if_needed(kb: 'KnowledgeBase') -> bool:
   """
   Check if BM25 index needs rebuilding and rebuild if necessary.
@@ -231,25 +236,28 @@ def rebuild_bm25_if_needed(kb: 'KnowledgeBase') -> bool:
   """
   try:
     cursor = kb.sql_cursor
-    cursor.execute("SELECT COUNT(*) FROM docs WHERE keyphrase_processed = 0")
+    cursor.execute('SELECT COUNT(*) FROM docs WHERE keyphrase_processed = 0')
     unprocessed = cursor.fetchone()[0]
 
     # Get rebuild threshold from config
     threshold = getattr(kb, 'bm25_rebuild_threshold', 1000)
 
     if unprocessed > threshold:
-      logger.info(f"BM25 rebuild needed: {unprocessed} unprocessed documents (threshold: {threshold})")
+      logger.info(f'BM25 rebuild needed: {unprocessed} unprocessed documents (threshold: {threshold})')
       bm25 = build_bm25_index(kb)
       return bm25 is not None
     else:
-      logger.debug(f"BM25 rebuild not needed: {unprocessed} unprocessed documents (threshold: {threshold})")
+      logger.debug(f'BM25 rebuild not needed: {unprocessed} unprocessed documents (threshold: {threshold})')
       return True
 
   except sqlite3.Error as e:
-    logger.error(f"Error checking BM25 rebuild status: {e}")
+    logger.error(f'Error checking BM25 rebuild status: {e}')
     return False
 
-def get_bm25_scores(kb: 'KnowledgeBase', query_text: str, bm25_data: dict[str, Any], max_results: int = None) -> list[tuple[int, float]]:
+
+def get_bm25_scores(
+  kb: 'KnowledgeBase', query_text: str, bm25_data: dict[str, Any], max_results: int | None = None
+) -> list[tuple[int, float]]:
   """
   Get BM25 scores for a query with result limiting.
 
@@ -269,7 +277,7 @@ def get_bm25_scores(kb: 'KnowledgeBase', query_text: str, bm25_data: dict[str, A
     query_tokens = query_tokens.split()
 
     if not query_tokens:
-      logger.warning("Query tokenization resulted in empty token list")
+      logger.warning('Query tokenization resulted in empty token list')
       return []
 
     # Get BM25 scores
@@ -295,8 +303,10 @@ def get_bm25_scores(kb: 'KnowledgeBase', query_text: str, bm25_data: dict[str, A
         doc_scores = [(doc_ids[i], score) for i, score in top_indices]
         doc_scores.sort(key=lambda x: x[1], reverse=True)
 
-        logger.info(f"BM25 results limited from {len(positive_scores)} to {limit} "
-                   f"(index size: {len(doc_ids)}, query: '{query_text[:30]}...')")
+        logger.info(
+          f'BM25 results limited from {len(positive_scores)} to {limit} '
+          f"(index size: {len(doc_ids)}, query: '{query_text[:30]}...')"
+        )
       else:
         # All positive scores fit within limit
         doc_scores = [(doc_ids[i], score) for i, score in positive_scores]
@@ -306,12 +316,13 @@ def get_bm25_scores(kb: 'KnowledgeBase', query_text: str, bm25_data: dict[str, A
       doc_scores = [(doc_id, float(score)) for doc_id, score in zip(doc_ids, scores, strict=False) if score > 0]
       doc_scores.sort(key=lambda x: x[1], reverse=True)
 
-    logger.debug(f"BM25 search returned {len(doc_scores)} results for query: {query_text[:50]}...")
+    logger.debug(f'BM25 search returned {len(doc_scores)} results for query: {query_text[:50]}...')
     return doc_scores
 
   except (ValueError, TypeError, KeyError, IndexError) as e:
-    logger.error(f"Error computing BM25 scores: {e}")
+    logger.error(f'Error computing BM25 scores: {e}')
     return []
+
 
 def ensure_bm25_index(kb: 'KnowledgeBase') -> bool:
   """
@@ -325,7 +336,7 @@ def ensure_bm25_index(kb: 'KnowledgeBase') -> bool:
   """
   # Check if hybrid search is enabled
   if not getattr(kb, 'enable_hybrid_search', False):
-    logger.debug("Hybrid search disabled, skipping BM25 index check")
+    logger.debug('Hybrid search disabled, skipping BM25 index check')
     return False
 
   # Try to load existing index
@@ -335,7 +346,7 @@ def ensure_bm25_index(kb: 'KnowledgeBase') -> bool:
     return rebuild_bm25_if_needed(kb)
   else:
     # No index exists, build one
-    logger.info("No BM25 index found, building new index")
+    logger.info('No BM25 index found, building new index')
     bm25 = build_bm25_index(kb)
     return bm25 is not None
 
@@ -358,7 +369,7 @@ def search_bm25(kb: 'KnowledgeBase', query_text: str, max_results: int = 10) -> 
   """
   # Check if hybrid search is enabled
   if not getattr(kb, 'enable_hybrid_search', False):
-    logger.debug("Hybrid search disabled")
+    logger.debug('Hybrid search disabled')
     return []
 
   # Load BM25 index
@@ -371,4 +382,4 @@ def search_bm25(kb: 'KnowledgeBase', query_text: str, max_results: int = 10) -> 
   return get_bm25_scores(kb, query_text, bm25_data, max_results)
 
 
-#fin
+# fin

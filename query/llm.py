@@ -113,7 +113,7 @@ async def get_response(
   """
   litellm_model = _to_litellm_model(model, provider or '')
 
-  logger.info(f"LiteLLM request: model={litellm_model}, temp={temperature}, max_tokens={max_tokens}")
+  logger.info(f'LiteLLM request: model={litellm_model}, temp={temperature}, max_tokens={max_tokens}')
 
   try:
     response = await litellm.acompletion(
@@ -124,22 +124,22 @@ async def get_response(
     )
     content = response.choices[0].message.content
     if not content:
-      raise APIError(f"Empty response from model {litellm_model}")
-    logger.info(f"LiteLLM response: {len(content)} characters")
+      raise APIError(f'Empty response from model {litellm_model}')
+    logger.info(f'LiteLLM response: {len(content)} characters')
     return content
 
   except litellm.AuthenticationError as e:
-    logger.error(f"Authentication failed for {litellm_model}: {e}")
-    raise APIError(f"Authentication failed for {litellm_model}: {e}") from e
+    logger.error(f'Authentication failed for {litellm_model}: {e}')
+    raise APIError(f'Authentication failed for {litellm_model}: {e}') from e
   except litellm.RateLimitError as e:
-    logger.error(f"Rate limit for {litellm_model}: {e}")
-    raise APIError(f"Rate limit exceeded for {litellm_model}: {e}") from e
+    logger.error(f'Rate limit for {litellm_model}: {e}')
+    raise APIError(f'Rate limit exceeded for {litellm_model}: {e}') from e
   except litellm.APIConnectionError as e:
-    logger.error(f"Connection error for {litellm_model}: {e}")
-    raise APIError(f"Connection error for {litellm_model}: {e}") from e
+    logger.error(f'Connection error for {litellm_model}: {e}')
+    raise APIError(f'Connection error for {litellm_model}: {e}') from e
   except litellm.APIError as e:
-    logger.error(f"API error for {litellm_model}: {e}")
-    raise APIError(f"LiteLLM API error for {litellm_model}: {e}") from e
+    logger.error(f'API error for {litellm_model}: {e}')
+    raise APIError(f'LiteLLM API error for {litellm_model}: {e}') from e
 
 
 async def generate_ai_response(
@@ -201,7 +201,7 @@ async def generate_ai_response(
     )
 
     if not response:
-      raise ModelError(model_name, "Empty response from AI model")
+      raise ModelError(model_name, 'Empty response from AI model')
 
     return response
 
@@ -210,8 +210,8 @@ async def generate_ai_response(
   except APIError:
     raise
   except (FileNotFoundError, KeyError, ValueError) as e:
-    logger.error(f"Model resolution failed for {model_name}: {e}")
-    raise ModelError(model_name, f"Model resolution failed: {e}") from e
+    logger.error(f'Model resolution failed for {model_name}: {e}')
+    raise ModelError(model_name, f'Model resolution failed: {e}') from e
 
 
-#fin
+# fin

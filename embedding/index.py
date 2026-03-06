@@ -12,10 +12,19 @@ from typing import Any
 
 import numpy as np
 
-# Load FAISS with proper GPU initialization
-from utils.faiss_loader import get_faiss
+# Lazy FAISS loading to avoid import failures when FAISS is not installed
+_faiss = None
+_FAISS_GPU_AVAILABLE = None
 
-faiss, FAISS_GPU_AVAILABLE = get_faiss()
+
+def _get_faiss():
+  global _faiss, _FAISS_GPU_AVAILABLE
+  if _faiss is None:
+    from utils.faiss_loader import get_faiss
+
+    _faiss, _FAISS_GPU_AVAILABLE = get_faiss()
+  return _faiss, _FAISS_GPU_AVAILABLE
+
 
 from utils.exceptions import IndexError as CustomIndexError
 from utils.logging_config import get_logger
@@ -23,7 +32,7 @@ from utils.logging_config import get_logger
 logger = get_logger(__name__)
 
 
-def get_optimal_faiss_index(dimensions: int, dataset_size: int, kb=None) -> faiss.Index:
+def get_optimal_faiss_index(dimensions: int, dataset_size: int, kb=None) -> Any:
   """
   Create an optimal FAISS index based on dataset characteristics.
 
@@ -35,21 +44,25 @@ def get_optimal_faiss_index(dimensions: int, dataset_size: int, kb=None) -> fais
   Returns:
       Configured FAISS index
   """
+  faiss, _ = _get_faiss()
+
   # Get configuration from KB if available
   use_gpu = getattr(kb, 'use_gpu_faiss', False) if kb else False
   index_type = getattr(kb, 'faiss_index_type', 'auto') if kb else 'auto'
 
-  # Auto-select index type based on dataset size
+  # Auto-select index type based on dataset size:
+  #   < 10K vectors  -> Flat (brute-force exact search, fast enough at this scale)
+  #   < 100K vectors -> IVF  (inverted file index, good speed/accuracy trade-off)
+  #   >= 100K vectors -> HNSW (graph-based ANN, best throughput for large datasets)
   if index_type == 'auto':
     if dataset_size < 10000:
-      index_type = 'flat'  # Exact search for small datasets
+      index_type = 'flat'
     elif dataset_size < 100000:
-      index_type = 'ivf'  # IVF for medium datasets
+      index_type = 'ivf'
     else:
-      index_type = 'hnsw'  # HNSW for large datasets
+      index_type = 'hnsw'
 
-  logger.info(f"Creating FAISS index: type={index_type}, dimensions={dimensions}, "
-             f"dataset_size={dataset_size}, gpu={use_gpu}")
+  logger.info(f'Creating FAISS index: type={index_type}, dimensions={dimensions}, dataset_size={dataset_size}, gpu={use_gpu}')
 
   # Create base index
   if index_type == 'flat':
@@ -75,7 +88,7 @@ def get_optimal_faiss_index(dimensions: int, dataset_size: int, kb=None) -> fais
 
   else:
     # Default to flat index
-    logger.warning(f"Unknown index type: {index_type}, using flat index")
+    logger.warning(f'Unknown index type: {index_type}, using flat index')
     index = faiss.IndexFlatL2(dimensions)
 
   # Wrap in IDMap for document ID tracking
@@ -84,16 +97,16 @@ def get_optimal_faiss_index(dimensions: int, dataset_size: int, kb=None) -> fais
   # Move to GPU if available and requested
   if use_gpu and faiss.get_num_gpus() > 0:
     try:
-      logger.info("Moving FAISS index to GPU")
+      logger.info('Moving FAISS index to GPU')
       gpu_resource = faiss.StandardGpuResources()
       index = faiss.index_cpu_to_gpu(gpu_resource, 0, index)
     except (RuntimeError, OSError) as e:
-      logger.warning(f"Failed to move index to GPU: {e}, using CPU")
+      logger.warning(f'Failed to move index to GPU: {e}, using CPU')
 
   return index
 
 
-def train_index(index: faiss.Index, training_vectors: np.ndarray) -> None:
+def train_index(index: Any, training_vectors: np.ndarray) -> None:
   """
   Train index if it requires training (e.g., IVF, PQ).
 
@@ -103,13 +116,13 @@ def train_index(index: faiss.Index, training_vectors: np.ndarray) -> None:
   """
   # Check if index needs training
   if hasattr(index, 'is_trained') and not index.is_trained:
-    logger.info(f"Training index with {len(training_vectors)} vectors")
+    logger.info(f'Training index with {len(training_vectors)} vectors')
 
     # Ensure we have enough training data
     min_training = getattr(index, 'nlist', 100) * 40  # IVF needs ~40 vectors per cluster
 
     if len(training_vectors) < min_training:
-      logger.warning(f"Insufficient training data: {len(training_vectors)} < {min_training}")
+      logger.warning(f'Insufficient training data: {len(training_vectors)} < {min_training}')
       # Duplicate vectors if needed
       while len(training_vectors) < min_training:
         training_vectors = np.vstack([training_vectors, training_vectors])
@@ -117,11 +130,10 @@ def train_index(index: faiss.Index, training_vectors: np.ndarray) -> None:
 
     # Train the index
     index.train(training_vectors)
-    logger.info("Index training completed")
+    logger.info('Index training completed')
 
 
-def add_vectors_to_index(index: faiss.Index, vectors: np.ndarray,
-                        ids: np.ndarray | None = None) -> int:
+def add_vectors_to_index(index: Any, vectors: np.ndarray, ids: np.ndarray | None = None) -> int:
   """
   Add vectors to the index.
 
@@ -133,6 +145,8 @@ def add_vectors_to_index(index: faiss.Index, vectors: np.ndarray,
   Returns:
       Number of vectors added
   """
+  faiss, _ = _get_faiss()
+
   if len(vectors) == 0:
     return 0
 
@@ -153,12 +167,11 @@ def add_vectors_to_index(index: faiss.Index, vectors: np.ndarray,
   else:
     index.add(vectors)
 
-  logger.debug(f"Added {len(vectors)} vectors to index (total: {index.ntotal})")
+  logger.debug(f'Added {len(vectors)} vectors to index (total: {index.ntotal})')
   return len(vectors)
 
 
-def search_index(index: faiss.Index, query_vectors: np.ndarray,
-                k: int = 10, nprobe: int = 10) -> tuple[np.ndarray, np.ndarray]:
+def search_index(index: Any, query_vectors: np.ndarray, k: int = 10, nprobe: int = 10) -> tuple[np.ndarray, np.ndarray]:
   """
   Search the index for similar vectors.
 
@@ -189,7 +202,7 @@ def search_index(index: faiss.Index, query_vectors: np.ndarray,
   return distances, indices
 
 
-def save_index(index: faiss.Index, index_path: str, metadata: dict[str, Any] = None) -> None:
+def save_index(index: Any, index_path: str, metadata: dict[str, Any] = None) -> None:
   """
   Save FAISS index to disk.
 
@@ -198,27 +211,29 @@ def save_index(index: faiss.Index, index_path: str, metadata: dict[str, Any] = N
       index_path: Path to save the index
       metadata: Optional metadata to save alongside
   """
+  faiss, _ = _get_faiss()
+
   try:
     # Create directory if needed
     os.makedirs(os.path.dirname(index_path), exist_ok=True)
 
     # Save index
     faiss.write_index(index, index_path)
-    logger.info(f"Saved FAISS index to {index_path} ({index.ntotal} vectors)")
+    logger.info(f'Saved FAISS index to {index_path} ({index.ntotal} vectors)')
 
     # Save metadata if provided
     if metadata:
       metadata_path = index_path + '.meta'
       with open(metadata_path, 'w') as f:
         json.dump(metadata, f, indent=2)
-      logger.debug(f"Saved index metadata to {metadata_path}")
+      logger.debug(f'Saved index metadata to {metadata_path}')
 
   except (OSError, PermissionError, RuntimeError) as e:
-    logger.error(f"Failed to save index: {e}")
-    raise CustomIndexError(f"Index save failed: {e}") from e
+    logger.error(f'Failed to save index: {e}')
+    raise CustomIndexError(f'Index save failed: {e}') from e
 
 
-def load_index(index_path: str) -> tuple[faiss.Index, dict[str, Any] | None]:
+def load_index(index_path: str) -> tuple[Any, dict[str, Any] | None]:
   """
   Load FAISS index from disk.
 
@@ -228,13 +243,15 @@ def load_index(index_path: str) -> tuple[faiss.Index, dict[str, Any] | None]:
   Returns:
       Tuple of (index, metadata)
   """
+  faiss, _ = _get_faiss()
+
   try:
     # Load index
     if not os.path.exists(index_path):
-      raise FileNotFoundError(f"Index file not found: {index_path}")
+      raise FileNotFoundError(f'Index file not found: {index_path}')
 
     index = faiss.read_index(index_path)
-    logger.info(f"Loaded FAISS index from {index_path} ({index.ntotal} vectors)")
+    logger.info(f'Loaded FAISS index from {index_path} ({index.ntotal} vectors)')
 
     # Load metadata if exists
     metadata = None
@@ -242,16 +259,16 @@ def load_index(index_path: str) -> tuple[faiss.Index, dict[str, Any] | None]:
     if os.path.exists(metadata_path):
       with open(metadata_path) as f:
         metadata = json.load(f)
-      logger.debug(f"Loaded index metadata from {metadata_path}")
+      logger.debug(f'Loaded index metadata from {metadata_path}')
 
     return index, metadata
 
   except (FileNotFoundError, OSError, RuntimeError, json.JSONDecodeError) as e:
-    logger.error(f"Failed to load index: {e}")
-    raise CustomIndexError(f"Index load failed: {e}") from e
+    logger.error(f'Failed to load index: {e}')
+    raise CustomIndexError(f'Index load failed: {e}') from e
 
 
-def merge_indexes(indexes: list[faiss.Index]) -> faiss.Index:
+def merge_indexes(indexes: list[Any]) -> Any:
   """
   Merge multiple FAISS indexes into one.
 
@@ -262,7 +279,7 @@ def merge_indexes(indexes: list[faiss.Index]) -> faiss.Index:
       Merged index
   """
   if not indexes:
-    raise ValueError("No indexes to merge")
+    raise ValueError('No indexes to merge')
 
   if len(indexes) == 1:
     return indexes[0]
@@ -271,10 +288,7 @@ def merge_indexes(indexes: list[faiss.Index]) -> faiss.Index:
   dimensions = indexes[0].d
 
   # Create new index of same type
-  merged = get_optimal_faiss_index(
-    dimensions,
-    sum(idx.ntotal for idx in indexes)
-  )
+  merged = get_optimal_faiss_index(dimensions, sum(idx.ntotal for idx in indexes))
 
   # Merge all indexes
   for idx in indexes:
@@ -285,11 +299,11 @@ def merge_indexes(indexes: list[faiss.Index]) -> faiss.Index:
       # Add to merged index
       add_vectors_to_index(merged, vectors)
 
-  logger.info(f"Merged {len(indexes)} indexes into one with {merged.ntotal} vectors")
+  logger.info(f'Merged {len(indexes)} indexes into one with {merged.ntotal} vectors')
   return merged
 
 
-def optimize_index(index: faiss.Index, optimization_level: str = 'medium') -> faiss.Index:
+def optimize_index(index: Any, optimization_level: str = 'medium') -> Any:
   """
   Optimize index for better performance.
 
@@ -300,7 +314,9 @@ def optimize_index(index: faiss.Index, optimization_level: str = 'medium') -> fa
   Returns:
       Optimized index
   """
-  logger.info(f"Optimizing index with level: {optimization_level}")
+  faiss, _ = _get_faiss()
+
+  logger.info(f'Optimizing index with level: {optimization_level}')
 
   if optimization_level == 'low':
     # Just ensure index is compacted
@@ -322,7 +338,7 @@ def optimize_index(index: faiss.Index, optimization_level: str = 'medium') -> fa
       new_index.add(vectors)
 
       index = faiss.IndexIDMap(new_index)
-      logger.info(f"Converted flat index to IVF with {nlist} clusters")
+      logger.info(f'Converted flat index to IVF with {nlist} clusters')
 
   elif optimization_level == 'high':  # noqa: SIM102
     # Maximum optimization with compression
@@ -336,12 +352,12 @@ def optimize_index(index: faiss.Index, optimization_level: str = 'medium') -> fa
       index.add(vectors)
       index = faiss.IndexIDMap(index)
 
-      logger.info(f"Created optimized HNSW index with M={m}")
+      logger.info(f'Created optimized HNSW index with M={m}')
 
   return index
 
 
-def get_index_stats(index: faiss.Index) -> dict[str, Any]:
+def get_index_stats(index: Any) -> dict[str, Any]:
   """
   Get statistics about the index.
 
@@ -356,7 +372,7 @@ def get_index_stats(index: faiss.Index) -> dict[str, Any]:
     'dimensions': index.d,
     'index_type': type(index).__name__,
     'is_trained': getattr(index, 'is_trained', True),
-    'memory_usage_mb': 0
+    'memory_usage_mb': 0,
   }
 
   # Estimate memory usage
@@ -376,7 +392,7 @@ def get_index_stats(index: faiss.Index) -> dict[str, Any]:
   return stats
 
 
-def remove_vectors_from_index(index: faiss.Index, ids_to_remove: list[int]) -> int:
+def remove_vectors_from_index(index: Any, ids_to_remove: list[int]) -> int:
   """
   Remove vectors from the index by ID.
 
@@ -387,8 +403,10 @@ def remove_vectors_from_index(index: faiss.Index, ids_to_remove: list[int]) -> i
   Returns:
       Number of vectors removed
   """
+  faiss, _ = _get_faiss()
+
   if not isinstance(index, faiss.IndexIDMap):
-    raise ValueError("Index must be IndexIDMap to remove by ID")
+    raise ValueError('Index must be IndexIDMap to remove by ID')
 
   if not ids_to_remove:
     return 0
@@ -399,8 +417,8 @@ def remove_vectors_from_index(index: faiss.Index, ids_to_remove: list[int]) -> i
   # Remove from index
   removed = index.remove_ids(ids_array)
 
-  logger.info(f"Removed {removed} vectors from index")
+  logger.info(f'Removed {removed} vectors from index')
   return removed
 
 
-#fin
+# fin

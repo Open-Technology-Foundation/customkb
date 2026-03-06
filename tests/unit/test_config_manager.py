@@ -18,7 +18,7 @@ class TestGetKbName:
 
   def test_empty_name_returns_none(self):
     """Test that empty KB name returns None."""
-    assert get_kb_name("") is None
+    assert get_kb_name('') is None
     assert get_kb_name(None) is None
 
   def test_simple_kb_name(self):
@@ -80,7 +80,7 @@ class TestGetFqCfgFilename:
 
   def test_empty_filename_returns_none(self):
     """Test that empty filename returns None."""
-    assert get_fq_cfg_filename("") is None
+    assert get_fq_cfg_filename('') is None
     assert get_fq_cfg_filename(None) is None
 
   def test_simple_kb_name(self):
@@ -166,27 +166,22 @@ class TestKnowledgeBase:
       with patch('config.config_manager.VECTORDBS', tmpdir):
         kb = KnowledgeBase('test_kb')
 
-        assert kb.vector_model == "text-embedding-3-small"
+        assert kb.vector_model == 'text-embedding-3-small'
         assert kb.vector_dimensions == 1536
         assert kb.vector_chunks == 200
         assert kb.db_min_tokens == 100
         assert kb.db_max_tokens == 200
-        assert kb.query_model == "gpt-4o"
-        assert kb.knowledge_base_name == "test_kb"
+        assert kb.query_model == 'gpt-4o'
+        assert kb.knowledge_base_name == 'test_kb'
 
   def test_init_with_kwargs(self):
     """Test initializing KnowledgeBase with keyword arguments."""
-    kb = KnowledgeBase(
-      "test_kb",
-      vector_model="custom-model",
-      vector_dimensions=512,
-      query_model="custom-query-model"
-    )
+    kb = KnowledgeBase('test_kb', vector_model='custom-model', vector_dimensions=512, query_model='custom-query-model')
 
-    assert kb.vector_model == "custom-model"
+    assert kb.vector_model == 'custom-model'
     assert kb.vector_dimensions == 512
-    assert kb.query_model == "custom-query-model"
-    assert kb.knowledge_base_name == "test_kb"
+    assert kb.query_model == 'custom-query-model'
+    assert kb.knowledge_base_name == 'test_kb'
 
   def test_environment_variable_override(self):
     """Test that environment variables override config file values."""
@@ -201,10 +196,10 @@ class TestKnowledgeBase:
       with open(config_path, 'w') as f:
         f.write(config_content)
 
-      with patch('config.config_manager.VECTORDBS', tmpdir), patch.dict(os.environ, {
-        'VECTOR_MODEL': 'env-override-model',
-        'QUERY_TOP_K': '100'
-      }):
+      with (
+        patch('config.config_manager.VECTORDBS', tmpdir),
+        patch.dict(os.environ, {'VECTOR_MODEL': 'env-override-model', 'QUERY_TOP_K': '100'}),
+      ):
         kb = KnowledgeBase('test_kb')
         assert kb.vector_model == 'env-override-model'
         assert kb.query_top_k == 100
@@ -225,9 +220,9 @@ class TestKnowledgeBase:
       with patch('config.config_manager.VECTORDBS', tmpdir):
         kb = KnowledgeBase('test_kb')
 
-        expected_base = os.path.join(kb_dir, "test_kb")
-        assert kb.knowledge_base_db == f"{expected_base}.db"
-        assert kb.knowledge_base_vector == f"{expected_base}.faiss"
+        expected_base = os.path.join(kb_dir, 'test_kb')
+        assert kb.knowledge_base_db == f'{expected_base}.db'
+        assert kb.knowledge_base_vector == f'{expected_base}.faiss'
 
   def test_domain_style_paths(self):
     """Test paths for domain-style knowledgebase names."""
@@ -237,27 +232,27 @@ class TestKnowledgeBase:
       os.makedirs(kb_dir)
       config_path = os.path.join(kb_dir, 'example.com.cfg')
       with open(config_path, 'w') as f:
-        f.write("[DEFAULT]\nvector_model = test\n")
+        f.write('[DEFAULT]\nvector_model = test\n')
 
       with patch('config.config_manager.VECTORDBS', tmpdir):
         kb = KnowledgeBase('example.com')
 
-        expected_base = os.path.join(kb_dir, "example.com")
-        assert kb.knowledge_base_db == f"{expected_base}.db"
-        assert kb.knowledge_base_vector == f"{expected_base}.faiss"
-        assert kb.knowledge_base_name == "example.com"
+        expected_base = os.path.join(kb_dir, 'example.com')
+        assert kb.knowledge_base_db == f'{expected_base}.db'
+        assert kb.knowledge_base_vector == f'{expected_base}.faiss'
+        assert kb.knowledge_base_name == 'example.com'
 
   def test_config_defaults(self):
     """Test that configuration defaults are properly set."""
-    kb = KnowledgeBase("test")
+    kb = KnowledgeBase('test')
 
     # Check all default values
-    assert kb.DEF_VECTOR_MODEL == "text-embedding-3-small"
+    assert kb.DEF_VECTOR_MODEL == 'text-embedding-3-small'
     assert kb.DEF_VECTOR_DIMENSIONS == 1536
     assert kb.DEF_VECTOR_CHUNKS == 200
     assert kb.DEF_DB_MIN_TOKENS == 100
     assert kb.DEF_DB_MAX_TOKENS == 200
-    assert kb.DEF_QUERY_MODEL == "claude-sonnet-4-5"
+    assert kb.DEF_QUERY_MODEL == 'claude-sonnet-4-5'
     assert kb.DEF_QUERY_TOP_K == 50
     assert kb.DEF_QUERY_CONTEXT_SCOPE == 4
     assert kb.DEF_QUERY_TEMPERATURE == 0.0
@@ -276,14 +271,14 @@ class TestKnowledgeBase:
       with open(config_path, 'w') as f:
         f.write(config_content)
 
-      with patch('config.config_manager.VECTORDBS', tmpdir), patch.dict(os.environ, {
-        'VECTOR_DIMENSIONS': 'invalid_int',
-        'QUERY_TEMPERATURE': 'invalid_float'
-      }):
+      with (
+        patch('config.config_manager.VECTORDBS', tmpdir),
+        patch.dict(os.environ, {'VECTOR_DIMENSIONS': 'invalid_int', 'QUERY_TEMPERATURE': 'invalid_float'}),
+      ):
         kb = KnowledgeBase('test_kb')
         # Should fall back to config/default values
         assert kb.vector_dimensions == 1536  # from config
-        assert kb.query_temperature == 0.1   # from config
+        assert kb.query_temperature == 0.1  # from config
 
   def test_query_context_files_parsing(self):
     """Test parsing of query_context_files configuration."""
@@ -322,8 +317,8 @@ query_context_files = file1.txt,file2.txt,file3.txt
         kb.save_config()
 
         captured = capsys.readouterr()
-        assert "test_kb" in captured.err
-        assert "vector_model" in captured.err
+        assert 'test_kb' in captured.err
+        assert 'vector_model' in captured.err
 
   def test_save_config_to_file(self):
     """Test saving configuration to a file."""
@@ -340,15 +335,15 @@ query_context_files = file1.txt,file2.txt,file3.txt
 
       with patch('config.config_manager.VECTORDBS', tmpdir):
         kb = KnowledgeBase('test_kb')
-        output_file = os.path.join(tmpdir, "saved_config.txt")
+        output_file = os.path.join(tmpdir, 'saved_config.txt')
 
         kb.save_config(output_file)
 
         assert os.path.exists(output_file)
         with open(output_file) as f:
           content = f.read()
-          assert "[DEFAULT]" in content
-          assert "vector_model" in content
+          assert '[DEFAULT]' in content
+          assert 'vector_model' in content
 
   def test_sql_connection_initialization(self):
     """Test that SQL connection attributes are properly initialized."""
@@ -384,6 +379,7 @@ query_context_files = file1.txt,file2.txt,file3.txt
 
       with patch('config.config_manager.VECTORDBS', tmpdir):
         import time
+
         before = int(time.time())
         kb = KnowledgeBase('test_kb')
         after = int(time.time())
@@ -392,7 +388,7 @@ query_context_files = file1.txt,file2.txt,file3.txt
 
   def test_new_config_sections_defaults(self):
     """Test that new configuration section defaults are properly set."""
-    kb = KnowledgeBase("test")
+    kb = KnowledgeBase('test')
 
     # API configuration defaults
     assert kb.DEF_API_CALL_DELAY_SECONDS == 0.05
@@ -455,7 +451,7 @@ query_context_files = file1.txt,file2.txt,file3.txt
         api_max_retries=5,
         max_file_size_mb=50,
         embedding_batch_size=25,
-        similarity_threshold=0.8
+        similarity_threshold=0.8,
       )
 
       with open(config_path, 'w') as f:
@@ -488,12 +484,18 @@ query_context_files = file1.txt,file2.txt,file3.txt
       with open(config_path, 'w') as f:
         f.write(config_content)
 
-      with patch('config.config_manager.VECTORDBS', tmpdir), patch.dict(os.environ, {
-        'API_CALL_DELAY_SECONDS': '0.1',
-        'MAX_FILE_SIZE_MB': '200',
-        'EMBEDDING_BATCH_SIZE': '50',
-        'SIMILARITY_THRESHOLD': '0.9'
-      }):
+      with (
+        patch('config.config_manager.VECTORDBS', tmpdir),
+        patch.dict(
+          os.environ,
+          {
+            'API_CALL_DELAY_SECONDS': '0.1',
+            'MAX_FILE_SIZE_MB': '200',
+            'EMBEDDING_BATCH_SIZE': '50',
+            'SIMILARITY_THRESHOLD': '0.9',
+          },
+        ),
+      ):
         kb = KnowledgeBase('test_kb')
         assert kb.api_call_delay_seconds == 0.1
         assert kb.max_file_size_mb == 200
@@ -503,12 +505,12 @@ query_context_files = file1.txt,file2.txt,file3.txt
   def test_new_config_sections_kwargs(self):
     """Test new configuration sections with kwargs."""
     kb = KnowledgeBase(
-      "test_kb",
+      'test_kb',
       api_call_delay_seconds=0.001,
       max_file_size_mb=500,
       embedding_batch_size=200,
       similarity_threshold=0.95,
-      default_editor='vim'
+      default_editor='vim',
     )
 
     assert kb.api_call_delay_seconds == 0.001
@@ -575,10 +577,17 @@ vector_model = test-model
       with open(config_path, 'w') as f:
         f.write(config_content)
 
-      with patch('config.config_manager.VECTORDBS', tmpdir), patch('config.models.VECTORDBS', tmpdir), patch.dict(os.environ, {
-        'VECTOR_MODEL': 'env-model',
-        'QUERY_MODEL': 'env-query-model',
-      }):
+      with (
+        patch('config.config_manager.VECTORDBS', tmpdir),
+        patch('config.models.VECTORDBS', tmpdir),
+        patch.dict(
+          os.environ,
+          {
+            'VECTOR_MODEL': 'env-model',
+            'QUERY_MODEL': 'env-query-model',
+          },
+        ),
+      ):
         kb = KnowledgeBase('test_kb')
         assert kb.vector_model == 'env-model'
         assert kb.query_model == 'env-query-model'
@@ -595,7 +604,7 @@ class TestErrorHandling:
       os.makedirs(kb_dir)
       config_path = os.path.join(kb_dir, 'corrupted.cfg')
       with open(config_path, 'w') as f:
-        f.write("invalid config content [[[")
+        f.write('invalid config content [[[')
 
       with patch('config.config_manager.VECTORDBS', tmpdir):
         # Should not raise exception, should use defaults
@@ -625,11 +634,7 @@ vector_model = test
     """Test that KB names with dangerous patterns are handled."""
     with tempfile.TemporaryDirectory() as tmpdir, patch('config.config_manager.VECTORDBS', tmpdir):
       # These should all resolve to None since the KB doesn't exist
-      dangerous_names = [
-        "../../../etc/passwd",
-        "../../malicious",
-        "/etc/shadow"
-      ]
+      dangerous_names = ['../../../etc/passwd', '../../malicious', '/etc/shadow']
 
       for name in dangerous_names:
         result = get_kb_name(name)
@@ -858,11 +863,7 @@ bm25_k1 = 1.2
 
       with patch('config.config_manager.VECTORDBS', tmpdir):
         # Set environment variables
-        env_vars = {
-          'ENABLE_HYBRID_SEARCH': 'true',
-          'VECTOR_WEIGHT': '0.9',
-          'BM25_K1': '2.0'
-        }
+        env_vars = {'ENABLE_HYBRID_SEARCH': 'true', 'VECTOR_WEIGHT': '0.9', 'BM25_K1': '2.0'}
 
         with patch.dict(os.environ, env_vars):
           kb = KnowledgeBase('test_bm25_env')
@@ -924,7 +925,7 @@ knowledge_base_name = test_bm25_bool
 enable_hybrid_search = invalid_value
 """)
 
-      with patch('config.config_manager.VECTORDBS', tmpdir), pytest.raises(ValueError, match="Not a boolean"):
+      with patch('config.config_manager.VECTORDBS', tmpdir), pytest.raises(ValueError, match='Not a boolean'):
         KnowledgeBase('test_bm25_bool')
 
   def test_bm25_mixed_configuration_sources(self):
@@ -973,11 +974,7 @@ knowledge_base_name = test_bm25_kwargs
 
       with patch('config.config_manager.VECTORDBS', tmpdir):
         # Pass BM25 parameters via kwargs
-        kb = KnowledgeBase('test_bm25_kwargs',
-                          enable_hybrid_search=True,
-                          vector_weight=0.85,
-                          bm25_k1=1.8,
-                          bm25_b=0.9)
+        kb = KnowledgeBase('test_bm25_kwargs', enable_hybrid_search=True, vector_weight=0.85, bm25_k1=1.8, bm25_b=0.9)
 
         # Should use kwargs values
         assert kb.enable_hybrid_search is True
@@ -1008,6 +1005,7 @@ vector_weight = 0.8
 
         # Save config to string
         import io
+
         io.StringIO()
         kb.save_config()  # This prints to stderr by default
 
@@ -1020,4 +1018,5 @@ vector_weight = 0.8
         assert hasattr(kb, 'bm25_min_token_length')
         assert hasattr(kb, 'bm25_rebuild_threshold')
 
-#fin
+
+# fin

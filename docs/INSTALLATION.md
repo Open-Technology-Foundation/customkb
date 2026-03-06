@@ -44,24 +44,19 @@ For users who want to get started quickly:
 git clone https://github.com/Open-Technology-Foundation/customkb.git
 cd customkb
 
-# 2. Create virtual environment
-python -m venv .venv
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+# 2. Install all dependencies (creates .venv automatically)
+uv sync --extra faiss-gpu-cu12 --extra mcp --extra test
+# For CPU-only: uv sync --extra faiss-cpu --extra mcp --extra test
 
-# 3. Install base dependencies
-pip install -r requirements.txt
-
-# 4. Install FAISS (auto-detects your hardware)
-./setup/install_faiss.sh
-
-# 5. Install NLTK data
+# 3. Install NLTK data
 sudo ./setup/nltk_setup.py download cleanup
 
-# 6. Configure API keys
+# 4. Configure API keys
 export OPENAI_API_KEY="your-key-here"
 export VECTORDBS="/var/lib/vectordbs"
 
-# 7. Verify installation
+# 5. Verify installation
+source .venv/bin/activate
 python -c "import faiss; print(f'FAISS: {faiss.__version__}')"
 customkb --version
 ```
@@ -83,35 +78,24 @@ tar -xzf v0.9.0.tar.gz
 cd customkb-0.9.0
 ```
 
-### 2. Create Virtual Environment
+### 2. Install Dependencies
 
-Using venv (recommended):
-
-```bash
-python -m venv .venv
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
-```
-
-Or using conda:
+Dependencies are managed via `pyproject.toml` and `uv`. Install everything in one command:
 
 ```bash
-conda create -n customkb python=3.12
-conda activate customkb
+# GPU systems (CUDA 12):
+uv sync --extra faiss-gpu-cu12 --extra mcp --extra test
+
+# GPU systems (CUDA 11):
+uv sync --extra faiss-gpu-cu11 --extra mcp --extra test
+
+# CPU-only systems:
+uv sync --extra faiss-cpu --extra mcp --extra test
 ```
 
-### 3. Install Base Dependencies
+This creates a `.venv`, installs all dependencies including FAISS, and sets up the editable install.
 
-```bash
-pip install -r requirements.txt
-```
-
-This installs all required packages except FAISS, which must be installed separately based on your hardware configuration.
-
-### 4. Install FAISS
-
-See the [FAISS Installation](#faiss-installation) section below.
-
-### 5. Install NLTK Data
+### 3. Install NLTK Data
 
 CustomKB requires NLTK stopwords and tokenizers for text processing:
 
@@ -126,7 +110,7 @@ sudo ./setup/nltk_setup.py download cleanup
 python -c "import nltk; nltk.download('stopwords'); nltk.download('punkt')"
 ```
 
-### 6. Configure Environment Variables
+### 4. Configure Environment Variables
 
 Create a `.env` file or add to your shell profile:
 
@@ -152,7 +136,7 @@ export FAISS_VARIANT="auto"  # or "cpu", "gpu-cu12", "gpu-cu11"
 export FAISS_NO_GPU="0"      # Set to 1 to disable GPU
 ```
 
-### 7. Create Knowledgebase Storage
+### 5. Create Knowledgebase Storage
 
 ```bash
 # Create the base directory
@@ -196,17 +180,17 @@ If you prefer manual control or the automatic installer fails:
 
 **CPU-only systems:**
 ```bash
-pip install -r requirements-faiss-cpu.txt
+uv sync --extra faiss-cpu
 ```
 
 **GPU with CUDA 12.x (NVIDIA Driver >= R530):**
 ```bash
-pip install -r requirements-faiss-gpu-cu12.txt
+uv sync --extra faiss-gpu-cu12
 ```
 
 **GPU with CUDA 11.8 (NVIDIA Driver >= R520):**
 ```bash
-pip install -r requirements-faiss-gpu-cu11.txt
+uv sync --extra faiss-gpu-cu11
 ```
 
 ### Force Specific Variant
@@ -245,8 +229,7 @@ Typical setup for development with NVIDIA GPU:
 
 ```bash
 # Standard installation
-pip install -r requirements.txt
-./setup/install_faiss.sh  # Auto-detects GPU
+uv sync --extra faiss-gpu-cu12 --extra mcp
 
 # Enable GPU acceleration in config
 cat > /var/lib/vectordbs/myproject/myproject.cfg << 'EOF'
@@ -314,11 +297,9 @@ RUN apt-get update && \
 # Copy application
 COPY . /app/
 
-# Create virtual environment and install dependencies
-RUN python -m venv /app/.venv && \
-    . /app/.venv/bin/activate && \
-    pip install --no-cache-dir -r requirements.txt && \
-    pip install --no-cache-dir -r requirements-faiss-cpu.txt
+# Install uv and dependencies
+RUN pip install --no-cache-dir uv && \
+    uv sync --extra faiss-cpu --extra mcp
 
 # Install NLTK data
 RUN . /app/.venv/bin/activate && \
@@ -353,11 +334,9 @@ RUN apt-get update && \
 # Copy application
 COPY . /app/
 
-# Create virtual environment and install dependencies
-RUN python3.12 -m venv /app/.venv && \
-    . /app/.venv/bin/activate && \
-    pip install --no-cache-dir -r requirements.txt && \
-    pip install --no-cache-dir -r requirements-faiss-gpu-cu12.txt
+# Install uv and dependencies
+RUN pip install --no-cache-dir uv && \
+    uv sync --extra faiss-gpu-cu12 --extra mcp
 
 # Install NLTK data
 RUN . /app/.venv/bin/activate && \
@@ -404,10 +383,10 @@ nvcc --version
 nvidia-smi
 
 # 2. Try CUDA 11 version instead
-pip install -r requirements-faiss-gpu-cu11.txt
+uv sync --extra faiss-gpu-cu11
 
 # 3. Fall back to CPU version
-pip install -r requirements-faiss-cpu.txt
+uv sync --extra faiss-cpu
 ```
 
 **Problem**: ImportError: libcudart.so.12 not found

@@ -41,7 +41,7 @@ def get_reranking_cache_key(query: str, document: str) -> str:
       A cache key string.
   """
   # Combine query and document for unique key
-  combined = f"{query}|||{document}"
+  combined = f'{query}|||{document}'
   return hashlib.md5(combined.encode('utf-8')).hexdigest()
 
 
@@ -65,7 +65,7 @@ def get_cached_score(query: str, document: str) -> float | None:
     return _memory_cache[cache_key]
 
   # Check disk cache (JSON format)
-  cache_file = os.path.join(CACHE_DIR, f"{cache_key}.json")
+  cache_file = os.path.join(CACHE_DIR, f'{cache_key}.json')
   if os.path.exists(cache_file):
     try:
       with open(cache_file) as f:
@@ -76,15 +76,15 @@ def get_cached_score(query: str, document: str) -> float | None:
       _enforce_memory_cache_size()
       return score
     except (json.JSONDecodeError, OSError, KeyError, ValueError) as e:
-      logger.warning(f"Failed to load cached score from JSON: {e}")
+      logger.warning(f'Failed to load cached score from JSON: {e}')
 
   # Legacy pickle format is no longer supported (removed for security)
   # If old pickle cache files exist, they will be ignored and naturally age out
-  old_cache_file = os.path.join(CACHE_DIR, f"{cache_key}.pkl")
+  old_cache_file = os.path.join(CACHE_DIR, f'{cache_key}.pkl')
   if os.path.exists(old_cache_file):
-    logger.debug(f"Ignoring legacy pickle cache file: {cache_key}.pkl")
-    logger.debug("Legacy pickle caches are no longer supported for security reasons.")
-    logger.debug("The cache will be regenerated automatically.")
+    logger.debug(f'Ignoring legacy pickle cache file: {cache_key}.pkl')
+    logger.debug('Legacy pickle caches are no longer supported for security reasons.')
+    logger.debug('The cache will be regenerated automatically.')
 
   return None
 
@@ -105,17 +105,23 @@ def cache_score(query: str, document: str, score: float):
   _enforce_memory_cache_size()
 
   # Save to disk cache (JSON format)
-  cache_file = os.path.join(CACHE_DIR, f"{cache_key}.json")
+  cache_file = os.path.join(CACHE_DIR, f'{cache_key}.json')
   try:
     os.makedirs(CACHE_DIR, exist_ok=True)
     with open(cache_file, 'w') as f:
       json.dump({'score': score, 'version': '1.0'}, f)
   except (OSError, PermissionError) as e:
-    logger.warning(f"Failed to save score to disk cache: {e}")
+    logger.warning(f'Failed to save score to disk cache: {e}')
 
 
 def _enforce_memory_cache_size():
-  """Enforce the memory cache size limit using LRU eviction."""
+  """Enforce memory cache size limit via LRU eviction.
+
+  Removes the oldest (least recently used) entries from the OrderedDict
+  until the cache size is within the configured _memory_cache_size limit.
+  The limit is updated dynamically from kb.reranking_cache_size in
+  rerank_documents().
+  """
   while len(_memory_cache) > _memory_cache_size:
     _memory_cache.popitem(last=False)  # Remove oldest
 
@@ -138,11 +144,11 @@ async def load_reranking_model(model_name: str, device: str = 'cpu'):
       try:
         from sentence_transformers import CrossEncoder
 
-        logger.info(f"Loading reranking model: {model_name} on {device}")
+        logger.info(f'Loading reranking model: {model_name} on {device}')
         _reranking_model = CrossEncoder(model_name, device=device)
-        logger.info("Reranking model loaded successfully")
+        logger.info('Reranking model loaded successfully')
       except (ImportError, RuntimeError, OSError, FileNotFoundError) as e:
-        logger.error(f"Failed to load reranking model: {e}")
+        logger.error(f'Failed to load reranking model: {e}')
         raise
 
   return _reranking_model
@@ -163,23 +169,21 @@ def batch_predict(model, pairs: list[tuple[str, str]], batch_size: int) -> list[
   scores = []
 
   for i in range(0, len(pairs), batch_size):
-    batch = pairs[i:i + batch_size]
+    batch = pairs[i : i + batch_size]
     try:
       batch_scores = model.predict(batch)
       scores.extend(batch_scores)
     except (RuntimeError, ValueError, TypeError, IndexError) as e:
-      logger.error(f"Error in batch prediction: {e}")
-      # Return zeros for failed batch
+      logger.error(f'Error in batch prediction: {e}')
+      # Zero-fill failed batch so output length matches input length,
+      # allowing the caller to align scores with document indices.
       scores.extend([0.0] * len(batch))
 
   return scores
 
 
 async def rerank_documents(
-    kb: Any,
-    query: str,
-    documents: list[tuple[int, str, float]],
-    top_k: int | None = None
+  kb: Any, query: str, documents: list[tuple[int, str, float]], top_k: int | None = None
 ) -> list[tuple[int, str, float]]:
   """
   Rerank documents using a cross-encoder model.
@@ -230,14 +234,12 @@ async def rerank_documents(
   # Score uncached pairs
   new_scores = []
   if pairs_to_score:
-    logger.info(f"Reranking {len(pairs_to_score)} documents (batch size: {batch_size})")
+    logger.info(f'Reranking {len(pairs_to_score)} documents (batch size: {batch_size})')
 
     # Run prediction in thread pool to avoid blocking
     loop = asyncio.get_event_loop()
     with ThreadPoolExecutor(max_workers=1) as executor:
-      new_scores = await loop.run_in_executor(
-        executor, batch_predict, model, pairs_to_score, batch_size
-      )
+      new_scores = await loop.run_in_executor(executor, batch_predict, model, pairs_to_score, batch_size)
 
     # Cache new scores
     for (query_text, doc_text), score in zip(pairs_to_score, new_scores, strict=False):
@@ -264,16 +266,14 @@ async def rerank_documents(
   # Append remaining documents (not reranked)
   reranked.extend(remaining_documents)
 
-  logger.info(f"Reranking complete. Top score: {reranked[0][2]:.4f} (was position {documents.index(next(d for d in documents if d[0] == reranked[0][0])) + 1})")
+  logger.info(
+    f'Reranking complete. Top score: {reranked[0][2]:.4f} (was position {documents.index(next(d for d in documents if d[0] == reranked[0][0])) + 1})'
+  )
 
   return reranked
 
 
-async def rerank_search_results(
-    kb: Any,
-    query: str,
-    search_results: list[tuple[int, float]]
-) -> list[tuple[int, float]]:
+async def rerank_search_results(kb: Any, query: str, search_results: list[tuple[int, float]]) -> list[tuple[int, float]]:
   """
   Rerank search results by fetching document texts and applying cross-encoder.
 
@@ -297,16 +297,13 @@ async def rerank_search_results(
   for i, (doc_id, distance) in enumerate(search_results):
     if i < top_k:
       # Fetch document text
-      kb.sql_cursor.execute(
-        "SELECT originaltext FROM docs WHERE id = ?",
-        (doc_id,)
-      )
+      kb.sql_cursor.execute('SELECT originaltext FROM docs WHERE id = ?', (doc_id,))
       result = kb.sql_cursor.fetchone()
       if result:
         doc_text = result[0]
         documents_to_rerank.append((doc_id, doc_text, distance))
       else:
-        logger.warning(f"Could not fetch text for doc_id {doc_id}")
+        logger.warning(f'Could not fetch text for doc_id {doc_id}')
         remaining_results.append((doc_id, distance))
     else:
       remaining_results.append((doc_id, distance))
@@ -317,12 +314,12 @@ async def rerank_search_results(
   # Rerank documents
   reranked_docs = await rerank_documents(kb, query, documents_to_rerank, top_k)
 
-  # Convert back to search result format
-  # Note: We use the reranking score as a proxy for distance (lower is better)
-  # So we invert the score: distance = 1 / (score + epsilon)
+  # Convert back to search result format.
+  # FAISS uses distance (lower = better), but cross-encoder scores are
+  # higher = more relevant. Convert via: distance = 1/(score + eps) - 1
+  # This maps high scores to low distances while avoiding division by zero.
   reranked_results = []
   for doc_id, _, score in reranked_docs:
-    # Convert score to distance-like metric
     distance = 1.0 / (score + 1e-6) - 1.0
     reranked_results.append((doc_id, distance))
 
@@ -343,9 +340,9 @@ def clear_reranking_cache():
       try:
         os.remove(os.path.join(CACHE_DIR, file))
       except (FileNotFoundError, PermissionError, OSError) as e:
-        logger.warning(f"Failed to remove cache file {file}: {e}")
+        logger.warning(f'Failed to remove cache file {file}: {e}')
 
-  logger.info("Reranking cache cleared")
+  logger.info('Reranking cache cleared')
 
 
-#fin
+# fin

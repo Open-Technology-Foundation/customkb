@@ -30,24 +30,24 @@ REQUIRED_LANGUAGES = {
   'it': 'italian',
   'pt': 'portuguese',
   'es': 'spanish',
-  'sv': 'swedish'
+  'sv': 'swedish',
 }
 
 
 def check_permissions():
   """Check if we have write permissions to NLTK data directory."""
   if not os.access(NLTK_DATA_DIR, os.W_OK):
-    print(f"❌ Error: No write permission to {NLTK_DATA_DIR}")
-    print(f"Please run with sudo: sudo python {sys.argv[0]}")
+    print(f'❌ Error: No write permission to {NLTK_DATA_DIR}')
+    print(f'Please run with sudo: sudo python {sys.argv[0]}')
     return False
   return True
 
 
 def download_nltk_data():
   """Download required NLTK data for CustomKB."""
-  print("NLTK Data Download")
-  print(f"Target directory: {NLTK_DATA_DIR}")
-  print("=" * 50)
+  print('NLTK Data Download')
+  print(f'Target directory: {NLTK_DATA_DIR}')
+  print('=' * 50)
 
   if not check_permissions():
     return 1
@@ -55,47 +55,47 @@ def download_nltk_data():
   # Set NLTK data path
   nltk.data.path = [NLTK_DATA_DIR]
 
-  print(f"\nDownloading data for {len(REQUIRED_LANGUAGES)} languages:")
+  print(f'\nDownloading data for {len(REQUIRED_LANGUAGES)} languages:')
   for iso, lang in sorted(REQUIRED_LANGUAGES.items()):
-    print(f"  {iso}: {lang}")
+    print(f'  {iso}: {lang}')
 
-  print("\nStarting download...")
+  print('\nStarting download...')
 
   try:
     # Download the stopwords corpus (includes all languages)
     nltk.download('stopwords', download_dir=NLTK_DATA_DIR, quiet=False)
-    print("\n✅ Successfully downloaded stopwords corpus")
+    print('\n✅ Successfully downloaded stopwords corpus')
 
     # Also download punkt tokenizers which are needed
-    print("\nDownloading required tokenizers...")
+    print('\nDownloading required tokenizers...')
     nltk.download('punkt', download_dir=NLTK_DATA_DIR, quiet=False)
     nltk.download('punkt_tab', download_dir=NLTK_DATA_DIR, quiet=False)
     nltk.download('wordnet', download_dir=NLTK_DATA_DIR, quiet=False)
-    print("✅ Successfully downloaded tokenizers")
+    print('✅ Successfully downloaded tokenizers')
 
     # Verify the languages are available
-    print("\nVerifying stopwords availability...")
+    print('\nVerifying stopwords availability...')
     from nltk.corpus import stopwords
 
     available = stopwords.fileids()
-    print(f"Total languages available: {len(available)}")
+    print(f'Total languages available: {len(available)}')
 
-    print("\nChecking required languages:")
+    print('\nChecking required languages:')
     all_found = True
     for iso, lang in sorted(REQUIRED_LANGUAGES.items()):
       if lang in available:
-        print(f"  ✅ {iso}: {lang}")
+        print(f'  ✅ {iso}: {lang}')
       else:
-        print(f"  ❌ {iso}: {lang} NOT FOUND")
+        print(f'  ❌ {iso}: {lang} NOT FOUND')
         all_found = False
 
     if all_found:
-      print("\n✅ All required languages are available!")
+      print('\n✅ All required languages are available!')
     else:
-      print("\n⚠️  Some required languages are missing")
+      print('\n⚠️  Some required languages are missing')
 
   except (LookupError, OSError) as e:
-    print(f"\n❌ Error downloading: {e}")
+    print(f'\n❌ Error downloading: {e}')
     return 1
 
   return 0
@@ -106,18 +106,18 @@ def cleanup_nltk_data():
   stopwords_dir = Path('/usr/share/nltk_data/corpora/stopwords')
 
   if not stopwords_dir.exists():
-    print(f"❌ Stopwords directory not found: {stopwords_dir}")
+    print(f'❌ Stopwords directory not found: {stopwords_dir}')
     return 1
 
   if not check_permissions():
     return 1
 
-  print("NLTK Stopwords Cleanup")
-  print("=" * 50)
-  print(f"Directory: {stopwords_dir}")
-  print(f"Keeping {len(REQUIRED_LANGUAGES)} languages:")
+  print('NLTK Stopwords Cleanup')
+  print('=' * 50)
+  print(f'Directory: {stopwords_dir}')
+  print(f'Keeping {len(REQUIRED_LANGUAGES)} languages:')
   for iso, lang in sorted(REQUIRED_LANGUAGES.items()):
-    print(f"  {iso}: {lang}")
+    print(f'  {iso}: {lang}')
 
   # Get all files in directory
   all_files = list(stopwords_dir.iterdir())
@@ -127,96 +127,97 @@ def cleanup_nltk_data():
   removed_count = 0
   kept_count = 0
 
-  print("\nProcessing files...")
+  print('\nProcessing files...')
   for file_path in all_files:
     if file_path.is_file():
       filename = file_path.name
       if filename in keep_files:
-        print(f"  ✅ Keeping: {filename}")
+        print(f'  ✅ Keeping: {filename}')
         kept_count += 1
       else:
-        print(f"  🗑️  Removing: {filename}")
+        print(f'  🗑️  Removing: {filename}')
         try:
           file_path.unlink()
           removed_count += 1
         except (PermissionError, OSError) as e:
-          print(f"     ❌ Error removing {filename}: {e}")
+          print(f'     ❌ Error removing {filename}: {e}')
 
-  print("\n" + "=" * 50)
-  print("Summary:")
-  print(f"  Files kept: {kept_count}")
-  print(f"  Files removed: {removed_count}")
+  print('\n' + '=' * 50)
+  print('Summary:')
+  print(f'  Files kept: {kept_count}')
+  print(f'  Files removed: {removed_count}')
 
   # Show final state
-  print("\nFinal stopwords directory contents:")
+  print('\nFinal stopwords directory contents:')
   remaining_files = sorted([f.name for f in stopwords_dir.iterdir() if f.is_file()])
   for f in remaining_files:
-    print(f"  {f}")
+    print(f'  {f}')
 
   return 0
 
 
 def show_status():
   """Show current NLTK data status."""
-  print("NLTK Data Status")
-  print("=" * 50)
-  print(f"NLTK data directory: {NLTK_DATA_DIR}")
+  print('NLTK Data Status')
+  print('=' * 50)
+  print(f'NLTK data directory: {NLTK_DATA_DIR}')
 
   # Check stopwords
   stopwords_dir = Path(NLTK_DATA_DIR) / 'corpora' / 'stopwords'
   if stopwords_dir.exists():
     files = sorted([f.name for f in stopwords_dir.iterdir() if f.is_file() and f.name != 'README'])
-    print(f"\nStopwords installed: {len(files)} languages")
+    print(f'\nStopwords installed: {len(files)} languages')
 
     # Check which required languages are present
     required_present = []
     required_missing = []
     for iso, lang in sorted(REQUIRED_LANGUAGES.items()):
       if lang in files:
-        required_present.append(f"{iso}:{lang}")
+        required_present.append(f'{iso}:{lang}')
       else:
-        required_missing.append(f"{iso}:{lang}")
+        required_missing.append(f'{iso}:{lang}')
 
     if required_present:
-      print(f"\nRequired languages present ({len(required_present)}):")
+      print(f'\nRequired languages present ({len(required_present)}):')
       for lang in required_present:
-        print(f"  ✅ {lang}")
+        print(f'  ✅ {lang}')
 
     if required_missing:
-      print(f"\nRequired languages missing ({len(required_missing)}):")
+      print(f'\nRequired languages missing ({len(required_missing)}):')
       for lang in required_missing:
-        print(f"  ❌ {lang}")
+        print(f'  ❌ {lang}')
 
     # Show extra languages
     extra_langs = [f for f in files if f not in REQUIRED_LANGUAGES.values()]
     if extra_langs:
-      print(f"\nExtra languages installed ({len(extra_langs)}):")
+      print(f'\nExtra languages installed ({len(extra_langs)}):')
       for lang in sorted(extra_langs):
-        print(f"  - {lang}")
+        print(f'  - {lang}')
   else:
-    print("\n❌ Stopwords directory not found!")
+    print('\n❌ Stopwords directory not found!')
 
   # Check tokenizers
-  print("\nTokenizers:")
+  print('\nTokenizers:')
   for tokenizer in ['punkt', 'punkt_tab', 'wordnet']:
     path = Path(NLTK_DATA_DIR) / 'tokenizers' / tokenizer
     if path.exists():
-      print(f"  ✅ {tokenizer}")
+      print(f'  ✅ {tokenizer}')
     else:
       # Check in corpora for wordnet
       if tokenizer == 'wordnet':
         path = Path(NLTK_DATA_DIR) / 'corpora' / tokenizer
         if path.exists():
-          print(f"  ✅ {tokenizer}")
+          print(f'  ✅ {tokenizer}')
         else:
-          print(f"  ❌ {tokenizer}")
+          print(f'  ❌ {tokenizer}')
       else:
-        print(f"  ❌ {tokenizer}")
+        print(f'  ❌ {tokenizer}')
 
   return 0
 
 
 def main():
+  """Parse CLI arguments and execute NLTK setup commands in order."""
   parser = argparse.ArgumentParser(
     description='NLTK setup utility for CustomKB',
     formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -233,14 +234,11 @@ Examples:
 
   # Download then cleanup (full setup)
   sudo %(prog)s download cleanup
-"""
+""",
   )
 
   parser.add_argument(
-    'commands',
-    nargs='+',
-    choices=['download', 'cleanup', 'status'],
-    help='Commands to run (can specify multiple)'
+    'commands', nargs='+', choices=['download', 'cleanup', 'status'], help='Commands to run (can specify multiple)'
   )
 
   args = parser.parse_args()
@@ -253,10 +251,10 @@ Examples:
         return result
     elif cmd == 'cleanup':
       if 'download' not in args.commands:
-        print("\n⚠️  Warning: Running cleanup without download.")
-        response = input("Continue? (y/N): ")
+        print('\n⚠️  Warning: Running cleanup without download.')
+        response = input('Continue? (y/N): ')
         if response.lower() != 'y':
-          print("Cancelled.")
+          print('Cancelled.')
           return 0
       result = cleanup_nltk_data()
       if result != 0:
@@ -267,12 +265,12 @@ Examples:
         return result
 
     if cmd != args.commands[-1]:
-      print("\n" + "-" * 50 + "\n")
+      print('\n' + '-' * 50 + '\n')
 
   return 0
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
   sys.exit(main())
 
-#fin
+# fin
