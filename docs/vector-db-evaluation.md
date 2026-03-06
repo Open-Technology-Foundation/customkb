@@ -156,7 +156,7 @@ The IVF index with nprobe=32 is faster than all candidates by a wide margin.
 cd /ai/scripts/customkb2
 source .venv/bin/activate
 pip install chromadb qdrant-client sqlite-vec
-python docs/benchmark_vectordb.py
+python scripts/benchmark_vectordb.py
 ```
 
 Raw results: `docs/benchmark_results.json`
