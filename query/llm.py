@@ -121,6 +121,7 @@ async def get_response(
       messages=messages,
       temperature=temperature,
       max_tokens=max_tokens,
+      drop_params=True,
     )
     content = response.choices[0].message.content
     if not content:

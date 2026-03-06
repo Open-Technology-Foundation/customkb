@@ -90,7 +90,7 @@ async def get_embeddings(
     return await _local_provider_cache[model_lower].get_embeddings(texts, model)
 
   litellm_model = _to_litellm_embedding_model(model)
-  logger.info(f'LiteLLM embedding: model={litellm_model}, texts={len(texts)}')
+  logger.debug(f'LiteLLM embedding: model={litellm_model}, texts={len(texts)}')
 
   try:
     response = await litellm.aembedding(
@@ -99,7 +99,7 @@ async def get_embeddings(
       **({'dimensions': dimensions} if dimensions else {}),
     )
     embeddings = [item['embedding'] for item in response.data]
-    logger.info(f'LiteLLM embedding: {len(embeddings)} vectors, dims={len(embeddings[0]) if embeddings else 0}')
+    logger.debug(f'LiteLLM embedding: {len(embeddings)} vectors, dims={len(embeddings[0]) if embeddings else 0}')
     return embeddings
 
   except litellm.AuthenticationError as e:
