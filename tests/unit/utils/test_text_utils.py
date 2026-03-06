@@ -8,7 +8,19 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-from utils.text_utils import clean_text, enhanced_clean_text, find_file, get_env, get_files, split_filepath, tokenize_for_bm25
+from utils.text_utils import (
+  clean_text,
+  detect_file_encoding,
+  enhanced_clean_text,
+  find_file,
+  get_env,
+  get_files,
+  get_full_language_name,
+  get_iso_code,
+  read_text_file,
+  split_filepath,
+  tokenize_for_bm25,
+)
 
 
 class TestCleanText:
@@ -458,6 +470,116 @@ class TestGetEnv:
       # Try to cast non-numeric string to int (should fail and return default)
       result = get_env('COMPLEX_VAR', 42, int)
       assert result == 42  # Should return default on ValueError
+
+
+class TestGetIsoCode:
+  """Test ISO code conversion function."""
+
+  def test_already_iso_passthrough(self):
+    assert get_iso_code('en') == 'en'
+    assert get_iso_code('fr') == 'fr'
+    assert get_iso_code('de') == 'de'
+    assert get_iso_code('id') == 'id'
+
+  def test_full_name_to_code(self):
+    assert get_iso_code('english') == 'en'
+    assert get_iso_code('french') == 'fr'
+    assert get_iso_code('german') == 'de'
+    assert get_iso_code('indonesian') == 'id'
+    assert get_iso_code('chinese') == 'zh'
+    assert get_iso_code('spanish') == 'es'
+
+  def test_unrecognized_raises_value_error(self):
+    with pytest.raises(ValueError, match='Unrecognized language'):
+      get_iso_code('klingon')
+
+  def test_empty_raises_value_error(self):
+    with pytest.raises(ValueError, match='Unrecognized language'):
+      get_iso_code('')
+
+
+class TestGetFullLanguageName:
+  """Test full language name lookup function."""
+
+  def test_valid_codes(self):
+    assert get_full_language_name('en') == 'english'
+    assert get_full_language_name('fr') == 'french'
+    assert get_full_language_name('de') == 'german'
+    assert get_full_language_name('zh') == 'chinese'
+    assert get_full_language_name('id') == 'indonesian'
+
+  def test_invalid_code_raises_value_error(self):
+    with pytest.raises(ValueError, match='Unrecognized ISO code'):
+      get_full_language_name('xx')
+
+  def test_empty_raises_value_error(self):
+    with pytest.raises(ValueError, match='Unrecognized ISO code'):
+      get_full_language_name('')
+
+  def test_full_name_is_not_valid_code(self):
+    with pytest.raises(ValueError, match='Unrecognized ISO code'):
+      get_full_language_name('english')
+
+
+class TestDetectFileEncoding:
+  """Test file encoding detection function."""
+
+  def test_utf8_file(self, tmp_path):
+    test_file = tmp_path / 'utf8.txt'
+    test_file.write_text('Hello world', encoding='utf-8')
+    result = detect_file_encoding(str(test_file))
+    assert isinstance(result, str)
+    # Should detect as utf-8 or ascii (both valid for this content)
+    assert result in ('utf-8', 'ascii')
+
+  def test_file_not_found_fallback(self):
+    result = detect_file_encoding('/nonexistent/file.txt')
+    assert result == 'utf-8'
+
+  def test_charset_normalizer_import_error(self, tmp_path):
+    test_file = tmp_path / 'test.txt'
+    test_file.write_text('hello')
+    with patch('builtins.__import__', side_effect=ImportError):
+      result = detect_file_encoding(str(test_file))
+    assert result == 'utf-8'
+
+
+class TestReadTextFile:
+  """Test text file reading function."""
+
+  def test_basic_read(self, tmp_path):
+    test_file = tmp_path / 'test.txt'
+    test_file.write_text('Hello, World!', encoding='utf-8')
+    result = read_text_file(str(test_file))
+    assert result == 'Hello, World!'
+
+  def test_file_not_found(self):
+    with pytest.raises((FileNotFoundError, OSError)):
+      read_text_file('/nonexistent/file.txt')
+
+  def test_auto_detect_disabled(self, tmp_path):
+    test_file = tmp_path / 'test.txt'
+    test_file.write_text('content', encoding='utf-8')
+    config = {'auto_detect_encoding': False}
+    result = read_text_file(str(test_file), config=config)
+    assert result == 'content'
+
+  def test_custom_fallback_encodings(self, tmp_path):
+    test_file = tmp_path / 'test.txt'
+    test_file.write_text('content', encoding='utf-8')
+    config = {
+      'auto_detect_encoding': False,
+      'encoding_fallbacks': ['utf-8'],
+    }
+    result = read_text_file(str(test_file), config=config)
+    assert result == 'content'
+
+  def test_default_config(self, tmp_path):
+    test_file = tmp_path / 'test.txt'
+    test_file.write_text('test content', encoding='utf-8')
+    # None config should use defaults
+    result = read_text_file(str(test_file), config=None)
+    assert result == 'test content'
 
 
 class TestBM25Tokenization:

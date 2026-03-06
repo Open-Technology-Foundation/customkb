@@ -10,10 +10,12 @@ import sqlite3
 import pytest
 
 from query.search import (
+  _batch_fetch_documents,
   fetch_document_by_id,
   get_context_range,
   merge_search_results,
   merge_search_results_rrf,
+  merge_search_results_weighted,
 )
 from utils.exceptions import DatabaseError
 
@@ -550,6 +552,110 @@ class TestMergeSearchResultsFusionMethod:
     result = merge_search_results(vector_results, bm25_results, fusion_method='rrf', rrf_k=30)
 
     assert len(result) == 3
+
+
+class TestBatchFetchDocuments:
+  """Test _batch_fetch_documents helper function."""
+
+  def test_empty_ids(self, mock_kb):
+    result = _batch_fetch_documents(mock_kb, [], 'docs')
+    assert result == {}
+    mock_kb.sql_cursor.execute.assert_not_called()
+
+  def test_single_id(self, mock_kb):
+    mock_kb.sql_cursor.fetchall.return_value = [(42, 1, 'doc.txt')]
+    result = _batch_fetch_documents(mock_kb, [42], 'docs')
+    assert 42 in result
+    assert result[42] == (42, 1, 'doc.txt')
+
+  def test_multiple_ids(self, mock_kb):
+    mock_kb.sql_cursor.fetchall.return_value = [
+      (1, 0, 'a.txt'),
+      (2, 1, 'b.txt'),
+      (3, 2, 'c.txt'),
+    ]
+    result = _batch_fetch_documents(mock_kb, [1, 2, 3], 'docs')
+    assert len(result) == 3
+    assert result[1] == (1, 0, 'a.txt')
+    assert result[3] == (3, 2, 'c.txt')
+
+  def test_missing_doc_absent(self, mock_kb):
+    """IDs not in DB should not appear in result."""
+    mock_kb.sql_cursor.fetchall.return_value = [(1, 0, 'a.txt')]
+    result = _batch_fetch_documents(mock_kb, [1, 99], 'docs')
+    assert 1 in result
+    assert 99 not in result
+
+  def test_int_casting(self, mock_kb):
+    """Doc IDs should be cast to int in the query params."""
+    mock_kb.sql_cursor.fetchall.return_value = []
+    _batch_fetch_documents(mock_kb, [1.0, 2.0], 'docs')
+    call_args = mock_kb.sql_cursor.execute.call_args[0]
+    assert call_args[1] == (1, 2)
+
+  def test_correct_placeholder_count(self, mock_kb):
+    """Number of ? placeholders should match number of IDs."""
+    mock_kb.sql_cursor.fetchall.return_value = []
+    _batch_fetch_documents(mock_kb, [10, 20, 30, 40], 'docs')
+    call_args = mock_kb.sql_cursor.execute.call_args[0]
+    assert '?,?,?,?' in call_args[0]
+
+
+class TestMergeSearchResultsWeighted:
+  """Test weighted merge function directly."""
+
+  def test_basic_merge(self):
+    vector = [(1, 0.9), (2, 0.5)]
+    bm25 = [(1, 10.0), (3, 8.0)]
+    result = merge_search_results_weighted(vector, bm25)
+    assert len(result) == 3
+    doc_ids = {r[0] for r in result}
+    assert doc_ids == {1, 2, 3}
+
+  def test_weight_normalization(self):
+    """Weights should be normalized so they sum to 1."""
+    vector = [(1, 1.0)]
+    bm25 = [(1, 1.0)]
+    result = merge_search_results_weighted(vector, bm25, vector_weight=2.0, bm25_weight=3.0)
+    assert len(result) == 1
+    # With normalized weights: 2/5 * 1.0 + 3/5 * 1.0 = 1.0
+    assert abs(result[0][1] - 1.0) < 0.01
+
+  def test_score_normalization(self):
+    """Scores should be normalized to [0,1] range."""
+    vector = [(1, 100.0), (2, 50.0)]
+    bm25 = [(1, 200.0), (3, 100.0)]
+    result = merge_search_results_weighted(vector, bm25)
+    for _, score in result:
+      assert 0.0 <= score <= 1.0
+
+  def test_empty_inputs(self):
+    result = merge_search_results_weighted([], [])
+    assert result == []
+
+  def test_empty_vector(self):
+    result = merge_search_results_weighted([], [(1, 5.0)])
+    assert len(result) == 1
+
+  def test_empty_bm25(self):
+    result = merge_search_results_weighted([(1, 0.9)], [])
+    assert len(result) == 1
+
+  def test_overlapping_docs_combined(self):
+    """Doc appearing in both gets weighted combination."""
+    vector = [(1, 1.0)]
+    bm25 = [(1, 1.0)]
+    result = merge_search_results_weighted(vector, bm25, vector_weight=0.7, bm25_weight=0.3)
+    assert len(result) == 1
+    # Both normalized to 1.0, so combined = 0.7*1.0 + 0.3*1.0 = 1.0
+    assert abs(result[0][1] - 1.0) < 0.01
+
+  def test_sorted_descending(self):
+    vector = [(1, 0.3), (2, 0.9)]
+    bm25 = [(3, 10.0), (4, 1.0)]
+    result = merge_search_results_weighted(vector, bm25)
+    for i in range(len(result) - 1):
+      assert result[i][1] >= result[i + 1][1]
 
 
 if __name__ == '__main__':

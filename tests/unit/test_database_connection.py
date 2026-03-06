@@ -23,8 +23,7 @@ from database.connection import (
   get_connection_info,
   sqlite_connection,
 )
-from utils.exceptions import ConnectionError as CustomConnectionError
-from utils.exceptions import DatabaseError
+from utils.exceptions import DatabaseConnectionError, DatabaseError
 
 
 class TestDatabaseConnection(unittest.TestCase):
@@ -67,7 +66,7 @@ class TestDatabaseConnection(unittest.TestCase):
     """Test database connection error handling."""
     self.kb.knowledge_base_db = '/invalid/path/database.db'
 
-    with self.assertRaises(CustomConnectionError) as cm:
+    with self.assertRaises(DatabaseConnectionError) as cm:
       connect_to_database(self.kb)
 
     self.assertIn('Failed to connect to database', str(cm.exception))
@@ -237,7 +236,7 @@ class TestDatabaseConnection(unittest.TestCase):
 
   def test_sqlite_connection_invalid_path(self):
     """Test sqlite_connection with invalid path."""
-    with self.assertRaises(CustomConnectionError) as cm, sqlite_connection('/nonexistent/database.db') as (conn, cursor):
+    with self.assertRaises(DatabaseConnectionError) as cm, sqlite_connection('/nonexistent/database.db') as (conn, cursor):
       pass
 
     self.assertIn('Database not found', str(cm.exception))

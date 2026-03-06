@@ -68,6 +68,18 @@ class CacheThreadManager:
       'memory_usage_mb': 0.0,
     }
 
+  def __repr__(self) -> str:
+    hits = self._metrics['cache_hits']
+    misses = self._metrics['cache_misses']
+    total = hits + misses
+    ratio = f'{hits / total:.1%}' if total > 0 else 'n/a'
+    return (
+      f'CacheThreadManager('
+      f'entries={len(self._memory_cache)}/{self._memory_cache_size}, '
+      f'memory={self._metrics["memory_usage_mb"]:.1f}/{self._max_memory_mb}MB, '
+      f'hit_ratio={ratio})'
+    )
+
   def _ensure_executor(self):
     """Ensure thread pool executor is initialized."""
     if self._executor is None:

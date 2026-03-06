@@ -16,16 +16,12 @@ from pathlib import Path
 from typing import Any
 
 from utils.exceptions import (
-  ConnectionError as CustomConnectionError,
-)
-from utils.exceptions import (
+  DatabaseConnectionError,
   DatabaseError,
   FileSystemError,
+  KBPermissionError,
   ResourceError,
   TemporaryError,
-)
-from utils.exceptions import (
-  PermissionError as CustomPermissionError,
 )
 from utils.logging_config import get_logger
 
@@ -61,7 +57,7 @@ def database_connection(
     # Validate database path
     db_file = Path(db_path)
     if not db_file.exists():
-      raise CustomConnectionError(f'Database not found: {db_path}')
+      raise DatabaseConnectionError(f'Database not found: {db_path}')
 
     # Open connection with appropriate mode
     if read_only:
@@ -93,7 +89,7 @@ def database_connection(
 
   except (FileNotFoundError, PermissionError, OSError, AttributeError) as e:
     logger.error(f'Unexpected error in database connection: {e}')
-    raise CustomConnectionError(f'Failed to connect to database: {e}') from e
+    raise DatabaseConnectionError(f'Failed to connect to database: {e}') from e
 
   finally:
     # Clean up resources
@@ -155,7 +151,7 @@ def atomic_write(
 
   except PermissionError as e:
     logger.error(f'Permission denied writing to {filepath}: {e}')
-    raise CustomPermissionError(str(filepath), 'write') from e
+    raise KBPermissionError(str(filepath), 'write') from e
 
   except OSError as e:
     logger.error(f'Failed to write file {filepath}: {e}')

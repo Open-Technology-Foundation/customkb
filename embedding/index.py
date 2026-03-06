@@ -26,7 +26,7 @@ def _get_faiss():
   return _faiss, _FAISS_GPU_AVAILABLE
 
 
-from utils.exceptions import IndexError as CustomIndexError
+from utils.exceptions import DatabaseIndexError
 from utils.logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -230,7 +230,7 @@ def save_index(index: Any, index_path: str, metadata: dict[str, Any] = None) -> 
 
   except (OSError, PermissionError, RuntimeError) as e:
     logger.error(f'Failed to save index: {e}')
-    raise CustomIndexError(f'Index save failed: {e}') from e
+    raise DatabaseIndexError(f'Index save failed: {e}') from e
 
 
 def load_index(index_path: str) -> tuple[Any, dict[str, Any] | None]:
@@ -265,7 +265,7 @@ def load_index(index_path: str) -> tuple[Any, dict[str, Any] | None]:
 
   except (FileNotFoundError, OSError, RuntimeError, json.JSONDecodeError) as e:
     logger.error(f'Failed to load index: {e}')
-    raise CustomIndexError(f'Index load failed: {e}') from e
+    raise DatabaseIndexError(f'Index load failed: {e}') from e
 
 
 def merge_indexes(indexes: list[Any]) -> Any:

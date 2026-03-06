@@ -6,6 +6,7 @@ This module defines specific exception types for different error scenarios,
 improving error handling and debugging across the application.
 """
 
+import builtins as _builtins
 from typing import Any
 
 
@@ -67,7 +68,7 @@ class DatabaseError(CustomKBError):
   pass
 
 
-class ConnectionError(DatabaseError):
+class DatabaseConnectionError(DatabaseError):
   """Raised when database connection fails."""
 
   pass
@@ -86,7 +87,7 @@ class QueryError(DatabaseError):
     super().__init__(message, details)
 
 
-class IndexError(DatabaseError):
+class DatabaseIndexError(DatabaseError):
   """Raised when there's an issue with database indexes."""
 
   pass
@@ -259,7 +260,7 @@ class FileSystemError(CustomKBError):
   pass
 
 
-class FileNotFoundError(FileSystemError):
+class KBFileNotFoundError(FileSystemError):
   """Raised when a required file is not found."""
 
   def __init__(self, filepath: str):
@@ -267,7 +268,7 @@ class FileNotFoundError(FileSystemError):
     super().__init__(f'File not found: {filepath}', {'filepath': filepath})
 
 
-class PermissionError(FileSystemError):
+class KBPermissionError(FileSystemError):
   """Raised when there's a permission issue."""
 
   def __init__(self, filepath: str, operation: str):
@@ -305,7 +306,7 @@ class ResourceError(CustomKBError):
   pass
 
 
-class MemoryError(ResourceError):
+class KBMemoryError(ResourceError):
   """Raised when memory limits are exceeded."""
 
   def __init__(self, required: int, available: int):
@@ -374,22 +375,24 @@ def handle_exception(e: Exception, logger=None, raise_custom: bool = True) -> Cu
   custom_error = None
 
   # Map standard exceptions to custom ones
-  if isinstance(e, sqlite3.DatabaseError):
-    custom_error = DatabaseError(f'Database error: {e}')
-  elif isinstance(e, sqlite3.IntegrityError):
+  # IntegrityError before DatabaseError (IntegrityError is a DatabaseError subclass)
+  if isinstance(e, sqlite3.IntegrityError):
     custom_error = DatabaseError(f'Database integrity error: {e}')
-  elif isinstance(e, FileNotFoundError):
-    custom_error = FileNotFoundError(str(e))
-  elif isinstance(e, PermissionError):
-    custom_error = PermissionError(str(e), 'access')
-  elif isinstance(e, MemoryError):
-    custom_error = MemoryError(0, 0)  # Would need actual values
+  elif isinstance(e, sqlite3.DatabaseError):
+    custom_error = DatabaseError(f'Database error: {e}')
+  # Use _builtins to avoid matching our custom classes that shadow builtin names
+  elif isinstance(e, _builtins.FileNotFoundError):
+    custom_error = KBFileNotFoundError(str(e))
+  elif isinstance(e, _builtins.PermissionError):
+    custom_error = KBPermissionError(str(e), 'access')
+  elif isinstance(e, _builtins.MemoryError):
+    custom_error = KBMemoryError(0, 0)
   elif isinstance(e, ValueError):
     custom_error = ValidationError(f'Validation error: {e}')
   elif isinstance(e, KeyError):
     custom_error = ConfigurationError(f'Missing configuration: {e}')
-  elif isinstance(e, ConnectionError):
-    custom_error = ConnectionError(f'Connection failed: {e}')
+  elif isinstance(e, _builtins.ConnectionError):
+    custom_error = DatabaseConnectionError(f'Connection failed: {e}')
   elif isinstance(e, TimeoutError):
     custom_error = TemporaryError(f'Operation timed out: {e}')
   else:
@@ -404,6 +407,15 @@ def handle_exception(e: Exception, logger=None, raise_custom: bool = True) -> Cu
     raise custom_error from e
 
   return custom_error
+
+
+# Backward-compatible aliases for renamed exceptions that previously
+# shadowed Python builtins. Prefer the new names in new code.
+ConnectionError = DatabaseConnectionError
+IndexError = DatabaseIndexError
+FileNotFoundError = KBFileNotFoundError
+PermissionError = KBPermissionError
+MemoryError = KBMemoryError
 
 
 # fin

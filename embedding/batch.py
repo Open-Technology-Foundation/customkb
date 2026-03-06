@@ -305,6 +305,9 @@ class BatchProcessor:
     self.start_time = None
     self.batch_times = []
 
+  def __repr__(self) -> str:
+    return f'BatchProcessor(progress={self.processed_items}/{self.total_items}, failed={self.failed_items})'
+
   def start(self):
     """Record the start timestamp for elapsed-time and ETA calculations."""
     import time

@@ -91,6 +91,16 @@ def fetch_document_by_id(kb: Any, doc_id: int) -> tuple[int, int, str] | None:
     raise DatabaseError(f'Failed to fetch document: {e}') from e
 
 
+def _batch_fetch_documents(kb: Any, doc_ids: list[int], table_name: str) -> dict[int, tuple[int, int, str]]:
+  """Batch-fetch document location info for multiple IDs."""
+  if not doc_ids:
+    return {}
+  placeholders = ','.join('?' * len(doc_ids))
+  query = f'SELECT id, sid, sourcedoc FROM {table_name} WHERE id IN ({placeholders})'
+  kb.sql_cursor.execute(query, tuple(int(d) for d in doc_ids))
+  return {row[0]: row for row in kb.sql_cursor.fetchall()}
+
+
 async def filter_results_by_category(
   kb: Any, results: list[tuple[int, float]], categories: list[str]
 ) -> list[tuple[int, float]]:
@@ -247,7 +257,7 @@ async def perform_vector_search(kb: Any, query_embedding: np.ndarray, top_k: int
       if idx != -1:  # FAISS returns -1 for empty slots
         results.append((int(idx), float(similarity)))
 
-    logger.debug(f'Vector search found {len(results)} results')
+    logger.info(f'Vector search: {len(results)} results')
     return results
 
   except (FileNotFoundError, OSError, RuntimeError, ValueError) as e:
@@ -281,7 +291,7 @@ async def perform_bm25_search(kb: Any, query_text: str, top_k: int = 10) -> list
       logger.debug('No BM25 results found')
       return []
 
-    logger.debug(f'BM25 search found {len(bm25_results)} results')
+    logger.info(f'BM25 search: {len(bm25_results)} results')
     return bm25_results
 
   except ImportError:
@@ -326,7 +336,7 @@ def merge_search_results_rrf(
   # Sort by RRF score descending
   merged_results = sorted(rrf_scores.items(), key=lambda x: x[1], reverse=True)
 
-  logger.debug(f'RRF merged {len(vector_results)} vector + {len(bm25_results)} BM25 = {len(merged_results)} total results')
+  logger.info(f'RRF fusion: {len(vector_results)} vector + {len(bm25_results)} BM25 = {len(merged_results)} merged')
 
   return merged_results
 
@@ -480,15 +490,21 @@ async def perform_hybrid_search(
       try:
         from embedding.rerank_manager import rerank_search_results
 
+        pre_rerank_top = results[0][0] if results else None
         results = await rerank_search_results(kb, query_text, results)
-        logger.debug('Applied reranking to search results')
+        if results:
+          new_top = results[0][0]
+          reorder = f' (top changed: id {pre_rerank_top} -> {new_top})' if new_top != pre_rerank_top else ''
+          logger.info(f'Reranking applied: {len(results)} results{reorder}')
+        else:
+          logger.info('Reranking: no results')
       except (ImportError, RuntimeError, ValueError) as e:
         logger.warning(f'Reranking failed: {e}')
 
     # Limit to top_k results
     results = results[:top_k]
 
-    logger.info(f'Hybrid search completed: {len(results)} results')
+    logger.info(f'Search completed: {len(results)} final results')
     return results
 
   except (ValueError, RuntimeError, OSError, sqlite3.Error) as e:
@@ -532,14 +548,17 @@ async def process_reference_batch(kb: Any, batch: list[tuple[int, float]]) -> li
     if has_categories:
       select_fields.append('categories')
 
+    # Batch-fetch all document locations in a single query
+    all_doc_ids = [doc_id for doc_id, _ in batch]
+    doc_lookup = _batch_fetch_documents(kb, all_doc_ids, table_name)
+
     for doc_id, distance in batch:
       # Adjust context scope based on similarity (configurable thresholds)
       similarity_threshold = getattr(kb, 'similarity_threshold', 0.6)
       scope_factor = getattr(kb, 'low_similarity_scope_factor', 0.5)
       local_context_scope = max(int(context_scope * scope_factor), 1) if distance < similarity_threshold else context_scope
 
-      # Get document location info
-      doc_info = fetch_document_by_id(kb, doc_id)
+      doc_info = doc_lookup.get(doc_id)
       if not doc_info:
         continue
 

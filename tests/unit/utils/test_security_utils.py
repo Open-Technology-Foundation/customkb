@@ -3,17 +3,25 @@
 Test security utilities - fixed to match current API.
 """
 
+import json
 import os
 import tempfile
+from unittest.mock import Mock, patch
 
 import pytest
 
 from utils.security_utils import (
   mask_sensitive_data,
+  safe_json_loads,
+  safe_log_error,
+  safe_sql_in_query,
+  sanitize_config_value,
   sanitize_query_text,
   validate_api_key,
+  validate_database_name,
   validate_file_path,
   validate_safe_path,
+  validate_table_name,
 )
 
 
@@ -217,6 +225,233 @@ class TestMaskSensitiveData:
     """Test strings that don't need masking."""
     assert mask_sensitive_data('Regular log message') == 'Regular log message'
     assert mask_sensitive_data('Error code: 404') == 'Error code: 404'
+
+
+class TestValidateTableName:
+  """Test cases for validate_table_name function."""
+
+  def test_valid_table_names(self):
+    assert validate_table_name('docs') is True
+    assert validate_table_name('my_table') is True
+    assert validate_table_name('Table1') is True
+    assert validate_table_name('_private') is True
+
+  def test_empty_name(self):
+    assert validate_table_name('') is False
+    assert validate_table_name(None) is False
+
+  def test_sql_injection_attempts(self):
+    assert validate_table_name('docs; DROP TABLE users--') is False
+    assert validate_table_name("docs' OR '1'='1") is False
+    assert validate_table_name('docs UNION SELECT *') is False
+
+  def test_special_characters_rejected(self):
+    assert validate_table_name('my-table') is False
+    assert validate_table_name('my.table') is False
+    assert validate_table_name('my table') is False
+    assert validate_table_name('table!') is False
+
+  def test_starts_with_number_rejected(self):
+    assert validate_table_name('1table') is False
+
+  def test_dangerous_names(self):
+    assert validate_table_name('sqlite_master') is False
+    assert validate_table_name('sqlite_temp_master') is False
+    assert validate_table_name('sqlite_sequence') is False
+    assert validate_table_name('information_schema') is False
+    assert validate_table_name('pg_tables') is False
+    assert validate_table_name('sys') is False
+    assert validate_table_name('master') is False
+    assert validate_table_name('msdb') is False
+    assert validate_table_name('tempdb') is False
+
+  def test_length_limit(self):
+    assert validate_table_name('a' * 64) is True
+    assert validate_table_name('a' * 65) is False
+
+  def test_case_insensitive_dangerous(self):
+    assert validate_table_name('SQLITE_MASTER') is False
+    assert validate_table_name('Sqlite_Master') is False
+
+
+class TestSanitizeConfigValue:
+  """Test cases for sanitize_config_value function."""
+
+  def test_basic_value(self):
+    assert sanitize_config_value('hello') == 'hello'
+
+  def test_length_limit(self):
+    with pytest.raises(ValueError, match='too long'):
+      sanitize_config_value('x' * 1001)
+
+  def test_custom_length_limit(self):
+    with pytest.raises(ValueError, match='too long'):
+      sanitize_config_value('x' * 51, max_length=50)
+
+  def test_control_characters_removed(self):
+    result = sanitize_config_value('hello\x00world\x07test')
+    assert '\x00' not in result
+    assert '\x07' not in result
+    assert 'helloworld' in result
+
+  def test_whitespace_stripped(self):
+    assert sanitize_config_value('  hello  ') == 'hello'
+
+  def test_newlines_and_tabs_preserved(self):
+    # \n (\x0a) and \t (\x09) are NOT in the removed range
+    result = sanitize_config_value('hello\nworld\ttab')
+    assert '\n' in result
+    assert '\t' in result
+
+  def test_empty_string(self):
+    assert sanitize_config_value('') == ''
+
+
+class TestSafeSqlInQuery:
+  """Test cases for safe_sql_in_query function."""
+
+  def test_empty_list(self):
+    cursor = Mock()
+    safe_sql_in_query(cursor, 'SELECT * FROM docs WHERE id IN ({placeholders})', [])
+    cursor.execute.assert_not_called()
+
+  def test_placeholder_count(self):
+    cursor = Mock()
+    safe_sql_in_query(cursor, 'SELECT * FROM docs WHERE id IN ({placeholders})', [1, 2, 3])
+    call_args = cursor.execute.call_args
+    assert '?,?,?' in call_args[0][0]
+
+  def test_single_id(self):
+    cursor = Mock()
+    safe_sql_in_query(cursor, 'SELECT * FROM docs WHERE id IN ({placeholders})', [42])
+    call_args = cursor.execute.call_args
+    assert '?' in call_args[0][0]
+    assert call_args[0][1] == [42]
+
+  def test_non_integer_rejection(self):
+    cursor = Mock()
+    with pytest.raises(ValueError, match='integers'):
+      safe_sql_in_query(cursor, 'SELECT * FROM docs WHERE id IN ({placeholders})', [1, 'two', 3])
+
+  def test_additional_params(self):
+    cursor = Mock()
+    safe_sql_in_query(
+      cursor,
+      'SELECT * FROM docs WHERE id IN ({placeholders}) AND status = ?',
+      [1, 2],
+      additional_params=('active',),
+    )
+    call_args = cursor.execute.call_args
+    assert call_args[0][1] == [1, 2, 'active']
+
+  def test_cursor_execute_called(self):
+    cursor = Mock()
+    safe_sql_in_query(cursor, 'DELETE FROM docs WHERE id IN ({placeholders})', [10, 20])
+    cursor.execute.assert_called_once()
+
+
+class TestSafeLogError:
+  """Test cases for safe_log_error function."""
+
+  @patch('utils.security_utils.logger')
+  def test_basic_logging(self, mock_logger):
+    safe_log_error('Something failed')
+    mock_logger.error.assert_called_once_with('Something failed')
+
+  @patch('utils.security_utils.logger')
+  def test_sensitive_data_masked_in_message(self, mock_logger):
+    api_key = 'sk-' + 'a' * 40
+    safe_log_error(f'API error with key {api_key}')
+    call_args = mock_logger.error.call_args[0][0]
+    assert api_key not in call_args
+    assert 'MASKED' in call_args
+
+  @patch('utils.security_utils.logger')
+  def test_sensitive_data_masked_in_kwargs(self, mock_logger):
+    api_key = 'sk-' + 'a' * 40
+    safe_log_error('Error occurred', api_key=api_key)
+    call_args = mock_logger.error.call_args[0][0]
+    assert api_key not in call_args
+    assert 'Context' in call_args
+
+  @patch('utils.security_utils.logger')
+  def test_no_context_without_kwargs(self, mock_logger):
+    safe_log_error('Simple error')
+    call_args = mock_logger.error.call_args[0][0]
+    assert 'Context' not in call_args
+
+
+class TestSafeJsonLoads:
+  """Test cases for safe_json_loads function."""
+
+  def test_valid_json(self):
+    result = safe_json_loads('{"key": "value"}')
+    assert result == {'key': 'value'}
+
+  def test_invalid_json(self):
+    with pytest.raises(ValueError, match='Invalid JSON'):
+      safe_json_loads('{invalid}')
+
+  def test_size_limit(self):
+    large_json = json.dumps({'data': 'x' * 20000})
+    with pytest.raises(ValueError, match='too large'):
+      safe_json_loads(large_json, max_size=100)
+
+  def test_custom_size_limit(self):
+    small_json = '{"a": 1}'
+    result = safe_json_loads(small_json, max_size=50)
+    assert result == {'a': 1}
+
+  def test_nested_structures(self):
+    nested = json.dumps({'a': {'b': {'c': [1, 2, 3]}}})
+    result = safe_json_loads(nested)
+    assert result['a']['b']['c'] == [1, 2, 3]
+
+  def test_returns_dict(self):
+    result = safe_json_loads('{"x": 1}')
+    assert isinstance(result, dict)
+
+  def test_array_json(self):
+    # json.loads can parse arrays too, function returns Any but typed as dict
+    result = safe_json_loads('[1, 2, 3]')
+    assert result == [1, 2, 3]
+
+
+class TestValidateDatabaseName:
+  """Test cases for validate_database_name function."""
+
+  def test_valid_names(self):
+    assert validate_database_name('mydb') == 'mydb'
+    assert validate_database_name('my_db') == 'my_db'
+    assert validate_database_name('my-db') == 'my-db'
+    assert validate_database_name('db.sqlite') == 'db.sqlite'
+    assert validate_database_name('DB123') == 'DB123'
+
+  def test_empty_name(self):
+    with pytest.raises(ValueError, match='empty'):
+      validate_database_name('')
+
+  def test_invalid_characters(self):
+    with pytest.raises(ValueError, match='invalid characters'):
+      validate_database_name('my db')
+    with pytest.raises(ValueError, match='invalid characters'):
+      validate_database_name('db;drop')
+    with pytest.raises(ValueError, match='invalid characters'):
+      validate_database_name('db<script>')
+
+  def test_path_traversal_with_slash(self):
+    """Paths with / are caught by invalid characters check first."""
+    with pytest.raises(ValueError, match='invalid characters'):
+      validate_database_name('../etc/passwd')
+
+  def test_path_traversal_no_slash(self):
+    """Double dots without / are caught by path traversal check."""
+    with pytest.raises(ValueError, match='path traversal'):
+      validate_database_name('some..db')
+
+  def test_absolute_path(self):
+    with pytest.raises(ValueError, match='invalid characters'):
+      validate_database_name('/etc/passwd')
 
 
 if __name__ == '__main__':

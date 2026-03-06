@@ -297,10 +297,11 @@ class KnowledgeBase:
 
   def save_config(self, output_to: str | None = None) -> None:
     """
-    Save current configuration to a file or print to stderr.
+    Save current configuration to a file or log via logger.
 
     Args:
-        output_to: Path to save config to. If None, prints to stderr.
+        output_to: Path to save config to. If None, logs config
+                   (summary at INFO, full dump at DEBUG).
     """
     if output_to:
       with open(output_to, 'w') as filehandle:
@@ -310,12 +311,28 @@ class KnowledgeBase:
         for key, value in attrs.items():
           print(f'{key} = {value}', file=filehandle)
     else:
-      import sys
-
-      print(f'# {self.knowledge_base_name}', file=sys.stderr)
+      _logger = get_logger(__name__)
+      # INFO: concise summary of key settings
+      hybrid = getattr(self, 'enable_hybrid_search', False)
+      rerank = getattr(self, 'enable_reranking', False)
+      flags = []
+      if hybrid:
+        flags.append('hybrid')
+      if rerank:
+        flags.append('reranking')
+      flag_str = f' [{", ".join(flags)}]' if flags else ''
+      _logger.info(
+        f'KB "{self.knowledge_base_name}": '
+        f'vector_model={getattr(self, "vector_model", "?")} '
+        f'dims={getattr(self, "vector_dimensions", "?")} '
+        f'query_model={getattr(self, "query_model", "?")}'
+        f'{flag_str}'
+      )
+      # DEBUG: full config dump (skip internal/runtime/default attrs)
       attrs = vars(self)
       for key, value in attrs.items():
-        print(f'{key} = {value}', file=sys.stderr)
+        if not (key.startswith(('_', 'DEF_')) or key in ('sql_connection', 'sql_cursor', 'start_time')):
+          _logger.debug(f'  {key} = {value}')
 
 
 # fin

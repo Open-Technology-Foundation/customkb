@@ -125,7 +125,18 @@ async def get_response(
     content = response.choices[0].message.content
     if not content:
       raise APIError(f'Empty response from model {litellm_model}')
-    logger.info(f'LiteLLM response: {len(content)} characters')
+    # Log response with usage stats if available
+    usage = getattr(response, 'usage', None)
+    usage_str = ''
+    if usage:
+      parts = []
+      if hasattr(usage, 'prompt_tokens') and usage.prompt_tokens:
+        parts.append(f'in={usage.prompt_tokens}')
+      if hasattr(usage, 'completion_tokens') and usage.completion_tokens:
+        parts.append(f'out={usage.completion_tokens}')
+      if parts:
+        usage_str = f' ({", ".join(parts)} tokens)'
+    logger.info(f'LiteLLM response: {len(content)} chars{usage_str}')
     return content
 
   except litellm.AuthenticationError as e:

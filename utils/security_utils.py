@@ -349,7 +349,8 @@ def validate_database_name(db_name: str) -> str:
   if not re.match(r'^[a-zA-Z0-9_.-]+$', db_name):
     raise ValueError('Database name contains invalid characters')
 
-  # Prevent path traversal
+  # Prevent path traversal (defense-in-depth; regex above rejects '/' but
+  # the '..' check is reachable via names like 'some..db')
   if '..' in db_name or db_name.startswith('/'):
     raise ValueError('Invalid database name: path traversal detected')
 

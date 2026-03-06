@@ -10,6 +10,7 @@ import argparse
 import asyncio
 import os
 import sqlite3
+import time
 from typing import Any
 
 from config.config_manager import KnowledgeBase, get_fq_cfg_filename
@@ -179,11 +180,12 @@ async def process_query_async(args: argparse.Namespace, logger) -> str:
 
     try:
       # Generate query embedding
-      logger.debug('Generating query embedding...')
+      t0 = time.perf_counter()
       query_embedding = await get_query_embedding(query_text, kb.vector_model, kb)
+      t_embed = time.perf_counter()
+      logger.info(f'Embedding: {(t_embed - t0) * 1000:.0f}ms')
 
       # Perform hybrid search
-      logger.debug('Performing hybrid search...')
       search_results = await perform_hybrid_search(
         kb=kb,
         query_text=query_text,
@@ -192,6 +194,8 @@ async def process_query_async(args: argparse.Namespace, logger) -> str:
         categories=categories,
         rerank=getattr(kb, 'enable_reranking', False),
       )
+      t_search = time.perf_counter()
+      logger.info(f'Search: {(t_search - t_embed) * 1000:.0f}ms')
 
       if not search_results:
         return 'No relevant results found for your query.'
@@ -199,7 +203,6 @@ async def process_query_async(args: argparse.Namespace, logger) -> str:
       logger.info(f'Found {len(search_results)} relevant results')
 
       # Process search results to get document content
-      logger.debug('Processing reference batch...')
       reference_data = await process_reference_batch(kb, search_results)
 
       if not reference_data:
@@ -245,16 +248,19 @@ async def process_query_async(args: argparse.Namespace, logger) -> str:
         return reference_string
 
       # Generate AI response
-      logger.debug('Generating AI response...')
+      t_llm_start = time.perf_counter()
       prompt_template = getattr(args, 'prompt_template', None)
       response = await generate_ai_response(
         kb=kb, reference_string=reference_string, query_text=query_text, prompt_template=prompt_template
       )
+      t_llm_end = time.perf_counter()
+      logger.info(f'LLM response: {(t_llm_end - t_llm_start) * 1000:.0f}ms, {len(response)} chars')
 
       if not response:
         return 'Failed to generate a response. Please try again.'
 
-      logger.info(f'Generated response: {len(response)} characters')
+      # Total pipeline time
+      logger.info(f'Total query pipeline: {(t_llm_end - t0) * 1000:.0f}ms')
       return response
 
     finally:

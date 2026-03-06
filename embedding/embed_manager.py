@@ -311,15 +311,10 @@ async def process_embedding_batch_async(kb: KnowledgeBase, chunks: list[str]) ->
         all_indices.extend(sub_idx)
         break
       except (ConnectionError, TimeoutError, OSError, ValueError) as e:
-        from utils.security_utils import safe_log_error
-
-        safe_log_error(f'Embedding API error: {e}')
-        safe_log_error(f'Retry attempt {tries} for model {kb.vector_model}')
         tries += 1
+        logger.error(f'Embedding API error (attempt {tries}/{max_tries}): {e}')
         if tries > max_tries:
-          safe_log_error('Max retries reached for sub-batch. Skipping batch.')
-          safe_log_error(f'Failed after {tries} attempts with model {kb.vector_model}')
-          # Skip this batch instead of exiting the program
+          logger.error(f'Max retries reached for sub-batch ({kb.vector_model}). Skipping.')
           break
         # Exponential backoff with jitter
         backoff_exponent = getattr(kb, 'backoff_exponent', 2)
@@ -377,8 +372,8 @@ async def get_embeddings_for_batch(kb: KnowledgeBase, chunks: list[str]) -> list
         # Cache the embedding
         save_embedding_to_cache(uncached_texts[idx], kb.vector_model, embedding, kb)
 
-    if cache_hits > 0:
-      logger.debug(f'Cache hits: {cache_hits}/{len(chunks)}')
+    # Per-batch cache hits logged only at TRACE-equivalent level
+    # Aggregate cache stats are logged by callers instead
 
     # Filter out any None values (shouldn't happen but be safe)
     return [emb for emb in embeddings_list if emb is not None]
@@ -439,22 +434,28 @@ async def process_all_batches_with_checkpoints(
   # Lazy load FAISS when needed
   faiss, _ = get_faiss_instance()
 
+  import time as _time
+
   all_processed_ids = set()
+  batch_start_time = _time.perf_counter()
+  total_batches = len(all_chunks)
+  total_chunks = sum(len(chunk_batch) for chunk_batch in all_chunks)
+  batches_completed = 0
+  last_progress_time = batch_start_time
 
   # Set concurrency limit based on dataset size
   # For larger datasets, process more batches concurrently
-  dataset_size = sum(len(chunk_batch) for chunk_batch in all_chunks)
+  dataset_size = total_chunks
   max_concurrency = getattr(kb, 'api_max_concurrency', 8)
   min_concurrency = getattr(kb, 'api_min_concurrency', 3)
   concurrency_limit = min(max_concurrency, max(min_concurrency, dataset_size // 1000))
-  logger.info(f'Using concurrency limit of {concurrency_limit} for embedding API calls')
+  logger.info(f'Embedding {total_chunks} chunks in {total_batches} batches (concurrency={concurrency_limit})')
 
   # Process batches in parallel with a semaphore to limit concurrent API calls
   semaphore = asyncio.Semaphore(concurrency_limit)
 
   async def process_batch_with_semaphore(i, chunks, ids):
     async with semaphore:
-      logger.info(f'Processing batch {i + 1}/{len(all_chunks)}')
       return await process_batch_and_update(kb, index, chunks, ids)
 
   # Create tasks for batch processing with the semaphore for concurrent processing
@@ -477,8 +478,22 @@ async def process_all_batches_with_checkpoints(
     for successful_ids in batch_results:
       all_processed_ids.update(successful_ids)
 
-    # Checkpoint after each group
-    logger.info(f'Checkpoint: saving progress after {len(batch_group)} batches')
+    # Update progress and log periodically
+    batches_completed += len(batch_group)
+    now = _time.perf_counter()
+    elapsed = now - batch_start_time
+    if elapsed > 0:
+      rate = batches_completed / elapsed
+      chunks_done = sum(len(b) for b in all_chunks[:batches_completed])
+      pct = (batches_completed / total_batches) * 100
+      remaining = (total_batches - batches_completed) / rate if rate > 0 else 0
+      eta = f'{remaining:.0f}s' if remaining > 0 else '--:--'
+      # Log progress every group (checkpoint interval)
+      logger.info(
+        f'Progress: {batches_completed}/{total_batches} batches ({pct:.0f}%) '
+        f'| {chunks_done}/{total_chunks} chunks '
+        f'| {rate:.1f} batches/s | ETA {eta}'
+      )
 
     # Save FAISS index
     faiss.write_index(index, kb.knowledge_base_vector)
@@ -658,11 +673,6 @@ def process_embeddings(args: argparse.Namespace, logger) -> str:
   logger.info(f'Reduced to {len(unique_rows)} unique texts (from {len(rows)} total)')
 
   for progress_counter, (row_id, text) in enumerate(unique_rows, 1):
-    if (progress_counter % optimal_batch_size) == 0:
-      logger.info(
-        f'{progress_counter}/{len(unique_rows)} ~{time_to_finish(kb.start_time, progress_counter, len(unique_rows))}'
-      )
-
     current_chunks.append(text)
     current_ids.append(row_id)
 
@@ -687,13 +697,21 @@ def process_embeddings(args: argparse.Namespace, logger) -> str:
     # Get embeddings for training samples
     logger.info(f'Getting embeddings for {len(train_texts)} training samples...')
     train_embeddings = []
+    train_cache_hits = 0
 
     # Process training samples in batches
     for i in range(0, len(train_texts), optimal_batch_size):
       batch = train_texts[i : i + optimal_batch_size]
+      # Count cache hits before the batch call
+      batch_cache_count = sum(1 for t in batch if get_cached_embedding(t, kb.vector_model) is not None)
+      train_cache_hits += batch_cache_count
       batch_embeddings = asyncio.run(get_embeddings_for_batch(kb, batch))
       if batch_embeddings:
         train_embeddings.extend(batch_embeddings)
+
+    # Log training cache summary once
+    if train_cache_hits > 0:
+      logger.info(f'Training data: {train_cache_hits}/{len(train_texts)} from cache')
 
     if train_embeddings:
       # Convert to numpy array

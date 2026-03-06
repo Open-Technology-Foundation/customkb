@@ -299,8 +299,10 @@ query_context_files = file1.txt,file2.txt,file3.txt
         kb = KnowledgeBase('context_test')
         assert kb.query_context_files == ['file1.txt', 'file2.txt', 'file3.txt']
 
-  def test_save_config_to_stderr(self, capsys):
-    """Test saving configuration to stderr."""
+  def test_save_config_to_stderr(self, caplog):
+    """Test saving configuration via logger."""
+    import logging
+
     with tempfile.TemporaryDirectory() as tmpdir:
       # Create KB directory structure
       kb_dir = os.path.join(tmpdir, 'test_kb')
@@ -314,11 +316,11 @@ query_context_files = file1.txt,file2.txt,file3.txt
 
       with patch('config.config_manager.VECTORDBS', tmpdir):
         kb = KnowledgeBase('test_kb')
-        kb.save_config()
+        with caplog.at_level(logging.DEBUG):
+          kb.save_config()
 
-        captured = capsys.readouterr()
-        assert 'test_kb' in captured.err
-        assert 'vector_model' in captured.err
+        assert 'test_kb' in caplog.text
+        assert 'vector_model' in caplog.text
 
   def test_save_config_to_file(self):
     """Test saving configuration to a file."""

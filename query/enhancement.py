@@ -98,7 +98,7 @@ def get_synonyms_for_word(word: str, max_synonyms: int = 2, relevance_threshold:
       if len(synonyms) >= max_synonyms:
         break
 
-  except (ImportError, Exception) as e:
+  except (ImportError, AttributeError, LookupError, OSError) as e:
     logger.debug(f'WordNet synonym lookup failed: {e}')
 
   # Fallback: Use simple morphological variants
@@ -156,7 +156,7 @@ def correct_spelling(word: str, vocabulary: set[str] | None = None) -> str:
       logger.debug(f"Spelling correction: '{word}' -> '{corrected}'")
       return corrected
 
-  except (ImportError, Exception) as e:
+  except (ImportError, AttributeError, LookupError, OSError) as e:
     logger.debug(f'Spelling correction failed: {e}')
 
   # Fallback: Simple corrections for common typos
@@ -431,7 +431,7 @@ def enhance_query(query: str, kb: Any | None = None) -> str:
     # Cache the result if enhancement was made
     if enhanced != query:
       save_enhanced_query_to_cache(query, enhanced)
-      logger.debug(f"Query enhanced: '{query}' -> '{enhanced}'")
+      logger.info(f"Query enhanced: '{query}' -> '{enhanced}'")
 
     return enhanced
 

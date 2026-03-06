@@ -291,6 +291,9 @@ for _lib in (
   'urllib3',
   'requests',
   'httpx',
+  'httpx._client',
+  'httpcore',
+  'httpcore._trace',
   'openai',
   'anthropic',
   'faiss',
@@ -301,6 +304,14 @@ for _lib in (
   'PIL',
   'spacy',
   'nltk',
+  'asyncio',
+  'asyncio.selector_events',
+  'LiteLLM',
+  'litellm',
+  'litellm_logging',
+  'http_handler',
+  'utils',
+  'logging_worker',
 ):
   logging.getLogger(_lib).setLevel(logging.WARNING)
 

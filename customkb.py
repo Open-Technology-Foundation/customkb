@@ -49,6 +49,7 @@ if str(project_root) not in sys.path:
 
 # Import core modules only (performance optimization - other modules loaded conditionally)
 from config.config_manager import KnowledgeBase, get_fq_cfg_filename
+from utils.exceptions import CustomKBError
 from utils.logging_config import elapsed_time, setup_logging
 
 # Heavy modules (database, embedding, query) imported lazily when needed
@@ -544,20 +545,22 @@ Examples:
   # Dispatch command via structural pattern matching (Python 3.10+).
   # Each case lazily imports its module to keep CLI startup fast.
   try:
+    logger.info(f'Starting {args.command} on KB "{kb_name}"')
+
     match args.command:
       case 'database':
         from database.db_manager import process_database
 
         result = process_database(args, logger)
         print(result)  # Keep print for user output
-        logger.debug(f'Database command completed: {result}')
+        logger.info(f'Database completed: {result}')
 
       case 'embed':
         from embedding.embed_manager import process_embeddings
 
         result = process_embeddings(args, logger)
         print(result)  # Keep print for user output
-        logger.debug(f'Embed command completed: {result}')
+        logger.info(f'Embed completed: {result}')
 
       case 'query':
         from models.model_manager import get_canonical_model
@@ -592,7 +595,7 @@ Examples:
             sys.exit(1)
         result = process_query(args, logger)
         print(result)  # Keep print for user output
-        logger.debug('Query command completed')
+        logger.info('Query completed')
 
       case 'edit':
         result = edit_config(args, logger)
@@ -605,28 +608,31 @@ Examples:
       case 'bm25':
         result = rebuild_bm25_index(args, logger)
         print(result)  # Keep print for user output
-        logger.debug('BM25 command completed')
+        logger.info(f'BM25 completed: {result}')
 
       case 'verify-indexes':
         from database.index_manager import process_verify_indexes
 
         result = process_verify_indexes(args, logger)
         print(result)  # Keep print for user output
-        logger.debug('Verify-indexes command completed')
+        logger.info('Verify-indexes completed')
 
       case 'categorize':
         from categorize.categorize_manager import process_categorize
 
         result = process_categorize(args, logger)
         print(result)  # Keep print for user output
-        logger.debug('Categorize command completed')
+        logger.info(f'Categorize completed: {result}')
 
       case _:
         logger.error(f'Unknown command: {args.command}')
         sys.exit(1)
-  except Exception as e:
-    logger.error(f'Application error: {e}')
+  except CustomKBError as e:
+    logger.error(f'{e}')
     sys.exit(1)
+  except Exception as e:
+    logger.error(f'Unexpected error: {e}', exc_info=True)
+    sys.exit(2)
   finally:
     elapsed = elapsed_time(process_start_time)
     logger.info(f'Elapsed Time: {elapsed}')

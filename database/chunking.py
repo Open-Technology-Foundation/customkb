@@ -42,7 +42,7 @@ def get_token_counter(encoding_name: str = 'cl100k_base') -> Callable[[str], int
   # Return cached encoding if available
   if encoding_name in _tiktoken_encodings:
     encoding = _tiktoken_encodings[encoding_name]
-    return lambda text: len(encoding.encode(text))
+    return lambda text: len(encoding.encode(text, disallowed_special=()))
 
   try:
     import tiktoken
@@ -50,7 +50,7 @@ def get_token_counter(encoding_name: str = 'cl100k_base') -> Callable[[str], int
     encoding = tiktoken.get_encoding(encoding_name)
     _tiktoken_encodings[encoding_name] = encoding
     logger.debug(f'Initialized tiktoken encoding: {encoding_name}')
-    return lambda text: len(encoding.encode(text))
+    return lambda text: len(encoding.encode(text, disallowed_special=()))
   except ImportError:
     logger.warning('tiktoken not installed, falling back to word-based estimation')
     # Fallback: ~1.3 tokens per word is a reasonable approximation

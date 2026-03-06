@@ -11,8 +11,7 @@ from contextlib import contextmanager, suppress
 from pathlib import Path
 from typing import Any
 
-from utils.exceptions import ConnectionError as CustomConnectionError
-from utils.exceptions import DatabaseError
+from utils.exceptions import DatabaseConnectionError, DatabaseError
 from utils.logging_config import get_logger
 from utils.security_utils import validate_table_name
 
@@ -73,7 +72,7 @@ def connect_to_database(kb: Any) -> None:
 
   except sqlite3.Error as e:
     logger.error(f'Database connection failed: {e}')
-    raise CustomConnectionError(f'Failed to connect to database: {e}') from e
+    raise DatabaseConnectionError(f'Failed to connect to database: {e}') from e
   except (FileNotFoundError, PermissionError, OSError, AttributeError) as e:
     logger.error(f'Unexpected error during database connection: {e}')
     raise DatabaseError(f'Database initialization failed: {e}') from e
@@ -255,7 +254,7 @@ def sqlite_connection(db_path: str):
   try:
     # Validate path
     if not Path(db_path).exists():
-      raise CustomConnectionError(f'Database not found: {db_path}')
+      raise DatabaseConnectionError(f'Database not found: {db_path}')
 
     # Create connection
     conn = sqlite3.connect(db_path, timeout=30.0)

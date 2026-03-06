@@ -220,7 +220,7 @@ additional_stopword_languages = spanish,italian,portuguese
     cfg = KBConfig.from_cfg('okusiassociates2')
     assert cfg.default.vector_model == 'bge-m3'
     assert cfg.default.vector_dimensions == 1024
-    assert cfg.default.query_model == 'claude-sonnet-4-5'
+    assert cfg.default.query_model == 'claude-sonnet-4-6'
     assert cfg.algorithms.enable_hybrid_search is True
     assert cfg.api.api_max_retries == 20
 
