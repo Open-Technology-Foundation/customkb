@@ -57,7 +57,7 @@ _customkb_completions() {
       -m|--model|-k|--top-k|-s|--context-scope|-t|--temperature|-M|--max-tokens|\
       -f|--format|-p|--prompt-template|-R|--role|-Q|--query_file|-l|--language|\
       --memory-gb|--category|--categories|-S|--sample|--sampling|--max-concurrent|\
-      --confidence-threshold|-x|--exclude|--context-files|--dedup-threshold)
+      --confidence-threshold|--context-files|--dedup-threshold)
         continue
         ;;
     esac
@@ -68,7 +68,7 @@ _customkb_completions() {
     query)
       case "$prev" in
         -m|--model)
-          COMPREPLY=($(compgen -W "gpt-4o gpt-4.1 gpt-4.1-mini claude-sonnet-4-20250514 claude-haiku-4-5-20241022 gemini-2.5-flash" -- "$cur"))
+          COMPREPLY=($(compgen -W "claude-sonnet-4-6 claude-haiku-4-5 claude-opus-4-6 gpt-4o gpt-4o-mini gpt-4.1 gpt-4.1-mini gpt-5 gpt-5-mini gemini-2.5-pro gemini-2.5-flash grok-4 grok-4-fast o3 o4-mini" -- "$cur"))
           return
           ;;
         -f|--format)
@@ -167,7 +167,7 @@ _customkb_completions() {
     categorize)
       case "$prev" in
         -m|--model)
-          COMPREPLY=($(compgen -W "claude-haiku-4-5 gpt-4o-mini gpt-4.1-mini gemini-2.5-flash" -- "$cur"))
+          COMPREPLY=($(compgen -W "claude-haiku-4-5 gpt-4o-mini gpt-4.1-mini gpt-4.1-nano gemini-2.5-flash gemini-2.5-flash-lite" -- "$cur"))
           return
           ;;
         -S|--sample|-M|--max-concurrent|-c|--confidence-threshold|-s|--sampling|\
@@ -180,7 +180,7 @@ _customkb_completions() {
       elif [[ "$cur" == -* ]]; then
         COMPREPLY=($(compgen -W "$common_opts -S --sample -f --full --fresh --import --list \
           -m --model -s --sampling -M --max-concurrent -c --confidence-threshold \
-          -D --dedup-threshold --fixed-categories $verbose_opts" -- "$cur"))
+          -D --no-dedup --dedup-threshold --fixed-categories $verbose_opts" -- "$cur"))
       fi
       ;;
 
@@ -198,7 +198,13 @@ _customkb_completions() {
       fi
       ;;
 
-    help|version)
+    version)
+      if [[ "$cur" == -* ]]; then
+        COMPREPLY=($(compgen -W "$common_opts --build" -- "$cur"))
+      fi
+      ;;
+
+    help)
       ;;
   esac
 }

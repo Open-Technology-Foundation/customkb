@@ -237,30 +237,30 @@ CustomKB uses INI-style configuration with environment variable overrides.
 [DEFAULT]
 # Models
 vector_model = text-embedding-3-small
-query_model = gpt-4o-mini
+query_model = claude-sonnet-4-6
 
 # Text Processing
 db_min_tokens = 200          # Minimum chunk size
 db_max_tokens = 400          # Maximum chunk size
 
 # Query Settings
-query_max_tokens = 4096      # Max tokens in LLM response
-query_top_k = 30             # Chunks to retrieve
-query_temperature = 0.1      # 0=precise, 2=creative
-query_role = You are a helpful expert assistant.
+query_max_tokens = 4000      # Max tokens in LLM response
+query_top_k = 50             # Chunks to retrieve
+query_temperature = 0.0      # 0=precise, 2=creative
+query_role = You are a helpful assistant.
 
 # Output
-reference_format = json      # xml, json, markdown, plain
-query_prompt_template = technical
+reference_format = xml       # xml, json, markdown, plain
+query_prompt_template = default
 
 [ALGORITHMS]
 similarity_threshold = 0.6   # Minimum similarity (0–1)
 enable_hybrid_search = true  # Vector + keyword search
-bm25_weight = 0.5            # BM25 weight in hybrid mode
+bm25_weight = 0.3            # BM25 weight in hybrid mode
 bm25_max_results = 1000
 enable_reranking = true
 reranking_model = cross-encoder/ms-marco-MiniLM-L-6-v2
-reranking_top_k = 30
+reranking_top_k = 20
 
 [PERFORMANCE]
 embedding_batch_size = 100
@@ -279,7 +279,7 @@ api_max_retries = 20
 - **`db_min_tokens`/`db_max_tokens`**: Smaller chunks = more precise retrieval; larger = more context per result
 - **`similarity_threshold`**: Lower (0.5) for broader recall, higher (0.7) for strict relevance
 - **`enable_hybrid_search`**: Recommended for technical documentation
-- **`query_temperature`**: 0.0–0.3 for factual answers, 0.7–1.0 for creative responses
+- **`query_temperature`**: 0.0 (default) for factual answers, 0.7–1.0 for creative responses
 
 ## Architecture
 
@@ -326,6 +326,7 @@ customkb.py                  # CLI entry point, match/case command dispatch
     ├── security_utils.py    # Input validation, path sanitization, safe SQL
     ├── text_utils.py        # Text cleaning, entity preservation
     ├── logging_config.py    # Centralized KB-specific logging
+    ├── logging_utils.py     # Logging utility helpers
     ├── optimization_manager.py  # Memory tier auto-optimization
     ├── performance_analyzer.py  # System profiling and recommendations
     ├── exceptions.py        # Custom exception hierarchy
@@ -378,10 +379,10 @@ $VECTORDBS/<kb_name>/
 
 | Provider | Models |
 |----------|--------|
-| **OpenAI** | GPT-5.x, GPT-4.1, GPT-4o, o3, o4-mini |
-| **Anthropic** | Claude Opus 4.5, Sonnet 4.5, Haiku 4.5, Opus 4.1 |
-| **Google** | Gemini 2.5 Pro/Flash, Gemini 1.5 Pro |
-| **xAI** | Grok 4, Grok 4-fast |
+| **OpenAI** | GPT-5.x, GPT-4.1/mini/nano, GPT-4o/mini, o3/o3-pro, o4-mini, Codex |
+| **Anthropic** | Claude Opus 4.6, Sonnet 4.6, Haiku 4.5 |
+| **Google** | Gemini 3.x Pro, 2.5 Pro/Flash, 2.0 Flash, 1.5 Pro/Flash |
+| **xAI** | Grok 4, Grok 4-fast, Grok 4-fast-non-reasoning |
 | **Ollama** | Llama 3.3, Gemma 3, DeepSeek R1, Qwen 2.5, Mistral, Phi-4 |
 
 Model aliases are resolved via `Models.json`. Run `customkb query <kb> --model <alias>` to use any supported model.
@@ -528,6 +529,10 @@ customkb query myproject "test" -v -d   # Verbose + debug
 | `scripts/upgrade_bm25_tokens.py` | Upgrade database for BM25 tokens |
 | `scripts/diagnose_crashes.py` | Analyze crash logs and system state |
 | `scripts/security-check.sh` | Run security validation checks |
+| `scripts/emergency_cleanup.sh` | Emergency cleanup of stale resources |
+| `scripts/gpu_env.sh` | GPU environment variable setup |
+| `scripts/gpu_monitor.sh` | Real-time GPU monitoring |
+| `scripts/test_cuda.sh` | CUDA installation verification |
 
 ## Testing
 

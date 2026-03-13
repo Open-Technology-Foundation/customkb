@@ -755,10 +755,34 @@ def process_embeddings(args: argparse.Namespace, logger) -> str:
     index.index.train_mode = False  # Disable training mode for final usage
   faiss.write_index(index, kb.knowledge_base_vector)
 
+  # Auto-sync vector_dimensions in .cfg to match actual FAISS index
+  actual_dims = index.d
+  if actual_dims != kb.vector_dimensions:
+    logger.warning(
+      f'Config vector_dimensions={kb.vector_dimensions} updated to '
+      f'match actual FAISS index dimensions={actual_dims}'
+    )
+    kb.vector_dimensions = actual_dims
+    _update_cfg_value(kb, 'vector_dimensions', str(actual_dims))
+
   # Close database connection
   close_database(kb)
 
   return f'{len(all_duplicate_ids)} embeddings (from {len(rows)} total rows with {len(unique_rows)} unique texts) saved to {kb.knowledge_base_vector}'
+
+
+def _update_cfg_value(kb, key: str, value: str) -> None:
+  """Update a single value in the KB's .cfg file."""
+  import configparser
+
+  cfg_path = kb.knowledge_base_db.replace('.db', '.cfg')
+  if not os.path.exists(cfg_path):
+    return
+  parser = configparser.ConfigParser()
+  parser.read(cfg_path)
+  parser['DEFAULT'][key] = value
+  with open(cfg_path, 'w') as f:
+    parser.write(f)
 
 
 # fin

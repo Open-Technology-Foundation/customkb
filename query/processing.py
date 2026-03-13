@@ -8,6 +8,7 @@ search execution, context assembly, and response generation.
 
 import argparse
 import asyncio
+import datetime
 import os
 import sqlite3
 import time
@@ -128,6 +129,21 @@ def build_simple_reference_string(reference: list[list[Any]], context_files_cont
         parts.append('')
 
   return '\n'.join(parts)
+
+
+def _log_query_response(kb_directory: str, query_text: str, response: str, elapsed_ms: float) -> None:
+  """Append query and response to a dedicated query log file."""
+  try:
+    log_dir = os.path.join(kb_directory, 'logs')
+    os.makedirs(log_dir, exist_ok=True)
+    log_path = os.path.join(log_dir, 'query.log')
+    timestamp = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    with open(log_path, 'a', encoding='utf-8') as f:
+      f.write(f'--- {timestamp} ({elapsed_ms:.0f}ms) ---\n')
+      f.write(f'Q: {query_text}\n')
+      f.write(f'A: {response}\n\n')
+  except OSError:
+    pass  # don't break queries if logging fails
 
 
 async def process_query_async(args: argparse.Namespace, logger) -> str:
@@ -260,7 +276,12 @@ async def process_query_async(args: argparse.Namespace, logger) -> str:
         return 'Failed to generate a response. Please try again.'
 
       # Total pipeline time
-      logger.info(f'Total query pipeline: {(t_llm_end - t0) * 1000:.0f}ms')
+      total_ms = (t_llm_end - t0) * 1000
+      logger.info(f'Total query pipeline: {total_ms:.0f}ms')
+
+      # Log query + response to dedicated query log
+      _log_query_response(os.path.dirname(config_file), query_text, response, total_ms)
+
       return response
 
     finally:

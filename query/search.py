@@ -211,7 +211,13 @@ async def perform_vector_search(kb: Any, query_embedding: np.ndarray, top_k: int
 
       logger.debug(f'Loading FAISS index from {kb.knowledge_base_vector}')
       faiss, _ = _get_faiss()
-      kb.faiss_index = faiss.read_index(kb.knowledge_base_vector)
+      use_mmap = getattr(kb, 'use_memory_mapped_faiss', False)
+      if use_mmap:
+        io_flags = faiss.IO_FLAG_MMAP | faiss.IO_FLAG_READ_ONLY
+        kb.faiss_index = faiss.read_index(kb.knowledge_base_vector, io_flags)
+        logger.debug('Loaded FAISS index with memory mapping')
+      else:
+        kb.faiss_index = faiss.read_index(kb.knowledge_base_vector)
 
     # Set nprobe for IVF indexes (requires downcast to expose nprobe)
     try:

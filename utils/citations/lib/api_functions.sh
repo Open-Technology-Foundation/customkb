@@ -164,7 +164,7 @@ api_call_openai() {
 
 # Call Anthropic API with retry logic
 # Args:
-#   $1: Model name (e.g., claude-sonnet-4-5)
+#   $1: Model name (e.g., claude-sonnet-4-6)
 #   $2: System prompt
 #   $3: User content
 #   $4: Max tokens for response

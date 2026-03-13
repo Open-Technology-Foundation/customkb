@@ -55,7 +55,7 @@ class DefaultConfig(BaseModel):
   vector_chunks: int = 200
   db_min_tokens: int = 100
   db_max_tokens: int = 200
-  query_model: str = 'claude-sonnet-4-5'
+  query_model: str = 'claude-sonnet-4-6'
   query_role: str = 'You are a helpful assistant.'
   query_top_k: int = 50
   query_context_scope: int = 4
@@ -300,7 +300,7 @@ class KBConfig(BaseModel):
       vector_chunks=_get_env('VECTOR_CHUNKS', _cfg_int(df, 'vector_chunks', 200), int),
       db_min_tokens=_get_env('DB_MIN_TOKENS', _cfg_int(df, 'db_min_tokens', 100), int),
       db_max_tokens=_get_env('DB_MAX_TOKENS', _cfg_int(df, 'db_max_tokens', 200), int),
-      query_model=_get_env('QUERY_MODEL', df.get('query_model', 'claude-sonnet-4-5')),
+      query_model=_get_env('QUERY_MODEL', df.get('query_model', 'claude-sonnet-4-6')),
       query_role=_get_env('QUERY_ROLE', df.get('query_role', 'You are a helpful assistant.')),
       query_top_k=_get_env('QUERY_TOP_K', _cfg_int(df, 'query_top_k', 50), int),
       query_context_scope=_get_env('QUERY_CONTEXT_SCOPE', _cfg_int(df, 'query_context_scope', 4), int),

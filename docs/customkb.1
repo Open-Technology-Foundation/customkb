@@ -1,0 +1,550 @@
+.\" customkb(1) manpage
+.\" Generated from source: 2026-03-13
+.TH CUSTOMKB 1 "2026-03-13" "CustomKB 1.1.0" "CustomKB Manual"
+.
+.SH NAME
+customkb \- AI-powered knowledgebase system with semantic search and LLM integration
+.
+.SH SYNOPSIS
+.B customkb
+.I command
+.RI [ kb_name ]
+.RI [ options ]
+.br
+.B customkb database
+.I kb_name
+.RI [ files... ]
+.RI [ options ]
+.br
+.B customkb embed
+.I kb_name
+.RI [ options ]
+.br
+.B customkb query
+.I kb_name
+.RI \(dq question \(dq
+.RI [ options ]
+.br
+.B customkb categorize
+.I kb_name
+.RI [ options ]
+.br
+.B customkb optimize
+.RI [ kb_name ]
+.RI [ options ]
+.br
+.B customkb edit
+.I kb_name
+.br
+.B customkb bm25
+.I kb_name
+.RB [ \-\-force ]
+.br
+.B customkb verify\-indexes
+.I kb_name
+.br
+.B customkb convert\-encoding
+.I files...
+.RI [ options ]
+.br
+.B customkb version
+.RB [ \-\-build ]
+.br
+.B customkb help
+.
+.SH DESCRIPTION
+.B customkb
+transforms documents into AI-powered, searchable knowledgebases using vector
+embeddings, FAISS indexing, and LLM integration.
+It supports multiple AI providers (OpenAI, Anthropic, Google, xAI, Ollama)
+via LiteLLM and delivers contextually relevant answers from your data.
+.PP
+The system follows a three-stage pipeline:
+.IP 1. 4
+.B Document Processing
+\(em text extraction, language detection, intelligent chunking, and SQLite storage.
+.IP 2. 4
+.B Embedding Generation
+\(em vector embeddings via API or local models, FAISS index creation, two-tier caching.
+.IP 3. 4
+.B Semantic Query
+\(em vector similarity search, optional hybrid BM25, optional reranking, LLM response.
+.
+.SH COMMANDS
+.
+.SS database
+Process text files into a knowledgebase.
+Supports Markdown, HTML, PDF, code files, and plain text.
+Auto-detects 27+ languages.
+.PP
+.B customkb database
+.I kb_name
+.RI [ files... ]
+.RI [ options ]
+.TP
+.BR \-l ", " \-\-language " " \fILANG\fR
+Stopwords language (default: \fBen\fR).
+Available: en, fr, de, id, es, etc.
+.TP
+.B \-\-detect\-language
+Auto-detect language per file.
+.TP
+.BR \-f ", " \-\-force
+Force reprocess existing files.
+.TP
+.BR \-v ", " \-\-verbose
+Enable verbose output (default).
+.TP
+.BR \-q ", " \-\-quiet
+Disable verbose output.
+.TP
+.BR \-d ", " \-\-debug
+Enable debug output.
+.
+.SS embed
+Generate vector embeddings for all unembedded chunks in the knowledgebase.
+Automatically selects FAISS index type (Flat/IVF/HNSW) based on dataset size.
+.PP
+.B customkb embed
+.I kb_name
+.RI [ options ]
+.TP
+.BR \-r ", " \-\-reset\-database
+Reset embedding status flags and regenerate all embeddings.
+.TP
+.BR \-v " / " \-q " / " \-d
+Verbose / quiet / debug output.
+.
+.SS query
+Search a knowledgebase and get AI-powered answers.
+.PP
+.B customkb query
+.I kb_name
+.RI \(dq question \(dq
+.RI [ options ]
+.TP
+.BR \-c ", " \-\-context\-only
+Return retrieved context without generating an AI response.
+.TP
+.BR \-m ", " \-\-model " " \fIMODEL\fR
+AI model to use for response generation.
+Model aliases are resolved via \fBModels.json\fR.
+.TP
+.BR \-k ", " \-\-top\-k " " \fIN\fR
+Number of search results to retrieve (default: 50).
+.TP
+.BR \-s ", " \-\-context\-scope " " \fIN\fR
+Context segments per result.
+.TP
+.BR \-t ", " \-\-temperature " " \fIFLOAT\fR
+Response creativity, 0.0\(en2.0 (default: 0.0).
+.TP
+.BR \-M ", " \-\-max\-tokens " " \fIN\fR
+Maximum response tokens (default: 4000).
+.TP
+.BR \-f ", " \-\-format " " \fIFORMAT\fR
+Output format: \fBxml\fR (default), \fBjson\fR, \fBmarkdown\fR, \fBplain\fR.
+.TP
+.BR \-p ", " \-\-prompt\-template " " \fITEMPLATE\fR
+Response style: \fBdefault\fR, \fBinstructive\fR, \fBscholarly\fR, \fBconcise\fR,
+\fBanalytical\fR, \fBconversational\fR, \fBtechnical\fR.
+.TP
+.BR \-R ", " \-\-role " " \fIROLE\fR
+Custom system role for AI.
+.TP
+.BR \-Q ", " \-\-query_file " " \fIFILE\fR
+Read query text from file.
+.TP
+.B \-\-category " " \fICATEGORY\fR
+Filter results by category (exact match).
+.TP
+.B \-\-categories " " \fICATEGORIES\fR
+Filter results by multiple categories (comma-separated).
+.TP
+.B \-\-context\-files " " \fIFILES...\fR
+Additional context files to include in the query.
+.TP
+.BR \-v " / " \-q " / " \-d
+Verbose / quiet / debug output.
+.
+.SS categorize
+Auto-categorize articles in a knowledgebase using AI.
+.PP
+.B customkb categorize
+.I kb_name
+.RI [ options ]
+.TP
+.BR \-S ", " \-\-sample " " \fIN\fR
+Process only \fIN\fR sample articles.
+.TP
+.BR \-f ", " \-\-full
+Process all articles.
+.TP
+.B \-\-fresh
+Ignore checkpoint, reprocess all articles.
+.TP
+.B \-\-import
+Import categories to database after processing.
+.TP
+.B \-\-list
+List existing categories and counts.
+.TP
+.BR \-m ", " \-\-model " " \fIMODEL\fR
+AI model for categorization (default: \fBclaude-haiku-4-5\fR).
+.TP
+.BR \-s ", " \-\-sampling " " \fIT\-M\-B\fR
+Chunk sampling config, e.g., \fB5\-10\-5\fR for top-middle-bottom.
+.TP
+.BR \-M ", " \-\-max\-concurrent " " \fIN\fR
+Maximum concurrent API requests (default: 5).
+.TP
+.BR \-c ", " \-\-confidence\-threshold " " \fIFLOAT\fR
+Minimum confidence for category assignment (default: 0.5).
+.TP
+.BR \-D ", " \-\-no\-dedup
+Disable category deduplication.
+.TP
+.B \-\-dedup\-threshold " " \fIFLOAT\fR
+Similarity threshold for deduplication (default: 85.0).
+.TP
+.B \-\-fixed\-categories
+Use fixed number of categories per article.
+.TP
+.BR \-v " / " \-q " / " \-d
+Verbose / quiet / debug output.
+.
+.SS optimize
+Auto-optimize performance settings based on system resources.
+When run without a \fIkb_name\fR, shows system-wide recommendations.
+.PP
+.B customkb optimize
+.RI [ kb_name ]
+.RI [ options ]
+.TP
+.BR \-n ", " \-\-dry\-run
+Preview changes without applying.
+.TP
+.BR \-a ", " \-\-analyze
+Analyze and show recommendations.
+.TP
+.BR \-s ", " \-\-show\-tiers
+Display all memory tier settings.
+.TP
+.BR \-m ", " \-\-memory\-gb " " \fIGB\fR
+Override detected memory (in GB).
+.TP
+.BR \-v " / " \-q " / " \-d
+Verbose / quiet / debug output.
+.
+.SS edit
+Open the knowledgebase configuration file in \fB$EDITOR\fR.
+Falls back to the editor specified by the \fBdefault_editor\fR config setting
+(default: \fBjoe\fR).
+.PP
+.B customkb edit
+.I kb_name
+.
+.SS bm25
+Build the BM25 keyword index for hybrid search (vector + keyword matching).
+Requires \fBenable_hybrid_search = true\fR in the [ALGORITHMS] config section.
+.PP
+.B customkb bm25
+.I kb_name
+.RB [ \-\-force ]
+.TP
+.B \-\-force
+Force rebuild of an existing BM25 index.
+.
+.SS verify\-indexes
+Check database index health and report any issues.
+.PP
+.B customkb verify\-indexes
+.I kb_name
+.
+.SS convert\-encoding
+Convert text files to UTF-8 encoding in-place.
+.PP
+.B customkb convert\-encoding
+.I files...
+.RI [ options ]
+.TP
+.B \-\-no\-backup
+Do not create backups of original files (backups are on by default).
+.TP
+.B \-\-dry\-run
+Preview changes without converting files.
+.TP
+.BR \-r ", " \-\-recursive
+Process directories recursively.
+.TP
+.BR \-v " / " \-q " / " \-d
+Verbose / quiet / debug output.
+.
+.SS version
+Show version information.
+.TP
+.B \-\-build
+Include build number in output.
+.
+.SS help
+Display usage information and exit.
+.
+.SH KB NAME RESOLUTION
+The \fIkb_name\fR argument is flexible.
+All of these resolve to the same knowledgebase:
+.PP
+.nf
+customkb query myproject "test"
+customkb query myproject.cfg "test"
+customkb query $VECTORDBS/myproject "test"
+customkb query $VECTORDBS/myproject/myproject.cfg "test"
+.fi
+.
+.SH CONFIGURATION
+CustomKB uses INI-style configuration files stored in
+\fB$VECTORDBS/\fIkb_name\fB/\fIkb_name\fB.cfg\fR.
+.PP
+Configuration hierarchy (highest to lowest priority):
+.IP 1. 4
+Environment variables (uppercased field names, e.g., \fBQUERY_MODEL\fR)
+.IP 2. 4
+Values in the \fB.cfg\fR file
+.IP 3. 4
+Built-in defaults
+.
+.SS [DEFAULT] Section
+.TS
+l l l.
+Parameter	Default	Description
+_
+vector_model	text-embedding-3-small	Embedding model
+vector_dimensions	1536	Embedding dimensions (auto-updated)
+db_min_tokens	100	Minimum chunk size in tokens
+db_max_tokens	200	Maximum chunk size in tokens
+query_model	claude-sonnet-4-6	LLM for query responses
+query_top_k	50	Chunks to retrieve
+query_temperature	0.0	Response creativity (0.0\(en2.0)
+query_max_tokens	4000	Maximum response tokens
+reference_format	xml	Output format (xml/json/markdown/plain)
+query_prompt_template	default	Response style template
+.TE
+.
+.SS [ALGORITHMS] Section
+.TS
+l l l.
+Parameter	Default	Description
+_
+similarity_threshold	0.6	Minimum similarity score (0\(en1)
+enable_hybrid_search	false	Combine vector + BM25 search
+bm25_weight	0.3	BM25 weight in hybrid mode
+enable_reranking	true	Cross-encoder reranking
+reranking_model	cross-encoder/ms-marco-MiniLM-L-6-v2	Reranking model
+reranking_top_k	20	Results to rerank
+.TE
+.
+.SS [PERFORMANCE] Section
+.TS
+l l l.
+Parameter	Default	Description
+_
+embedding_batch_size	100	Embeddings per batch
+checkpoint_interval	10	Save progress every N batches
+cache_thread_pool_size	4	Parallel cache threads
+memory_cache_size	10000	LRU cache entries
+.TE
+.
+.SS [API] Section
+.TS
+l l l.
+Parameter	Default	Description
+_
+api_call_delay_seconds	0.05	Seconds between API calls
+api_max_concurrency	8	Maximum parallel API requests
+api_max_retries	20	Maximum retry attempts
+.TE
+.
+.SH FILES
+.TP
+.B $VECTORDBS/\fIkb_name\fB/\fIkb_name\fB.cfg
+Knowledgebase configuration file (INI format).
+.TP
+.B $VECTORDBS/\fIkb_name\fB/\fIkb_name\fB.db
+SQLite database containing document chunks, metadata, and categories.
+.TP
+.B $VECTORDBS/\fIkb_name\fB/\fIkb_name\fB.faiss
+FAISS vector index (auto-selected type: Flat, IVF, or HNSW).
+.TP
+.B $VECTORDBS/\fIkb_name\fB/\fIkb_name\fB.bm25
+BM25 keyword index (optional, for hybrid search).
+.TP
+.B $VECTORDBS/\fIkb_name\fB/logs/
+KB-specific log files.
+.TP
+.B Models.json
+Model registry with aliases, providers, and capabilities.
+.TP
+.B example.cfg
+Full example configuration with all available options documented.
+.
+.SH ENVIRONMENT
+.TP
+.B VECTORDBS
+Knowledgebase base directory (default: \fB/var/lib/vectordbs\fR).
+.TP
+.B OPENAI_API_KEY
+OpenAI API key (for GPT models and text-embedding models).
+.TP
+.B ANTHROPIC_API_KEY
+Anthropic API key (for Claude models).
+.TP
+.B GOOGLE_API_KEY
+Google API key (for Gemini models and gemini-embedding).
+.TP
+.B XAI_API_KEY
+xAI API key (for Grok models).
+.TP
+.B NLTK_DATA
+NLTK data directory location.
+.TP
+.B EDITOR
+Preferred editor for \fBcustomkb edit\fR.
+Falls back to the \fBdefault_editor\fR config value, then \fBjoe\fR.
+.TP
+.B CUDA_VISIBLE_DEVICES
+GPU device selection (set by the customkb wrapper script).
+.
+.SH EXIT STATUS
+.TP
+.B 0
+Success (including help and version output).
+.TP
+.B 1
+Error (unknown command, missing knowledgebase, processing failure, or user interrupt).
+.TP
+.B 2
+Unexpected internal error.
+.
+.SH EXAMPLES
+Create a knowledgebase from Markdown files:
+.PP
+.nf
+mkdir -p "$VECTORDBS/myproject"
+cat > "$VECTORDBS/myproject/myproject.cfg" << 'EOF'
+[DEFAULT]
+vector_model = text-embedding-3-small
+query_model = claude-sonnet-4-6
+db_min_tokens = 200
+db_max_tokens = 400
+EOF
+
+customkb database myproject docs/*.md
+customkb embed myproject
+customkb query myproject "What are the main features?"
+.fi
+.PP
+Query with specific model and format:
+.PP
+.nf
+customkb query myproject "explain the architecture" \\
+  --model gpt-4o-mini --format json --prompt-template technical
+.fi
+.PP
+Context-only retrieval (no LLM response):
+.PP
+.nf
+customkb query myproject "search terms" --context-only
+.fi
+.PP
+Enable and build hybrid search:
+.PP
+.nf
+# Set enable_hybrid_search = true in [ALGORITHMS] section
+customkb edit myproject
+customkb bm25 myproject
+customkb query myproject "keyword-heavy search"
+.fi
+.PP
+Auto-optimize for system resources:
+.PP
+.nf
+customkb optimize myproject
+customkb optimize --analyze
+customkb optimize myproject --dry-run
+.fi
+.PP
+Categorize documents using AI:
+.PP
+.nf
+customkb categorize myproject --sample 10
+customkb categorize myproject --full --import
+customkb categorize myproject --list
+.fi
+.
+.SH SUPPORTED MODELS
+.SS Embedding Models
+.TS
+l l l.
+Model	Provider	Dimensions
+_
+text-embedding-3-small	OpenAI	1536
+text-embedding-3-large	OpenAI	3072
+text-embedding-ada-002	OpenAI	1536
+gemini-embedding-001	Google	768/1536/3072
+.TE
+.
+.SS LLM Models (via LiteLLM)
+.TS
+l l.
+Provider	Models
+_
+OpenAI	GPT-5.x, GPT-4.1/mini/nano, GPT-4o/mini, o3/o3-pro, o4-mini
+Anthropic	Claude Opus 4.6, Sonnet 4.6, Haiku 4.5
+Google	Gemini 3.x Pro, 2.5 Pro/Flash, 2.0 Flash, 1.5 Pro/Flash
+xAI	Grok 4, Grok 4-fast, Grok 4-fast-non-reasoning
+Ollama	Llama 3.3, Gemma 3, DeepSeek R1, Qwen 2.5, Mistral, Phi-4
+.TE
+.PP
+Model aliases are resolved via \fBModels.json\fR.
+.
+.SH MEMORY TIERS
+CustomKB auto-configures based on available system memory:
+.TS
+l l l l l.
+Memory	Tier	Batch Size	Cache Size	Hybrid Search
+_
+<16GB	Low	50	5,000	Disabled
+16\(en64GB	Medium	100	10,000	Available
+64\(en128GB	High	200	20,000	Enabled
+>128GB	Very High	300	50,000	Enabled
+.TE
+.
+.SH SECURITY
+.IP \(bu 3
+Safe serialization: JSON-only format (zero pickle).
+.IP \(bu 3
+SQL injection prevention: parameterized queries throughout.
+.IP \(bu 3
+Path traversal protection: all file paths validated.
+.IP \(bu 3
+API key security: environment variable storage, never logged.
+.IP \(bu 3
+Atomic database operations with rollback support.
+.
+.SH BUGS
+Report bugs at https://github.com/Open-Technology-Foundation/customkb/issues
+.
+.SH AUTHORS
+Indonesian Open Technology Foundation
+.br
+https://github.com/Open-Technology-Foundation
+.
+.SH COPYRIGHT
+Copyright \(co 2025\(en2026 Indonesian Open Technology Foundation.
+Licensed under GPL-3.0.
+.
+.SH SEE ALSO
+.BR faiss (1),
+.BR sqlite3 (1),
+.BR litellm (1)
+.PP
+Full documentation: https://github.com/Open-Technology-Foundation/customkb

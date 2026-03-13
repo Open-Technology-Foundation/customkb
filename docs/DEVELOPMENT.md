@@ -70,18 +70,12 @@ CustomKB implements a modular, three-tier architecture designed for scalability 
    cd customkb
    ```
 
-2. **Create virtual environment**
-   ```bash
-   python3.12 -m venv .venv
-   source .venv/bin/activate
-   ```
-
-3. **Install dependencies**
+2. **Install dependencies** (auto-creates `.venv`)
    ```bash
    uv sync --extra test --extra dev --extra faiss-gpu-cu12 --extra mcp
    ```
 
-4. **Set up environment variables**
+3. **Set up environment variables**
    ```bash
    # Create .env file (not tracked by git)
    cat > .env << EOF
@@ -96,14 +90,9 @@ CustomKB implements a modular, three-tier architecture designed for scalability 
    source .env
    ```
 
-5. **Initialize NLTK data**
+4. **Initialize NLTK data**
    ```bash
-   python -c "import nltk; nltk.download('all', download_dir='${NLTK_DATA}')"
-   ```
-
-6. **Install spaCy language model**
-   ```bash
-   python -m spacy download en_core_web_sm
+   sudo ./setup/nltk_setup.py download cleanup
    ```
 
 ### IDE Configuration
@@ -112,11 +101,11 @@ CustomKB implements a modular, three-tier architecture designed for scalability 
 ```json
 {
   "python.defaultInterpreterPath": ".venv/bin/python",
-  "python.linting.enabled": true,
-  "python.linting.flake8Enabled": true,
-  "python.linting.mypyEnabled": true,
-  "python.formatting.provider": "black",
-  "editor.rulers": [100],
+  "editor.rulers": [127],
+  "editor.tabSize": 2,
+  "[python]": {
+    "editor.defaultFormatter": "charliermarsh.ruff"
+  },
   "files.exclude": {
     "**/__pycache__": true,
     "**/*.pyc": true,
@@ -127,56 +116,86 @@ CustomKB implements a modular, three-tier architecture designed for scalability 
 
 #### PyCharm
 - Set Project Interpreter to `.venv/bin/python`
-- Enable flake8 and mypy inspections
-- Set line length to 100 characters
+- Enable ruff inspections (via plugin)
+- Set line length to 127 characters
 - Configure Python indentation to 2 spaces
 
 ## Project Structure
 
 ```
 customkb/
-├── customkb.py              # Main CLI entry point
-├── customkb                 # Executable script (symlink)
+├── customkb.py              # Main CLI entry point (match/case dispatch)
+├── customkb                 # Bash wrapper (activates .venv, calls customkb.py)
 ├── version.py               # Version management
 ├── version.sh               # Version update script
 ├── Models.json              # Model registry and aliases
 │
 ├── config/                  # Configuration management
-│   ├── __init__.py
-│   └── config_manager.py    # KnowledgeBase class and config loading
+│   ├── config_manager.py    # KnowledgeBase class, config loading, name resolution
+│   └── models.py            # Pydantic config models with env var overrides
+│
+├── categorize/              # AI-powered categorization
+│   ├── categorize_manager.py    # LLM-based document categorization
+│   ├── category_deduplicator.py # Fuzzy deduplication via rapidfuzz
+│   └── import_to_db.py          # Category import pipeline to SQLite
 │
 ├── database/                # Database operations
-│   ├── __init__.py
-│   └── db_manager.py        # Text processing and storage
+│   ├── db_manager.py        # Document processing pipeline
+│   ├── connection.py        # SQLite connection with WAL + PRAGMA tuning
+│   ├── chunking.py          # Text chunking with overlap (langchain splitters)
+│   ├── index_manager.py     # Database index creation and verification
+│   └── migrations.py        # Schema migrations with version tracking
 │
 ├── embedding/               # Embedding generation
-│   ├── __init__.py
-│   └── embed_manager.py     # Vector embedding creation
+│   ├── embed_manager.py     # Embedding orchestration, FAISS index management
+│   ├── providers.py         # Embedding provider abstraction
+│   ├── litellm_provider.py  # LiteLLM unified embedding interface
+│   ├── bm25_manager.py      # BM25 index for hybrid search
+│   ├── rerank_manager.py    # Cross-encoder reranking with score caching
+│   ├── cache.py             # Thread-safe two-tier cache (memory LRU + disk)
+│   ├── batch.py             # Batch progress tracking with ETA
+│   └── index.py             # FAISS index type auto-selection
 │
 ├── query/                   # Query processing
-│   ├── __init__.py
-│   └── query_manager.py     # Search and response generation
+│   ├── query_manager.py     # Re-export hub for all query submodules
+│   ├── processing.py        # Top-level query orchestration pipeline
+│   ├── search.py            # FAISS vector search, hybrid search, result assembly
+│   ├── response.py          # LLM response generation (multi-provider)
+│   ├── llm.py               # Unified LLM interface via LiteLLM
+│   ├── embedding.py         # Query embedding generation and caching
+│   ├── enhancement.py       # Spelling correction, synonym expansion
+│   ├── formatters.py        # Output formatting (XML, JSON, Markdown, plain)
+│   └── prompt_templates.py  # Response style templates
 │
 ├── models/                  # Model management
-│   ├── __init__.py
-│   └── model_manager.py     # Model registry and resolution
+│   └── model_manager.py     # Model registry from Models.json (aliases, providers)
+│
+├── mcp_server/              # MCP server integration
+│   └── server.py            # MCP server for Claude Code integration
 │
 ├── utils/                   # Utility functions
-│   ├── __init__.py
-│   ├── logging_utils.py     # Logging configuration
-│   ├── security_utils.py    # Security validations
-│   └── text_utils.py        # Text processing utilities
+│   ├── security_utils.py    # Input validation, path sanitization, safe SQL
+│   ├── text_utils.py        # Text cleaning, entity preservation
+│   ├── logging_config.py    # Centralized KB-specific logging
+│   ├── logging_utils.py     # Logging utility helpers
+│   ├── optimization_manager.py  # Memory tier auto-optimization
+│   ├── performance_analyzer.py  # System profiling and recommendations
+│   ├── exceptions.py        # Custom exception hierarchy (CustomKBError base)
+│   ├── faiss_loader.py      # FAISS loading with GPU/CPU fallback
+│   ├── gpu_utils.py         # GPU detection and memory management
+│   ├── resource_manager.py  # Thread pool and resource lifecycle
+│   ├── language_detector.py # Language detection with caching
+│   ├── encoding_converter.py # File encoding conversion to UTF-8
+│   ├── enums.py             # Shared enumerations
+│   └── context_managers.py  # Database and resource context managers
 │
 ├── tests/                   # Test suite
-│   ├── __init__.py
 │   ├── conftest.py          # Pytest configuration
 │   ├── unit/                # Unit tests
-│   ├── integration/         # Integration tests
-│   └── fixtures/            # Test data and mocks
+│   └── integration/         # Integration tests
 │
-├── docs/                    # Documentation (if needed)
-├── scripts/                 # Utility scripts
-└── examples/                # Example configurations
+├── docs/                    # Documentation
+└── scripts/                 # Utility scripts
 ```
 
 ## Core Components
@@ -287,7 +306,7 @@ from models.model_manager import get_canonical_model, get_models_by_category
 
 # Resolve model aliases
 model_info = get_canonical_model('claude')
-# Returns: {'model': 'claude-3-5-sonnet-20241022', 'category': 'llm', ...}
+# Returns: {'model': 'claude-sonnet-4-6', 'category': 'LLM', ...}
 
 # Get models by category
 llm_models = get_models_by_category('llm')
@@ -319,20 +338,14 @@ pytest tests/unit/test_config_manager.py::test_domain_style_names
 ### Code Quality Checks
 
 ```bash
-# Linting
-flake8 . --max-line-length=100 --extend-ignore=E203,W503
+# Linting (primary — see .ruff.toml for config)
+ruff check .
+
+# Auto-format (2-space indent, single quotes, 127 char line length)
+ruff format .
 
 # Type checking
 mypy --ignore-missing-imports .
-
-# Security scan
-bandit -r . -x .venv,tests
-
-# Code formatting (check only)
-black --check --line-length=100 .
-
-# All checks combined
-make lint  # If Makefile is available
 ```
 
 ### Performance Testing
@@ -362,7 +375,7 @@ cd docs && make html
 ### Python Style Guide
 
 1. **Indentation**: 2 spaces (not tabs)
-2. **Line Length**: Maximum 100 characters
+2. **Line Length**: Maximum 127 characters (configured in `.ruff.toml`)
 3. **Imports**: 
    ```python
    # Standard library
@@ -376,7 +389,7 @@ cd docs && make html
    
    # Local imports
    from config.config_manager import KnowledgeBase
-   from utils.logging_utils import get_logger
+   from utils.logging_config import setup_logging
    ```
 
 4. **Docstrings**: Google style with type hints
@@ -497,7 +510,7 @@ response = process_query(args, logger)
 
 ```python
 # Logging
-from utils.logging_utils import setup_logging, get_logger
+from utils.logging_config import setup_logging
 logger = setup_logging(verbose=True, debug=False)
 
 # Text Processing
@@ -539,8 +552,8 @@ is_valid = validate_api_key(key, min_length=20)
 1. **Batch Size Tuning**:
    ```ini
    [PERFORMANCE]
-   embedding_batch_size = 200  # Increase for better throughput
-   api_max_concurrency = 16    # More parallel requests
+   embedding_batch_size = 200  # Increase for better throughput (default: 100)
+   api_max_concurrency = 16    # More parallel requests (default: 8)
    ```
 
 2. **Caching Strategy**:
@@ -704,6 +717,6 @@ Build numbers increment automatically with each commit via git hooks.
 ---
 
 For additional information, see:
-- [README.md](README.md) - User documentation
-- [CLAUDE.md](CLAUDE.md) - AI assistant instructions
-- [CHANGELOG.md](CHANGELOG.md) - Version history
+- [README.md](../README.md) - User documentation
+- [INSTALLATION.md](INSTALLATION.md) - Installation guide
+- [GPU_ACCELERATION.md](GPU_ACCELERATION.md) - GPU setup and optimization

@@ -5,10 +5,6 @@ This directory contains utility scripts for managing and optimizing CustomKB ins
 ## Scripts Overview
 
 ### Performance Optimization
-- **optimize_kb_performance.py** - Main optimization script that applies memory-based performance tiers
-  - Usage: `python scripts/optimize_kb_performance.py [kb_name] [--memory-gb N]`
-  - Creates optimized configurations based on available system memory
-  
 - **show_optimization_tiers.py** - Displays optimization settings for different memory tiers
   - Usage: `python scripts/show_optimization_tiers.py`
   - Shows settings for: Low (<16GB), Medium (16-64GB), High (64-128GB), Very High (>128GB)
@@ -17,24 +13,49 @@ This directory contains utility scripts for managing and optimizing CustomKB ins
   - Usage: `python scripts/emergency_optimize.py <kb_config_path>`
   - Use when experiencing memory issues or crashes
 
+- **emergency_cleanup.sh** - Emergency cleanup of stale resources
+  - Usage: `./scripts/emergency_cleanup.sh`
+
+Note: Primary optimization is now via `customkb optimize <kb_name>`.
+
 ### GPU Support
 - **benchmark_gpu.py** - Benchmarks GPU vs CPU performance for reranking
   - Usage: `python scripts/benchmark_gpu.py`
   - Tests reranking model performance on both CPU and GPU
-  
+
 - **gpu_monitor.sh** - Monitors GPU usage during CustomKB operations
   - Usage: `./scripts/gpu_monitor.sh`
   - Real-time GPU memory and utilization monitoring
 
-### BM25 Management  
+- **gpu_env.sh** - GPU environment variable setup
+  - Usage: `source scripts/gpu_env.sh`
+
+- **test_cuda.sh** - CUDA installation verification
+  - Usage: `./scripts/test_cuda.sh`
+
+### Benchmarking
+- **benchmark_vectordb.py** - Vector database benchmarking
+  - Usage: `python scripts/benchmark_vectordb.py`
+
+### BM25 Management
 - **rebuild_bm25_filtered.py** - Creates filtered BM25 indexes with keyword filtering
   - Usage: `python scripts/rebuild_bm25_filtered.py <kb_config> [--keywords ...] [--min-score N]`
   - Reduces BM25 index size by filtering to relevant documents
 
+- **upgrade_bm25_tokens.py** - Upgrade database schema for BM25 token storage
+  - Usage: `python scripts/upgrade_bm25_tokens.py`
+
+### Diagnostics
+- **diagnose_crashes.py** - Analyze crash logs and system state
+  - Usage: `python scripts/diagnose_crashes.py <kb_name>`
+
+- **clean_corrupted_cache.py** - Clean corrupted cache files
+  - Usage: `python scripts/clean_corrupted_cache.py`
+
 ### Testing
 - **Note:** Safe testing functionality has been integrated into `run_tests.py --safe`
   - Use `python run_tests.py --safe` for memory-limited test execution
-  - See `/tests/README.md` for full testing documentation
+  - See `tests/` directory for full testing documentation
 
 ### Security
 - **security-check.sh** - Run security scans on dependencies and code
@@ -46,7 +67,7 @@ This directory contains utility scripts for managing and optimizing CustomKB ins
 
 1. **Optimize a knowledgebase:**
    ```bash
-   python scripts/optimize_kb_performance.py myproject
+   customkb optimize myproject
    ```
 
 2. **Check optimization settings:**

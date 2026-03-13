@@ -58,7 +58,7 @@ export VECTORDBS="/var/lib/vectordbs"
 # 5. Verify installation
 source .venv/bin/activate
 python -c "import faiss; print(f'FAISS: {faiss.__version__}')"
-customkb --version
+customkb version
 ```
 
 ## Detailed Installation
@@ -73,9 +73,9 @@ cd customkb
 Or download a specific release:
 
 ```bash
-wget https://github.com/Open-Technology-Foundation/customkb/archive/refs/tags/v0.9.0.tar.gz
-tar -xzf v0.9.0.tar.gz
-cd customkb-0.9.0
+wget https://github.com/Open-Technology-Foundation/customkb/archive/refs/tags/v1.1.0.tar.gz
+tar -xzf v1.1.0.tar.gz
+cd customkb-1.1.0
 ```
 
 ### 2. Install Dependencies
@@ -129,7 +129,7 @@ export NLTK_DATA="/usr/share/nltk_data"
 
 # Optional: Override default models
 export VECTOR_MODEL="text-embedding-3-small"
-export QUERY_MODEL="gpt-4o-mini"
+export QUERY_MODEL="claude-sonnet-4-6"
 
 # Optional: FAISS configuration
 export FAISS_VARIANT="auto"  # or "cpu", "gpu-cu12", "gpu-cu11"
@@ -215,7 +215,7 @@ FAISS_VARIANT=gpu-cu11 ./setup/install_faiss.sh
 python -c "import faiss; print(f'FAISS version: {faiss.__version__}')"
 
 # Check which variant is installed
-pip list | grep faiss
+uv pip list | grep faiss
 
 # Test GPU support (if applicable)
 python -c "import faiss; print(f'GPU available: {hasattr(faiss, \"StandardGpuResources\")}')"
@@ -235,7 +235,7 @@ uv sync --extra faiss-gpu-cu12 --extra mcp
 cat > /var/lib/vectordbs/myproject/myproject.cfg << 'EOF'
 [DEFAULT]
 vector_model = text-embedding-3-small
-query_model = gpt-4o-mini
+query_model = claude-sonnet-4-6
 
 [ALGORITHMS]
 reranking_device = cuda
@@ -251,10 +251,10 @@ Optimized for production with GPU:
 # Install with specific CUDA version
 FAISS_VARIANT=gpu-cu12 ./setup/install_faiss.sh
 
-# Use production-optimized configuration
-cp config/production-optimized.cfg /var/lib/vectordbs/myproject/myproject.cfg
+# Copy and customize the example configuration
+cp example.cfg /var/lib/vectordbs/myproject/myproject.cfg
 
-# Enable all optimizations
+# Auto-optimize for production
 customkb optimize myproject
 ```
 
@@ -270,7 +270,7 @@ FAISS_VARIANT=cpu ./setup/install_faiss.sh
 cat > /var/lib/vectordbs/myproject/myproject.cfg << 'EOF'
 [DEFAULT]
 vector_model = text-embedding-3-small
-query_model = gpt-4o-mini
+query_model = claude-sonnet-4-6
 
 [ALGORITHMS]
 reranking_device = cpu
@@ -437,10 +437,10 @@ customkb optimize myproject --memory-gb 8
 
 # Or manually reduce batch sizes in config
 [API]
-max_concurrent_requests = 2
+api_max_concurrency = 4
 
 [PERFORMANCE]
-batch_size = 50
+embedding_batch_size = 50
 ```
 
 ## Verification
@@ -451,7 +451,7 @@ After installation, verify everything is working:
 
 ```bash
 python --version  # Should be 3.12+
-pip list | grep -E "(anthropic|openai|faiss|langchain)"
+uv pip list | grep -E "(anthropic|openai|faiss|langchain)"
 ```
 
 ### 2. Verify FAISS
@@ -464,14 +464,14 @@ python -c "import faiss; print(f'FAISS {faiss.__version__} imported successfully
 
 ```bash
 # Check version
-customkb --version
+customkb version
 
 # Create test knowledgebase
 mkdir -p /var/lib/vectordbs/test
 cat > /var/lib/vectordbs/test/test.cfg << 'EOF'
 [DEFAULT]
 vector_model = text-embedding-3-small
-query_model = gpt-4o-mini
+query_model = claude-sonnet-4-6
 EOF
 
 # Create test document
@@ -507,12 +507,12 @@ After successful installation:
 1. Read the [Quick Start](../README.md#quick-start) guide
 2. Review [GPU Acceleration](GPU_ACCELERATION.md) for optimization
 3. Check [Performance Optimization Guide](performance_optimization_guide.md)
-4. Explore example configurations in `examples/` directory
+4. Review `example.cfg` for all available configuration options
 
 ## Getting Help
 
 - **Documentation**: Check docs/ directory for detailed guides
 - **Issues**: Report problems at https://github.com/Open-Technology-Foundation/customkb/issues
-- **Examples**: See examples/ directory for sample configurations
+- **Examples**: See `example.cfg` for sample configuration
 
 #fin

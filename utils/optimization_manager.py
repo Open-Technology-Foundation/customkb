@@ -281,6 +281,9 @@ def optimize_config(config_path: str, dry_run: bool = False, memory_gb: float = 
     else:
       logger.info(f'GPU suitable for FAISS index: {reason}')
 
+  # Enable memory-mapped FAISS for large indexes (>1GB)
+  performance_optimizations['PERFORMANCE']['use_memory_mapped_faiss'] = 'true' if faiss_size_mb > 1024 else 'false'
+
   # Load existing configuration
   config = configparser.ConfigParser()
   config.read(config_path)

@@ -252,7 +252,7 @@ class TestKnowledgeBase:
     assert kb.DEF_VECTOR_CHUNKS == 200
     assert kb.DEF_DB_MIN_TOKENS == 100
     assert kb.DEF_DB_MAX_TOKENS == 200
-    assert kb.DEF_QUERY_MODEL == 'claude-sonnet-4-5'
+    assert kb.DEF_QUERY_MODEL == 'claude-sonnet-4-6'
     assert kb.DEF_QUERY_TOP_K == 50
     assert kb.DEF_QUERY_CONTEXT_SCOPE == 4
     assert kb.DEF_QUERY_TEMPERATURE == 0.0

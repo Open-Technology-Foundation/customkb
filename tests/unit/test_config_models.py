@@ -28,7 +28,7 @@ class TestDefaultConfig:
     assert cfg.vector_chunks == 200
     assert cfg.db_min_tokens == 100
     assert cfg.db_max_tokens == 200
-    assert cfg.query_model == 'claude-sonnet-4-5'
+    assert cfg.query_model == 'claude-sonnet-4-6'
     assert cfg.query_top_k == 50
     assert cfg.query_temperature == 0.0
     assert cfg.query_max_tokens == 4000

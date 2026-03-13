@@ -133,7 +133,7 @@ customkb query myproject "What are the main features?"
 
 ```bash
 customkb query myproject "question" \
-  --model claude-sonnet-4-5 \      # LLM model
+  --model claude-sonnet-4-6 \      # LLM model
   --format json \                   # Output: json, xml, markdown, plain
   --prompt-template technical \     # Style: default, technical, scholarly, concise
   --top-k 30 \                      # Number of results
@@ -166,7 +166,7 @@ customkb verify-indexes prodkb
 customkb query myproject "explain this" --model gpt-4o
 
 # Anthropic Claude
-customkb query myproject "explain this" --model claude-sonnet-4-5
+customkb query myproject "explain this" --model claude-sonnet-4-6
 
 # Google Gemini
 customkb query myproject "explain this" --model gemini-2.5-pro
