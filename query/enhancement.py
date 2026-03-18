@@ -385,6 +385,10 @@ def save_enhanced_query_to_cache(original_query: str, enhanced_query: str) -> No
     cache_key = get_enhancement_cache_key(original_query)
     cache_file = os.path.join(ENHANCEMENT_CACHE_DIR, f'{cache_key}.json')
     os.makedirs(ENHANCEMENT_CACHE_DIR, exist_ok=True)
+    try:
+      os.chmod(ENHANCEMENT_CACHE_DIR, 0o2775)
+    except OSError:
+      pass
 
     cache_data = {'original': original_query, 'enhanced': enhanced_query, 'timestamp': time.time()}
 

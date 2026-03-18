@@ -18,6 +18,7 @@ import numpy as np
 
 from config.config_manager import KnowledgeBase, get_fq_cfg_filename
 from database.connection import close_database, connect_to_database
+from utils.exceptions import APIError
 from utils.logging_utils import get_logger, time_to_finish
 
 # FAISS will be loaded lazily when needed (performance optimization)
@@ -301,7 +302,7 @@ async def process_embedding_batch_async(kb: KnowledgeBase, chunks: list[str]) ->
         await asyncio.sleep(api_delay)
 
         # Use LiteLLM unified embedding interface
-        new_embeddings = await litellm_embed.get_embeddings(sub_batch, kb.vector_model)
+        new_embeddings = await litellm_embed.get_embeddings(sub_batch, kb.vector_model, kb.vector_dimensions)
 
         # Cache the new embeddings
         for _i, chunk_idx, emb in zip(range(len(sub_batch)), sub_idx, new_embeddings, strict=False):
@@ -310,17 +311,18 @@ async def process_embedding_batch_async(kb: KnowledgeBase, chunks: list[str]) ->
 
         all_indices.extend(sub_idx)
         break
-      except (ConnectionError, TimeoutError, OSError, ValueError) as e:
+      except (ConnectionError, TimeoutError, OSError, ValueError, APIError) as e:
         tries += 1
         logger.error(f'Embedding API error (attempt {tries}/{max_tries}): {e}')
         if tries > max_tries:
           logger.error(f'Max retries reached for sub-batch ({kb.vector_model}). Skipping.')
           break
-        # Exponential backoff with jitter
+        # Exponential backoff with proportional jitter to prevent thundering herd
         backoff_exponent = getattr(kb, 'backoff_exponent', 2)
-        backoff_jitter = getattr(kb, 'backoff_jitter', 0.1)
-        backoff = (tries**backoff_exponent) + (backoff_jitter * np.random.random())
-        logger.info(f'Rate limit hit. Backing off for {backoff:.2f} seconds')
+        base_backoff = min(tries**backoff_exponent, 30)
+        jitter = base_backoff * np.random.random()
+        backoff = base_backoff + jitter
+        logger.info(f'Rate limit hit. Backing off for {backoff:.2f} seconds (attempt {tries})')
         await asyncio.sleep(backoff)
 
   # Merge cached and new embeddings
@@ -364,7 +366,7 @@ async def get_embeddings_for_batch(kb: KnowledgeBase, chunks: list[str]) -> list
     if uncached_texts:
       # Get embeddings via LiteLLM unified interface
       # Use sync wrapper since this function uses asyncio.run() context
-      embeddings = [litellm_embed.get_embedding_sync(text, kb.vector_model) for text in uncached_texts]
+      embeddings = [litellm_embed.get_embedding_sync(text, kb.vector_model, kb.vector_dimensions) for text in uncached_texts]
 
       # Fill in the embeddings and cache them
       for idx, (text_idx, embedding) in enumerate(zip(uncached_indices, embeddings, strict=False)):
@@ -378,7 +380,7 @@ async def get_embeddings_for_batch(kb: KnowledgeBase, chunks: list[str]) -> list
     # Filter out any None values (shouldn't happen but be safe)
     return [emb for emb in embeddings_list if emb is not None]
 
-  except (ValueError, KeyError, IndexError, RuntimeError, OSError) as e:
+  except (ValueError, KeyError, IndexError, RuntimeError, OSError, APIError) as e:
     logger.error(f'Error getting embeddings for batch: {e}')
     return []
 
@@ -456,6 +458,8 @@ async def process_all_batches_with_checkpoints(
 
   async def process_batch_with_semaphore(i, chunks, ids):
     async with semaphore:
+      # Stagger concurrent tasks to prevent thundering herd on rate-limited APIs
+      await asyncio.sleep((i % concurrency_limit) * 0.5)
       return await process_batch_and_update(kb, index, chunks, ids)
 
   # Create tasks for batch processing with the semaphore for concurrent processing
@@ -614,7 +618,7 @@ def process_embeddings(args: argparse.Namespace, logger) -> str:
       embedding_dimensions = len(cached_embedding)
     else:
       # Get dimensions via LiteLLM unified interface
-      embedding = litellm_embed.get_embedding_sync(rows[0][1], kb.vector_model)
+      embedding = litellm_embed.get_embedding_sync(rows[0][1], kb.vector_model, kb.vector_dimensions)
       embedding_dimensions = len(embedding)
       save_embedding_to_cache(rows[0][1], kb.vector_model, embedding, kb)
 
@@ -694,24 +698,10 @@ def process_embeddings(args: argparse.Namespace, logger) -> str:
     train_sample_size = min(getattr(kb, 'faiss_train_sample_size', 10000), len(unique_rows))
     train_texts = [text for _, text in unique_rows[:train_sample_size]]
 
-    # Get embeddings for training samples
+    # Get embeddings for training samples (reuse the batched async path)
     logger.info(f'Getting embeddings for {len(train_texts)} training samples...')
-    train_embeddings = []
-    train_cache_hits = 0
-
-    # Process training samples in batches
-    for i in range(0, len(train_texts), optimal_batch_size):
-      batch = train_texts[i : i + optimal_batch_size]
-      # Count cache hits before the batch call
-      batch_cache_count = sum(1 for t in batch if get_cached_embedding(t, kb.vector_model) is not None)
-      train_cache_hits += batch_cache_count
-      batch_embeddings = asyncio.run(get_embeddings_for_batch(kb, batch))
-      if batch_embeddings:
-        train_embeddings.extend(batch_embeddings)
-
-    # Log training cache summary once
-    if train_cache_hits > 0:
-      logger.info(f'Training data: {train_cache_hits}/{len(train_texts)} from cache')
+    train_embeddings = asyncio.run(process_embedding_batch_async(kb, train_texts))
+    logger.info(f'Training: got {len(train_embeddings)} embeddings for {len(train_texts)} samples')
 
     if train_embeddings:
       # Convert to numpy array

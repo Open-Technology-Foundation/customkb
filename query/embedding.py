@@ -60,6 +60,12 @@ def get_cache_file_path(cache_key: str) -> str:
   # Use first 2 chars for directory to avoid too many files in one dir
   subdir = os.path.join(QUERY_CACHE_DIR, cache_key[:2])
   os.makedirs(subdir, exist_ok=True)
+  # Ensure group-writable + setgid for multi-user access (umask masks makedirs mode)
+  for d in (QUERY_CACHE_DIR, subdir):
+    try:
+      os.chmod(d, 0o2775)
+    except OSError:
+      pass
   full_path = os.path.join(subdir, f'{cache_key}.json')
   # Validate path stays within cache directory
   if not os.path.realpath(full_path).startswith(os.path.realpath(QUERY_CACHE_DIR) + os.sep):
@@ -153,7 +159,8 @@ async def generate_query_embedding(query_text: str, model: str, kb=None) -> np.n
     # Generate embedding using LiteLLM unified provider
     import embedding.litellm_provider as litellm_embed
 
-    embeddings = await litellm_embed.get_embeddings([query_text], model)
+    dimensions = getattr(kb, 'vector_dimensions', None) if kb else None
+    embeddings = await litellm_embed.get_embeddings([query_text], model, dimensions)
 
     if not embeddings or not embeddings[0]:
       raise EmbeddingError('Failed to generate embedding for query')

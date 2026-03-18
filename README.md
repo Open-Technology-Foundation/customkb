@@ -238,6 +238,8 @@ CustomKB uses INI-style configuration with environment variable overrides.
 # Models
 vector_model = text-embedding-3-small
 query_model = claude-sonnet-4-6
+# vector_dimensions — leave commented out for dynamic detection.
+# Set explicitly for Matryoshka models (e.g., 1536 for gemini-embedding-001).
 
 # Text Processing
 db_min_tokens = 200          # Minimum chunk size
@@ -276,6 +278,7 @@ api_max_retries = 20
 
 ### Configuration Tips
 
+- **`vector_dimensions`**: Leave unset for dynamic detection (probes the model on first embed). Set explicitly for Matryoshka models like `gemini-embedding-001` to select output dimensions (768/1536/3072). After the first embed, the actual dimensions are auto-synced back to the `.cfg` file.
 - **`db_min_tokens`/`db_max_tokens`**: Smaller chunks = more precise retrieval; larger = more context per result
 - **`similarity_threshold`**: Lower (0.5) for broader recall, higher (0.7) for strict relevance
 - **`enable_hybrid_search`**: Recommended for technical documentation
@@ -373,7 +376,7 @@ $VECTORDBS/<kb_name>/
 | `text-embedding-3-small` | OpenAI | 1536 | Cost-effective default |
 | `text-embedding-3-large` | OpenAI | 3072 | Best quality |
 | `text-embedding-ada-002` | OpenAI | 1536 | Legacy |
-| `gemini-embedding-001` | Google | 768/1536/3072 | 30k token context, Matryoshka support |
+| `gemini-embedding-001` | Google | 768/1536/3072 | 30k token context, Matryoshka dimensions via `vector_dimensions` config |
 
 #### LLM Models (via LiteLLM)
 
@@ -429,9 +432,10 @@ customkb query $VECTORDBS/myproject/myproject.cfg "test"
 ### Best Practices
 
 1. Store API keys in environment variables, never in config files
-2. Restrict `$VECTORDBS` directory permissions to the application user
+2. Restrict `$VECTORDBS` directory permissions to the application user/group
 3. Run behind authentication proxy for network-exposed deployments
 4. Use local Ollama models for maximum data privacy
+5. For multi-user setups, ensure `$VECTORDBS` and cache directories use setgid permissions (`chmod 2775`) so all users in the group can read/write caches
 
 ## Performance Optimization
 
@@ -490,16 +494,27 @@ ls -la $VECTORDBS/                              # Verify KB exists
 ls -la $VECTORDBS/myproject/myproject.cfg       # Check config file
 ```
 
-**"API rate limit exceeded"** — Increase delay in config:
+**"API rate limit exceeded"** — Rate limit errors are automatically retried with exponential backoff (up to `api_max_retries` attempts). To reduce rate limit pressure, adjust:
 ```ini
-api_call_delay_seconds = 0.1
-api_max_concurrency = 4
+api_call_delay_seconds = 0.1   # Delay between batches (seconds)
+api_max_concurrency = 4        # Concurrent batch tasks (lower = less pressure)
+api_max_retries = 20           # Max retry attempts per batch
 ```
 
 **"Out of memory during embedding"**
 ```bash
 customkb optimize myproject  # Auto-adjust for your system
 # Or manually: embedding_batch_size = 50
+```
+
+**"AssertionError" or "inhomogeneous shape" during embed/query** — Dimension mismatch between cached embeddings and FAISS index. Clear caches and rebuild:
+```bash
+# Clear embedding caches for the model
+find $VECTORDBS/.embedding_cache -name "gemini-embedding-001_*" -delete
+rm -rf $VECTORDBS/.query_embedding_cache
+# Delete FAISS index and re-embed
+rm -f $VECTORDBS/<kb>/<kb>.faiss
+customkb embed <kb>
 ```
 
 **Low similarity scores** — Adjust search parameters:

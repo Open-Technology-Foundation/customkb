@@ -248,7 +248,7 @@ class TestKnowledgeBase:
 
     # Check all default values
     assert kb.DEF_VECTOR_MODEL == 'text-embedding-3-small'
-    assert kb.DEF_VECTOR_DIMENSIONS == 1536
+    assert kb.DEF_VECTOR_DIMENSIONS is None
     assert kb.DEF_VECTOR_CHUNKS == 200
     assert kb.DEF_DB_MIN_TOKENS == 100
     assert kb.DEF_DB_MAX_TOKENS == 200

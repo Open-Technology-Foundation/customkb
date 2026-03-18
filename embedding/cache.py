@@ -248,6 +248,12 @@ def get_cache_file_path(cache_key: str) -> str:
   # Use first 2 chars for directory to avoid too many files in one dir
   subdir = os.path.join(CACHE_DIR, cache_key[:2])
   os.makedirs(subdir, exist_ok=True)
+  # Ensure group-writable + setgid for multi-user access (umask masks makedirs mode)
+  for d in (CACHE_DIR, subdir):
+    try:
+      os.chmod(d, 0o2775)
+    except OSError:
+      pass
   full_path = os.path.join(subdir, f'{cache_key}.json')
   # Validate path stays within cache directory
   if not os.path.realpath(full_path).startswith(os.path.realpath(CACHE_DIR) + os.sep):

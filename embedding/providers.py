@@ -440,28 +440,6 @@ async def get_embeddings_with_provider(texts: list[str], model: str, kb: Any = N
   return embeddings
 
 
-def get_embedding_dimensions(model: str) -> int:
-  """
-  Get the output dimensions for an embedding model.
-
-  Args:
-      model: Model name
-
-  Returns:
-      Number of dimensions
-  """
-  dimensions = {
-    'text-embedding-ada-002': 1536,
-    'text-embedding-3-small': 1536,
-    'text-embedding-3-large': 3072,
-    'gemini-embedding-001': 768,  # Default, can be 768/1536/3072
-    'bge-m3': 1024,
-    'all-minilm-l6-v2': 384,
-  }
-
-  return dimensions.get(model.lower(), 1536)  # Default to 1536
-
-
 def validate_model_name(model: str, kb: Any = None) -> str:
   """
   Validate and normalize model name.

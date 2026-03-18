@@ -51,7 +51,7 @@ class DefaultConfig(BaseModel):
   """
 
   vector_model: str = 'text-embedding-3-small'
-  vector_dimensions: int = 1536
+  vector_dimensions: int | None = None
   vector_chunks: int = 200
   db_min_tokens: int = 100
   db_max_tokens: int = 200
@@ -296,7 +296,7 @@ class KBConfig(BaseModel):
 
     return DefaultConfig(
       vector_model=_get_env('VECTOR_MODEL', df.get('vector_model', 'text-embedding-3-small')),
-      vector_dimensions=_get_env('VECTOR_DIMENSIONS', _cfg_int(df, 'vector_dimensions', 1536), int),
+      vector_dimensions=_get_env('VECTOR_DIMENSIONS', _cfg_int(df, 'vector_dimensions', None), int),
       vector_chunks=_get_env('VECTOR_CHUNKS', _cfg_int(df, 'vector_chunks', 200), int),
       db_min_tokens=_get_env('DB_MIN_TOKENS', _cfg_int(df, 'db_min_tokens', 100), int),
       db_max_tokens=_get_env('DB_MAX_TOKENS', _cfg_int(df, 'db_max_tokens', 200), int),
@@ -475,7 +475,7 @@ class KBConfig(BaseModel):
     )
 
 
-def _cfg_int(section: Any, key: str, default: int) -> int:
+def _cfg_int(section: Any, key: str, default: int | None) -> int | None:
   """Safely get an integer from a config section."""
   try:
     if hasattr(section, 'getint'):

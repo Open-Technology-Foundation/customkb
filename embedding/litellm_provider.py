@@ -111,12 +111,15 @@ async def get_embeddings(
   except litellm.APIConnectionError as e:
     logger.error(f'Embedding connection error for {litellm_model}: {e}')
     raise APIError(f'Connection error for embedding model {litellm_model}: {e}') from e
+  except litellm.BadRequestError as e:
+    logger.error(f'Embedding bad request for {litellm_model}: {e}')
+    raise APIError(f'Bad request for embedding model {litellm_model}: {e}') from e
   except litellm.APIError as e:
     logger.error(f'Embedding API error for {litellm_model}: {e}')
     raise APIError(f'LiteLLM embedding error for {litellm_model}: {e}') from e
 
 
-def get_embedding_sync(text: str, model: str) -> list[float]:
+def get_embedding_sync(text: str, model: str, dimensions: int | None = None) -> list[float]:
   """Get a single embedding synchronously.
 
   Convenience wrapper for code paths that can't use async.
@@ -147,32 +150,13 @@ def get_embedding_sync(text: str, model: str) -> list[float]:
     response = litellm.embedding(
       model=litellm_model,
       input=[text],
+      **({'dimensions': dimensions} if dimensions else {}),
     )
     return response.data[0]['embedding']
 
-  except (litellm.AuthenticationError, litellm.RateLimitError, litellm.APIConnectionError, litellm.APIError) as e:
+  except (litellm.AuthenticationError, litellm.RateLimitError, litellm.BadRequestError, litellm.APIConnectionError, litellm.APIError) as e:
     logger.error(f'Sync embedding error for {litellm_model}: {e}')
     raise APIError(f'Embedding failed for {litellm_model}: {e}') from e
-
-
-def get_embedding_dimensions(model: str) -> int:
-  """Get the output dimensions for an embedding model.
-
-  Args:
-    model: Model name.
-
-  Returns:
-    Number of dimensions.
-  """
-  dimensions = {
-    'text-embedding-ada-002': 1536,
-    'text-embedding-3-small': 1536,
-    'text-embedding-3-large': 3072,
-    'gemini-embedding-001': 768,
-    'bge-m3': 1024,
-    'all-minilm-l6-v2': 384,
-  }
-  return dimensions.get(model.lower(), 1536)
 
 
 # fin

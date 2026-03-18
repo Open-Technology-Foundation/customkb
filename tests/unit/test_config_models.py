@@ -24,7 +24,7 @@ class TestDefaultConfig:
   def test_defaults(self):
     cfg = DefaultConfig()
     assert cfg.vector_model == 'text-embedding-3-small'
-    assert cfg.vector_dimensions == 1536
+    assert cfg.vector_dimensions is None
     assert cfg.vector_chunks == 200
     assert cfg.db_min_tokens == 100
     assert cfg.db_max_tokens == 200
@@ -219,7 +219,7 @@ additional_stopword_languages = spanish,italian,portuguese
     """Test loading the okusiassociates2 test KB."""
     cfg = KBConfig.from_cfg('okusiassociates2')
     assert cfg.default.vector_model == 'bge-m3'
-    assert cfg.default.vector_dimensions == 1024
+    assert cfg.default.vector_dimensions is None  # dynamic — determined at embed time
     assert cfg.default.query_model == 'claude-sonnet-4-6'
     assert cfg.algorithms.enable_hybrid_search is True
     assert cfg.api.api_max_retries == 20

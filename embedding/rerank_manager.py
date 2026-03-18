@@ -108,6 +108,10 @@ def cache_score(query: str, document: str, score: float):
   cache_file = os.path.join(CACHE_DIR, f'{cache_key}.json')
   try:
     os.makedirs(CACHE_DIR, exist_ok=True)
+    try:
+      os.chmod(CACHE_DIR, 0o2775)
+    except OSError:
+      pass
     with open(cache_file, 'w') as f:
       json.dump({'score': score, 'version': '1.0'}, f)
   except (OSError, PermissionError) as e:
